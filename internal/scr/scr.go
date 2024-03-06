@@ -13,6 +13,7 @@ import (
 
 	"github/unng-lab/madfarmer/assets/img"
 	"github/unng-lab/madfarmer/internal/ebitenfx"
+	"github/unng-lab/madfarmer/internal/units/runner"
 	"github/unng-lab/madfarmer/internal/window"
 )
 
@@ -36,13 +37,17 @@ type Unit interface {
 }
 
 func (c *Canvas) Draw(screen *ebiten.Image) {
-
 	repeat := 3
 	w, h := c.bgImage.Bounds().Dx(), c.bgImage.Bounds().Dy()
 	dX := int(c.camera.position[1]) / w
 	dY := int(c.camera.position[0]) / h
 	for j := repeat - 5 + dX; j < repeat+dX; j++ {
 		for i := repeat + dY - 5; i < repeat+dY; i++ {
+			if j == 1 && i == 1 {
+				for _, u := range c.units {
+					u.Draw(c.bgImage, c.counter)
+				}
+			}
 			op := &ebiten.DrawImageOptions{}
 			op.GeoM.Translate(float64(w*i), float64(h*j))
 			op.GeoM.Translate(-c.camera.position[0], -c.camera.position[1])
@@ -76,7 +81,7 @@ type Game interface {
 	Run() error
 }
 
-func New(log *slog.Logger, cfg Config, window *window.Default) *Canvas {
+func New(log *slog.Logger, cfg Config, window *window.Default, runner *runner.Default) *Canvas {
 	var c Canvas
 	c.log = log.With("scr", "Canvas")
 	c.cfg = cfg
@@ -86,6 +91,8 @@ func New(log *slog.Logger, cfg Config, window *window.Default) *Canvas {
 		c.log.Error("c.createBG", err)
 		return nil
 	}
+
+	c.units = append(c.units, runner)
 
 	return &c
 }

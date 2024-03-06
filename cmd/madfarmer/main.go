@@ -15,6 +15,7 @@ import (
 	"github/unng-lab/madfarmer/internal/scr"
 	"github/unng-lab/madfarmer/internal/slogfx"
 	"github/unng-lab/madfarmer/internal/ui"
+	"github/unng-lab/madfarmer/internal/units/runner"
 	"github/unng-lab/madfarmer/internal/window"
 )
 
@@ -29,6 +30,7 @@ func main() {
 				fx.As(new(slogfx.Config)),
 				fx.As(new(scr.Config)),
 				fx.As(new(window.Config)),
+				fx.As(new(runner.Config)),
 			),
 			fx.Annotate(
 				ebitenfx.New,
@@ -45,6 +47,7 @@ func main() {
 			window.New,
 			slogfx.New,
 			game.New,
+			runner.New,
 		),
 		fx.Invoke(
 			ebiten.RunGame,

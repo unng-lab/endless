@@ -21,6 +21,7 @@ type Default struct {
 	gameConfig
 	scrConfig
 	slogfxConfig
+	runnerConfig
 }
 
 func New(log *slog.Logger) *Default {

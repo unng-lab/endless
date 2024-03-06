@@ -33,5 +33,5 @@ func New(log *slog.Logger, cfg Config, canvas *scr.Canvas, units ...Unit) *MadFa
 }
 
 func (mf *MadFarmer) Run() {
-	mf.canvas.Put()
+	//mf.canvas.Put()
 }
