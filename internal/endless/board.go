@@ -20,7 +20,8 @@ func NewBoard() error {
 	for i := range B.Cells {
 		for j := range B.Cells[i] {
 			B.Cells[i][j] = Cell{
-				tileImage: Tiles[rand.Intn(len(Tiles))],
+				tileImage:      Tiles[rand.Intn(len(Tiles))].Normal,
+				tileImageSmall: Tiles[rand.Intn(len(Tiles))].Small,
 			}
 		}
 	}
@@ -43,7 +44,13 @@ func (b *Board) Draw(screen *ebiten.Image) {
 			)
 			if posY := tileCount/2 + j + dY; posY < tileCount && posY >= 0 {
 				if posX := tileCount/2 + i + dX; posX < tileCount && posX >= 0 {
-					screen.DrawImage(b.Cells[int(posY)][int(posX)].tileImage, op)
+					if C.zoomFactor > -200 {
+						screen.DrawImage(b.Cells[int(posY)][int(posX)].tileImage, op)
+					} else {
+						//TODO оптимизация провалилась, нужно пробовать уменьшать кол-во объектов
+						screen.DrawImage(b.Cells[int(posY)][int(posX)].tileImageSmall, op)
+					}
+
 				}
 			}
 			op.GeoM.Reset()
