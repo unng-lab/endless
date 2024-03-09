@@ -12,7 +12,7 @@ var G Game
 
 type Game struct {
 	log   *slog.Logger
-	Units []Unit
+	Units []Unit[any]
 }
 
 func NewGame() *Game {

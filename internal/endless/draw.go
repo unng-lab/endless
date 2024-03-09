@@ -11,6 +11,14 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	B.Draw(screen)
 	ebitenutil.DebugPrint(
 		screen,
-		fmt.Sprintf("TPS: %0.2f\nFPS: %0.2f", ebiten.ActualTPS(), ebiten.ActualFPS()),
+		fmt.Sprintf(
+			"TPS: %0.2f\nFPS: %0.2f\nCameraX: %0.2f\nCameraY: %0.2f\nZoom: %0.2f\nCellNumber: %d",
+			ebiten.ActualTPS(),
+			ebiten.ActualFPS(),
+			C.GetPositionX(),
+			C.GetPositionY(),
+			C.GetZoomFactor(),
+			B.GetCellNumber(),
+		),
 	)
 }

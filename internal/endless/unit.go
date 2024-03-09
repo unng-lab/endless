@@ -1,4 +1,7 @@
 package endless
 
-type Unit struct {
+type Unit[T any] struct {
+	Body *T
+	Name string
+	Type string
 }

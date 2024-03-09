@@ -5,33 +5,42 @@ import (
 	"math"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	"golang.org/x/image/math/f64"
+	atomic2 "go.uber.org/atomic"
 )
 
-var C Camera
+const (
+	maxZoom = 200
+	minZoom = -100
+)
+
+var C = Camera{
+	tileSize:    *atomic2.NewFloat64(TileSize),
+	scaleFactor: *atomic2.NewFloat64(1),
+}
 
 type Camera struct {
-	position   f64.Vec2
-	zoomFactor int
-	middleX    int
-	middleY    int
+	positionX   atomic2.Float64
+	positionY   atomic2.Float64
+	zoomFactor  atomic2.Float64
+	tileSize    atomic2.Float64
+	scaleFactor atomic2.Float64
 }
 
 func (c *Camera) String() string {
 	return fmt.Sprintf(
-		"T: %.1f, S: %d",
-		c.position, c.zoomFactor,
+		"X: %d,Y: %d, S: %d",
+		c.positionX.Load(), c.positionY.Load(), c.zoomFactor.Load(),
 	)
 }
 
 func (c *Camera) worldMatrix() ebiten.GeoM {
 	m := ebiten.GeoM{}
-	m.Translate(-c.position[0], -c.position[1])
+	m.Translate(-c.positionX.Load(), -c.positionY.Load())
 	// We want to scale and rotate around center of image / screen
 	m.Translate(W.ViewPortCenter(false))
 	m.Scale(
-		math.Pow(1.01, float64(c.zoomFactor)),
-		math.Pow(1.01, float64(c.zoomFactor)),
+		math.Pow(1.01, c.zoomFactor.Load()),
+		math.Pow(1.01, c.zoomFactor.Load()),
 	)
 	return m
 }
@@ -54,35 +63,63 @@ func (c *Camera) ScreenToWorld(posX, posY int) (float64, float64) {
 }
 
 func (c *Camera) Reset(w, h int) {
-	c.position[0] = float64(c.middleX - w/2)
-	c.position[1] = float64(c.middleY - h/2)
-	c.zoomFactor = 0
+	c.positionX.Store(0)
+	c.positionY.Store(0)
+	c.zoomFactor.Store(0)
 }
 
 func (c *Camera) Up() {
-	c.position[1] -= 50
+	c.positionY.Add(-50)
 }
 
 func (c *Camera) Down() {
-	c.position[1] += 50
+	c.positionY.Add(50)
 }
 
 func (c *Camera) Left() {
-	c.position[0] -= 50
+	c.positionX.Add(-50)
 }
 
 func (c *Camera) Right() {
-	c.position[0] += 50
+	c.positionX.Add(50)
 }
 
 func (c *Camera) ZoomUp() {
-	if c.zoomFactor < 2400 {
-		c.zoomFactor += 10
+	if c.zoomFactor.Load() < maxZoom {
+		c.zoomFactor.Add(10)
+		c.tileSize.Store(TileSize * c.scale())
+		c.scaleFactor.Store(c.scale())
 	}
 }
 
 func (c *Camera) ZoomDown() {
-	if c.zoomFactor > -2400 {
-		c.zoomFactor -= 10
+	if c.zoomFactor.Load() > minZoom {
+		c.zoomFactor.Add(-10)
+		c.tileSize.Store(TileSize * c.scale())
+		c.scaleFactor.Store(c.scale())
 	}
+}
+
+func (c *Camera) scale() float64 {
+	return math.Pow(1.01, c.zoomFactor.Load())
+}
+
+func (c *Camera) GetTileSize() float64 {
+	return c.tileSize.Load()
+}
+
+func (c *Camera) GetZoomFactor() float64 {
+	return c.zoomFactor.Load()
+}
+
+func (c *Camera) GetPositionX() float64 {
+	return c.positionX.Load()
+}
+
+func (c *Camera) GetPositionY() float64 {
+	return c.positionY.Load()
+}
+
+func (c *Camera) GetScaleFactor() float64 {
+	return c.scaleFactor.Load()
 }
