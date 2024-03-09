@@ -5,8 +5,10 @@ import (
 	"embed"
 	"image"
 	_ "image/jpeg"
+	"image/png"
 	_ "image/png"
 	"log"
+	"path/filepath"
 	"strconv"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -27,10 +29,18 @@ func Img(name string, w, h uint64) (*ebiten.Image, error) {
 		if err != nil {
 			log.Fatal(err)
 		}
-		// decode jpeg into image.Image
-		img, _, err := image.Decode(bytes.NewReader(file))
-		if err != nil {
-			log.Fatal(err)
+		var img image.Image
+		if filepath.Ext(name) == ".png" {
+			img, err = png.Decode(bytes.NewReader(file))
+			if err != nil {
+				log.Fatal(err)
+			}
+		} else {
+			// decode jpeg into image.Image
+			img, _, err = image.Decode(bytes.NewReader(file))
+			if err != nil {
+				log.Fatal(err)
+			}
 		}
 
 		m := ebiten.NewImageFromImage(resize.Resize(uint(w), uint(h), img, resize.Lanczos3))

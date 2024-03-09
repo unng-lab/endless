@@ -3,13 +3,12 @@ package scr
 import (
 	"fmt"
 	"image"
-	"image/color"
 	"log/slog"
 	"math"
+	"math/rand"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
-	"github.com/hajimehoshi/ebiten/v2/vector"
 
 	"github/unng-lab/madfarmer/assets/img"
 	"github/unng-lab/madfarmer/internal/ebitenfx"
@@ -19,46 +18,100 @@ import (
 
 var _ ebitenfx.Screen = (*Canvas)(nil)
 
+const (
+	mapBlockSize  = 2048
+	mapBlockCount = 5
+)
+
 type Config interface {
 }
 type Canvas struct {
-	log     *slog.Logger
-	cfg     Config
-	window  *window.Default
-	camera  Camera
-	bgImage *ebiten.Image
+	log    *slog.Logger
+	cfg    Config
+	window *window.Default
+	camera Camera
+	//TMP
+	terrain *ebiten.Image
+	bg      *ebiten.Image
 	counter int64
 	units   []Unit
+
+	mapTiles map[string]*ebiten.Image
 }
 
 type Unit interface {
 	Position() image.Point
-	Draw(*ebiten.Image, int64)
+	Draw(
+		bg *ebiten.Image,
+		counter int64,
+		div image.Point,
+		min image.Point,
+		max image.Point,
+	)
 }
 
 func (c *Canvas) Draw(screen *ebiten.Image) {
-	repeat := 3
-	w, h := c.bgImage.Bounds().Dx(), c.bgImage.Bounds().Dy()
-	dX := int(c.camera.position[1]) / w
-	dY := int(c.camera.position[0]) / h
-	for j := repeat - 5 + dX; j < repeat+dX; j++ {
-		for i := repeat + dY - 5; i < repeat+dY; i++ {
-			if j == 1 && i == 1 {
-				for _, u := range c.units {
-					u.Draw(c.bgImage, c.counter)
-				}
+	w, h := mapBlockSize, mapBlockSize
+	dX := int(c.camera.position[0]) / w
+	dY := int(c.camera.position[1]) / h
+	for j := range mapBlockCount {
+		for i := range mapBlockCount {
+			key := fmt.Sprintf("%d,%d",
+				int(math.Abs(float64((i+dX)%mapBlockCount))),
+				int(math.Abs(float64((j+dY)%mapBlockCount))))
+			if tile, ok := c.mapTiles[key]; !ok {
+				c.log.Error("tile not found", i, j)
+				return
+			} else {
+				op := &ebiten.DrawImageOptions{}
+				op.GeoM.Translate(float64(w*i), float64(h*j))
+				c.bg.DrawImage(tile, op)
 			}
-			op := &ebiten.DrawImageOptions{}
-			op.GeoM.Translate(float64(w*i), float64(h*j))
-			op.GeoM.Translate(-c.camera.position[0], -c.camera.position[1])
-			op.GeoM.Scale(
-				math.Pow(1.01, float64(c.camera.zoomFactor)),
-				math.Pow(1.01, float64(c.camera.zoomFactor)),
-			)
-			//op.GeoM.Translate(offsetX, offsetY)
-			screen.DrawImage(c.bgImage, op)
 		}
 	}
+	//if c.camera.zoomFactor >= 0 {
+	//	for i := range 64 {
+	//		vector.StrokeLine(
+	//			c.bg,
+	//			0,
+	//			float32(64*i),
+	//			mapBlockSize,
+	//			float32(64*i),
+	//			2,
+	//			color.RGBA{0xeb, 0xeb, 0xeb, 0xff},
+	//			true,
+	//		)
+	//		vector.StrokeLine(
+	//			c.bg,
+	//			float32(64*i),
+	//			0,
+	//			float32(64*i),
+	//			mapBlockSize,
+	//			2,
+	//			color.RGBA{0xeb, 0xeb, 0xeb, 0xff},
+	//			true,
+	//		)
+	//	}
+	//}
+
+	for _, unit := range c.units {
+		unit.Draw(
+			c.bg,
+			c.counter,
+			image.Pt(w, h),
+			image.Pt((dX-mapBlockCount/2)*mapBlockSize, (dY-mapBlockCount/2)*mapBlockSize),
+			image.Pt((dX+mapBlockCount/2+1)*mapBlockSize, (dY+mapBlockCount/2+1)*mapBlockSize),
+		)
+	}
+
+	options := &ebiten.DrawImageOptions{
+		GeoM: c.camera.worldMatrix(),
+	}
+
+	//options.GeoM.Translate(float64(-mapBlockSize),
+	//	float64(-mapBlockSize))
+	c.log.Info("geoM", dX, dY)
+	screen.DrawImage(c.bg, options)
 
 	ebitenutil.DebugPrintAt(
 		screen,
@@ -87,50 +140,43 @@ func New(log *slog.Logger, cfg Config, window *window.Default, runner *runner.De
 	c.cfg = cfg
 	c.window = window
 
+	c.units = append(c.units, runner)
+	c.mapTiles = make(map[string]*ebiten.Image)
+	c.bg = ebiten.NewImage(mapBlockCount*mapBlockSize, mapBlockCount*mapBlockSize)
+	c.camera.window = window
 	if err := c.createBG(); err != nil {
 		c.log.Error("c.createBG", err)
 		return nil
 	}
 
-	c.units = append(c.units, runner)
-
 	return &c
 }
 
 func (c *Canvas) createBG() error {
-	bgImg, err := img.Img("bigbig.jpg", 4096, 4096)
-	if err != nil {
-		c.log.Error("img.Img", err)
-		return nil
-	}
-	if bgImg == nil {
-		c.log.Error("bgImg == nil")
-		return nil
-	}
-
-	for i := range 64 {
-		vector.StrokeLine(
-			bgImg,
-			0,
-			float32(64*i),
-			4096,
-			float32(64*i),
-			2,
-			color.RGBA{0xeb, 0xeb, 0xeb, 0xff},
-			true,
-		)
-		vector.StrokeLine(
-			bgImg,
-			float32(64*i),
-			0,
-			float32(64*i),
-			4096,
-			2,
-			color.RGBA{0xeb, 0xeb, 0xeb, 0xff},
-			true,
-		)
+	for j := range mapBlockCount {
+		for i := range mapBlockCount {
+			terrain, err := img.Img(getNameBg(), mapBlockSize, mapBlockSize)
+			if err != nil {
+				c.log.Error("img.Img", err)
+				return nil
+			}
+			if terrain == nil {
+				c.log.Error("terrain == nil")
+				return nil
+			}
+			c.mapTiles[fmt.Sprintf("%d,%d", i, j)] = terrain
+		}
 	}
 
-	c.bgImage = bgImg
 	return nil
+}
+
+var nArr = []string{
+	"bigbig.jpg",
+	"bigterrain.jpg",
+	"terrain.jpg",
+}
+
+func getNameBg() string {
+	return nArr[rand.Intn(len(nArr))]
 }
