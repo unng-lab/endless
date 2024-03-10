@@ -12,14 +12,16 @@ var G Game
 
 type Game struct {
 	log   *slog.Logger
-	Units []Unit[any]
+	Units []Unit
 }
 
 func NewGame() *Game {
+	G.Units = make([]Unit, 0)
 	err := NewBoard()
 	if err != nil {
 		panic(err)
 	}
-
+	NewInverntory()
+	G.Units = append(G.Units, I.Units["runner"].New(10, 10))
 	return &G
 }

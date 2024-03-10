@@ -66,6 +66,8 @@ func (c *Camera) Reset(w, h int) {
 	c.positionX.Store(0)
 	c.positionY.Store(0)
 	c.zoomFactor.Store(0)
+	c.tileSize.Store(TileSize * c.scale())
+	c.scaleFactor.Store(c.scale())
 }
 
 func (c *Camera) Up() {
