@@ -32,6 +32,8 @@ const (
 func NewRunner() *Unit {
 	var u Unit
 	u.Name = "runner"
+	u.SizeX = frameWidth
+	u.SizeY = frameHeight
 	img, _, err := image.Decode(bytes.NewReader(images.Runner_png))
 	if err != nil {
 		slog.Error("image.Decode", err)

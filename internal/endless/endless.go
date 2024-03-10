@@ -11,12 +11,21 @@ var _ ebiten.Game = (*Game)(nil) // ensure Game implements ebiten.Game
 var G Game
 
 type Game struct {
-	log   *slog.Logger
-	Units []Unit
+	log    *slog.Logger
+	camera Camera
+	Units  []Unit
 }
 
 func NewGame() *Game {
 	G.Units = make([]Unit, 0)
+	G.camera = Camera{
+		positionX:   0,
+		positionY:   0,
+		zoomFactor:  0,
+		tileSize:    TileSize,
+		scaleFactor: 1,
+	}
+
 	err := NewBoard()
 	if err != nil {
 		panic(err)
