@@ -48,12 +48,13 @@ func (b *Board) Draw(screen *ebiten.Image, camera Camera) {
 	cellNumber := int64(0)
 	for j := float64(-1); j < maxY; j++ {
 		for i := float64(-1); i < maxX; i++ {
-			op.GeoM.Translate(float64(i*TileSize)-shiftX, float64(j*TileSize)-shiftY)
+			op.GeoM.Translate(float64(i*TileSize), float64(j*TileSize))
 			//op.GeoM.Translate(W.ViewPortCenter(false))
 			op.GeoM.Scale(
 				camera.GetScaleFactor(),
 				camera.GetScaleFactor(),
 			)
+			op.GeoM.Translate(-shiftX, -shiftY)
 			if posY := tileCount/2 + j + dY; posY < tileCount && posY >= 0 {
 				if posX := tileCount/2 + i + dX; posX < tileCount && posX >= 0 {
 					if camera.GetZoomFactor() > minZoom/2 {

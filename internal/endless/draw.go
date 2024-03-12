@@ -77,8 +77,8 @@ CellY: %0.2f`,
 			posYClear,
 			x,
 			y,
-			(x+g.camera.GetPositionX())/g.camera.GetTileSize()+1,
-			(y+g.camera.GetPositionY())/g.camera.GetTileSize()+1,
+			math.Floor((x+g.camera.GetPositionX())/g.camera.GetTileSize())+1,
+			math.Floor((y+g.camera.GetPositionY())/g.camera.GetTileSize())+1,
 		),
 	)
 }

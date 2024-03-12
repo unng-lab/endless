@@ -2,6 +2,7 @@ package endless
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -32,14 +33,26 @@ func (u *Unit) New(positionX int, positionY int) Unit {
 }
 
 func (u *Unit) Draw(screen *ebiten.Image, counter int, camera Camera) {
-	posX := float64(u.PositionX)*camera.GetTileSize() - camera.GetTileSize()/2 - float64(u.SizeX)/2 - camera.GetPositionX()
-	posY := float64(u.PositionY)*camera.GetTileSize() - camera.GetTileSize()/4 - float64(u.SizeY) - camera.GetPositionY()
+	tileSize := camera.GetTileSize()
+	shiftX, shiftY := math.Mod(camera.GetPositionX(), tileSize), math.Mod(camera.GetPositionY(), tileSize)
+	if shiftX < 0 {
+		shiftX = -shiftX
+	}
+	if shiftY < 0 {
+		shiftY = -shiftY
+	}
 
-	u.DrawOptions.GeoM.Translate(float64(posX), float64(posY))
-	//u.DrawOptions.GeoM.Scale(
-	//	camera.GetScaleFactor(),
-	//	camera.GetScaleFactor(),
-	//)
+	posX := float64(u.PositionX)*camera.GetTileSize() - camera.GetTileSize()/2 -
+		float64(u.SizeX)*camera.GetScaleFactor()/2 - camera.GetPositionX()
+	posY := float64(u.PositionY)*camera.GetTileSize() - camera.GetTileSize()/4 -
+		float64(u.SizeY)*camera.GetScaleFactor() - camera.GetPositionY()
+
+	u.DrawOptions.GeoM.Translate(float64(u.PositionX)*TileSize, float64(u.PositionY)*TileSize)
+	u.DrawOptions.GeoM.Scale(
+		camera.GetScaleFactor(),
+		camera.GetScaleFactor(),
+	)
+	u.DrawOptions.GeoM.Translate(-shiftX, -shiftY)
 	screen.DrawImage(u.Animation[counter%len(u.Animation)], &u.DrawOptions)
 	u.DrawOptions.GeoM.Reset()
 
