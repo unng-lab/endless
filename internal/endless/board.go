@@ -1,6 +1,7 @@
 package endless
 
 import (
+	"math"
 	"math/rand"
 	"sync/atomic"
 
@@ -18,11 +19,12 @@ type Board struct {
 
 func NewBoard() error {
 	NewTiles()
+	rnd := rand.New(rand.NewSource(0))
 	for i := range B.Cells {
 		for j := range B.Cells[i] {
 			B.Cells[i][j] = Cell{
-				tileImage:      Tiles[rand.Intn(len(Tiles))].Normal,
-				tileImageSmall: Tiles[rand.Intn(len(Tiles))].Small,
+				tileImage:      Tiles[rnd.Intn(len(Tiles))].Normal,
+				tileImageSmall: Tiles[rnd.Intn(len(Tiles))].Small,
 			}
 		}
 	}
@@ -31,14 +33,22 @@ func NewBoard() error {
 
 func (b *Board) Draw(screen *ebiten.Image, camera Camera) {
 	tileSize := camera.GetTileSize()
-	maxX, maxY := float64(W.GetWidth())/tileSize+1, float64(W.GetHeight())/tileSize+1
+	maxX, maxY := (W.GetWidth()+TileSize)/tileSize+1, (W.GetHeight()+TileSize)/tileSize+1
 	op := &ebiten.DrawImageOptions{}
-	dX := camera.GetPositionX() / tileSize
-	dY := camera.GetPositionY() / tileSize
+	shiftX, shiftY := math.Mod(camera.GetPositionX(), tileSize), math.Mod(camera.GetPositionY(), tileSize)
+	if shiftX < 0 {
+		shiftX = -shiftX
+	}
+	if shiftY < 0 {
+		shiftY = -shiftY
+	}
+	dX := (camera.GetPositionX() + shiftX) / tileSize
+	dY := (camera.GetPositionY() + shiftY) / tileSize
+
 	cellNumber := int64(0)
 	for j := float64(-1); j < maxY; j++ {
 		for i := float64(-1); i < maxX; i++ {
-			op.GeoM.Translate(i*TileSize, j*TileSize)
+			op.GeoM.Translate(float64(i*TileSize)-shiftX, float64(j*TileSize)-shiftY)
 			//op.GeoM.Translate(W.ViewPortCenter(false))
 			op.GeoM.Scale(
 				camera.GetScaleFactor(),

@@ -10,19 +10,15 @@ const (
 )
 
 type Camera struct {
-	positionX   float64
-	positionY   float64
-	zoomFactor  float64
-	tileSize    float64
-	scaleFactor float64
+	positionX  float64
+	positionY  float64
+	zoomFactor float64
 }
 
 func (c *Camera) Reset(w, h int) {
 	c.positionX = 0
 	c.positionY = 0
 	c.zoomFactor = 0
-	c.tileSize = TileSize * c.scale()
-	c.scaleFactor = c.scale()
 }
 
 func (c *Camera) Up() {
@@ -44,16 +40,12 @@ func (c *Camera) Right() {
 func (c *Camera) ZoomUp() {
 	if c.zoomFactor < maxZoom {
 		c.zoomFactor += 10
-		c.tileSize = TileSize * c.scale()
-		c.scaleFactor = c.scale()
 	}
 }
 
 func (c *Camera) ZoomDown() {
 	if c.zoomFactor > minZoom {
 		c.zoomFactor += -10
-		c.tileSize = TileSize * c.scale()
-		c.scaleFactor = c.scale()
 	}
 }
 
@@ -62,7 +54,7 @@ func (c *Camera) scale() float64 {
 }
 
 func (c *Camera) GetTileSize() float64 {
-	return c.tileSize
+	return TileSize * c.scale()
 }
 
 func (c *Camera) GetZoomFactor() float64 {
@@ -78,5 +70,5 @@ func (c *Camera) GetPositionY() float64 {
 }
 
 func (c *Camera) GetScaleFactor() float64 {
-	return c.scaleFactor
+	return c.scale()
 }

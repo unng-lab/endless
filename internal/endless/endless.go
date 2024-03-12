@@ -19,11 +19,9 @@ type Game struct {
 func NewGame() *Game {
 	G.Units = make([]Unit, 0)
 	G.camera = Camera{
-		positionX:   0,
-		positionY:   0,
-		zoomFactor:  0,
-		tileSize:    TileSize,
-		scaleFactor: 1,
+		positionX:  0,
+		positionY:  0,
+		zoomFactor: 0,
 	}
 
 	err := NewBoard()
@@ -31,6 +29,6 @@ func NewGame() *Game {
 		panic(err)
 	}
 	NewInverntory()
-	G.Units = append(G.Units, I.Units["runner"].New(10, 10))
+	G.Units = append(G.Units, I.Units["runner"].New(30, 10))
 	return &G
 }

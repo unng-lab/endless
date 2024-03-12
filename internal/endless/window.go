@@ -1,35 +1,33 @@
 package endless
 
-import "sync/atomic"
-
 var W Window
 
 type Window struct {
-	Width  atomic.Int64
-	Height atomic.Int64
+	Width  float64
+	Height float64
 }
 
 func (w *Window) ViewPortCenter(dir bool) (float64, float64) {
 	if !dir {
-		return float64(-w.Width.Load()) / 2, float64(-w.Height.Load()) / 2
+		return (-w.Width) / 2, (-w.Height) / 2
 	}
-	return float64(w.Width.Load() / 2), float64(w.Height.Load() / 2)
+	return w.Width / 2, w.Height / 2
+
 }
 
-func (w *Window) GetWidth() int64 {
-	return w.Width.Load()
+func (w *Window) GetWidth() float64 {
+	return w.Width
+}
+func (w *Window) GetHeight() float64 {
+	return w.Height
 }
 
-func (w *Window) Pos(perX, perY float32) (int, int) {
+func (w *Window) Pos(perX, perY float64) (float64, float64) {
 	return w.PosX(perX), w.PosY(perY)
 }
-func (w *Window) PosX(perX float32) int {
-	return int(float32(w.Width.Load()) * perX / 100)
+func (w *Window) PosX(perX float64) float64 {
+	return (w.Width) * perX / 100
 }
-func (w *Window) PosY(perY float32) int {
-	return int(float32(w.Height.Load()) * perY / 100)
-}
-
-func (w *Window) GetHeight() int64 {
-	return w.Height.Load()
+func (w *Window) PosY(perY float64) float64 {
+	return (w.Height) * perY / 100
 }
