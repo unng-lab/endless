@@ -30,5 +30,8 @@ func NewGame() *Game {
 	}
 	NewInverntory()
 	G.Units = append(G.Units, I.Units["runner"].New(30, 10))
+	G.Units = append(G.Units, I.Units["runner"].New(500, 10))
+	G.Units = append(G.Units, I.Units["runner"].New(10, 10))
+	G.Units = append(G.Units, I.Units["runner"].New(-500, 10))
 	return &G
 }

@@ -16,9 +16,16 @@ var Counter int
 func (g *Game) Draw(screen *ebiten.Image) {
 	Counter++
 	camera := g.camera
-	B.Draw(screen, camera)
+	minX, minY, maxX, maxY := B.Draw(screen, camera)
+	unitNumber := 0
 	for i := range g.Units {
-		g.Units[i].Draw(screen, Counter, camera)
+		if g.Units[i].PositionX+tileCount/2 >= minX &&
+			g.Units[i].PositionX+tileCount/2 <= maxX &&
+			g.Units[i].PositionY+tileCount/2 >= minY &&
+			g.Units[i].PositionY+tileCount/2 <= maxY {
+			unitNumber++
+			g.Units[i].Draw(screen, Counter, camera)
+		}
 	}
 	a, b := ebiten.CursorPosition()
 	x, y := float64(a), float64(b)
@@ -55,7 +62,7 @@ CellY: %0.2f`,
 			g.camera.GetPositionY(),
 			g.camera.GetZoomFactor(),
 			B.GetCellNumber(),
-			len(g.Units),
+			unitNumber,
 			camera.GetTileSize(),
 			posX,
 			posY,

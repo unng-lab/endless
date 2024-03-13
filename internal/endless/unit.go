@@ -2,7 +2,6 @@ package endless
 
 import (
 	"fmt"
-	"math"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -11,14 +10,14 @@ import (
 type Unit struct {
 	Name        string
 	Animation   []*ebiten.Image
-	PositionX   int
-	PositionY   int
-	SizeX       int
-	SizeY       int
+	PositionX   float64
+	PositionY   float64
+	SizeX       float64
+	SizeY       float64
 	DrawOptions ebiten.DrawImageOptions
 }
 
-func (u *Unit) New(positionX int, positionY int) Unit {
+func (u *Unit) New(positionX float64, positionY float64) Unit {
 	var unit Unit
 	unit.Name = u.Name
 	unit.PositionX = positionX
@@ -33,40 +32,29 @@ func (u *Unit) New(positionX int, positionY int) Unit {
 }
 
 func (u *Unit) Draw(screen *ebiten.Image, counter int, camera Camera) {
-	tileSize := camera.GetTileSize()
-	shiftX, shiftY := math.Mod(camera.GetPositionX(), tileSize), math.Mod(camera.GetPositionY(), tileSize)
-	if shiftX < 0 {
-		shiftX = -shiftX
-	}
-	if shiftY < 0 {
-		shiftY = -shiftY
-	}
-
-	posX := float64(u.PositionX)*camera.GetTileSize() - camera.GetTileSize()/2 -
-		float64(u.SizeX)*camera.GetScaleFactor()/2 - camera.GetPositionX()
-	posY := float64(u.PositionY)*camera.GetTileSize() - camera.GetTileSize()/4 -
-		float64(u.SizeY)*camera.GetScaleFactor() - camera.GetPositionY()
-
-	u.DrawOptions.GeoM.Translate(float64(u.PositionX)*TileSize, float64(u.PositionY)*TileSize)
+	defer u.DrawOptions.GeoM.Reset()
 	u.DrawOptions.GeoM.Scale(
 		camera.GetScaleFactor(),
 		camera.GetScaleFactor(),
 	)
-	u.DrawOptions.GeoM.Translate(-camera.GetPositionX(), -camera.GetPositionY())
-	u.DrawOptions.GeoM.Translate(-shiftX, -shiftY)
+	u.DrawOptions.GeoM.Translate(u.GetDrawPoint(
+		camera.GetPositionX(),
+		camera.GetPositionY(),
+		camera.GetTileSize(),
+		camera.GetScaleFactor(),
+	))
 	screen.DrawImage(u.Animation[counter%len(u.Animation)], &u.DrawOptions)
-	u.DrawOptions.GeoM.Reset()
 
 	ebitenutil.DebugPrintAt(
 		screen,
 		fmt.Sprintf(
-			`posX: %0.2f, 
-posY: %0.2f,
-TileSize: %0.2f,
-cposX: %0.2f, 
-cposY: %0.2f`,
-			posX,
-			posY,
+			`posX: %0.2f,
+	posY: %0.2f,
+	TileSize: %0.2f,
+	cposX: %0.2f,
+	cposY: %0.2f`,
+			u.DrawOptions.GeoM.Element(0, 2),
+			u.DrawOptions.GeoM.Element(1, 2),
 			camera.GetTileSize(),
 			camera.GetPositionX(),
 			camera.GetPositionY(),
@@ -79,4 +67,17 @@ cposY: %0.2f`,
 func (u *Unit) Update() error {
 	//u.DrawOptions.GeoM.Translate(u.PositionX, u.PositionY)
 	return nil
+}
+
+func (u *Unit) GetDrawPoint(
+	cameraX, cameraY, tileSize, scale float64,
+) (float64, float64) {
+	var x, y float64
+	x = float64(u.PositionX)*tileSize + tileSize/2 - float64(u.SizeX)*scale/2 - cameraX
+	y = float64(u.PositionY)*tileSize + tileSize*3/4 - float64(u.SizeY)*scale - cameraY
+	return x, y
+}
+
+func (u *Unit) Drawable(cameraX, cameraY, tileSize, scale float64) bool {
+	return true
 }

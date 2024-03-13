@@ -41,11 +41,9 @@ func NewBoard() error {
 	return nil
 }
 
-func (b *Board) Draw(screen *ebiten.Image, camera Camera) {
+func (b *Board) Draw(screen *ebiten.Image, camera Camera) (float64, float64, float64, float64) {
 	tileSize := camera.GetTileSize()
 	maxX, maxY := (W.GetWidth())/tileSize+1, (W.GetHeight())/tileSize+1
-	//dX := (camera.GetPositionX()) / tileSize
-	//dY := (camera.GetPositionY()) / tileSize
 	defer b.DrawOp.GeoM.Reset()
 	b.DrawOp.GeoM.Scale(
 		camera.GetScaleFactor(),
@@ -89,6 +87,8 @@ func (b *Board) Draw(screen *ebiten.Image, camera Camera) {
 		b.DrawOp.GeoM.Translate(0, (j+1)*tileSize)
 	}
 	b.CellOnScreen.Store(cellNumber)
+
+	return cellX, cellY, cellX + maxX, cellY + maxY
 
 }
 
