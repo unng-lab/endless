@@ -52,6 +52,7 @@ func (u *Unit) Draw(screen *ebiten.Image, counter int, camera Camera) {
 		camera.GetScaleFactor(),
 		camera.GetScaleFactor(),
 	)
+	u.DrawOptions.GeoM.Translate(-camera.GetPositionX(), -camera.GetPositionY())
 	u.DrawOptions.GeoM.Translate(-shiftX, -shiftY)
 	screen.DrawImage(u.Animation[counter%len(u.Animation)], &u.DrawOptions)
 	u.DrawOptions.GeoM.Reset()

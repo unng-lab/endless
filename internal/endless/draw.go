@@ -22,19 +22,11 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	}
 	a, b := ebiten.CursorPosition()
 	x, y := float64(a), float64(b)
-	shiftX, shiftY := math.Mod(camera.GetPositionX(), camera.GetTileSize()), math.Mod(camera.GetPositionY(), camera.GetTileSize())
-	if shiftX < 0 {
-		shiftX = -shiftX
-	}
-	if shiftY < 0 {
-		shiftY = -shiftY
-	}
-	posX, posY := math.Floor((x+shiftX)/camera.GetTileSize()), math.Floor((y+shiftY)/camera.GetTileSize())
-	posXClear, posYClear := float32(posX)*float32(camera.GetTileSize()), float32(posY)*float32(camera.GetTileSize())
+	posX, posY := GetLeftAngle(camera.GetPositionX(), camera.GetPositionY(), x, y, camera.GetTileSize())
 	vector.DrawFilledRect(
 		screen,
-		posXClear-float32(shiftX),
-		posYClear-float32(shiftY),
+		float32(posX),
+		float32(posY),
 		float32(camera.GetTileSize()),
 		float32(camera.GetTileSize()),
 		color.White,
@@ -53,10 +45,6 @@ UnitNumber: %d
 TileSize: %0.2f
 posX: %0.2f
 posY: %0.2f
-shiftX: %0.2f
-shiftY: %0.2f
-posXClear: %0.2f
-posYClear: %0.2f
 CursorX: %0.2f
 CursorY: %0.2f
 CellX: %0.2f
@@ -71,14 +59,35 @@ CellY: %0.2f`,
 			camera.GetTileSize(),
 			posX,
 			posY,
-			shiftX,
-			shiftY,
-			posXClear,
-			posYClear,
 			x,
 			y,
-			math.Floor((x+g.camera.GetPositionX())/g.camera.GetTileSize())+1,
-			math.Floor((y+g.camera.GetPositionY())/g.camera.GetTileSize())+1,
+			GetCellNumber(x, camera.GetPositionX(), camera.GetTileSize()),
+			GetCellNumber(y, camera.GetPositionY(), camera.GetTileSize()),
 		),
 	)
+}
+
+func GetCellNumber(cursor float64, camera float64, tileSize float64) float64 {
+	return math.Trunc((cursor + camera) / tileSize)
+}
+
+func GetLeftAngle(cameraX, cameraY, cursorX, cursorY, tileSize float64) (float64, float64) {
+	var (
+		x, y float64
+	)
+
+	shiftX, shiftY := math.Mod(cameraX, tileSize), math.Mod(cameraY, tileSize)
+	if shiftX < 0 {
+		x = -tileSize - shiftX
+	} else if shiftX > 0 {
+		x = -shiftX
+	}
+
+	if shiftY < 0 {
+		y = -tileSize - shiftY
+	} else if shiftY > 0 {
+		y = -shiftY
+	}
+
+	return x + math.Trunc((cursorX-x)/tileSize)*tileSize, y + math.Trunc((cursorY-y)/tileSize)*tileSize
 }

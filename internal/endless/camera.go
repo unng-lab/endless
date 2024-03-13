@@ -5,10 +5,11 @@ import (
 )
 
 const (
-	maxZoom = 200
+	maxZoom = 800
 	minZoom = -100
 )
 
+// Camera TODO add maxX and maxY camera
 type Camera struct {
 	positionX  float64
 	positionY  float64
@@ -16,6 +17,7 @@ type Camera struct {
 }
 
 func (c *Camera) Reset(w, h int) {
+
 	c.positionX = 0
 	c.positionY = 0
 	c.zoomFactor = 0

@@ -6,6 +6,8 @@ import (
 	"sync/atomic"
 
 	"github.com/hajimehoshi/ebiten/v2"
+
+	"github/unng-lab/madfarmer/assets/img"
 )
 
 var B Board
@@ -15,6 +17,8 @@ const tileCount = 4096
 type Board struct {
 	Cells        [tileCount][tileCount]Cell
 	CellOnScreen atomic.Int64
+	EmptyCell    *ebiten.Image
+	DrawOp       ebiten.DrawImageOptions
 }
 
 func NewBoard() error {
@@ -28,50 +32,92 @@ func NewBoard() error {
 			}
 		}
 	}
+	empty, err := img.Img("empty.jpg", 16, 16)
+	if err != nil {
+		panic(err)
+	}
+	B.EmptyCell = empty
+
 	return nil
 }
 
 func (b *Board) Draw(screen *ebiten.Image, camera Camera) {
 	tileSize := camera.GetTileSize()
-	maxX, maxY := (W.GetWidth()+TileSize)/tileSize+1, (W.GetHeight()+TileSize)/tileSize+1
-	op := &ebiten.DrawImageOptions{}
-	shiftX, shiftY := math.Mod(camera.GetPositionX(), tileSize), math.Mod(camera.GetPositionY(), tileSize)
-	if shiftX < 0 {
-		shiftX = -shiftX
-	}
-	if shiftY < 0 {
-		shiftY = -shiftY
-	}
-	dX := (camera.GetPositionX() + shiftX) / tileSize
-	dY := (camera.GetPositionY() + shiftY) / tileSize
-
+	maxX, maxY := (W.GetWidth())/tileSize+1, (W.GetHeight())/tileSize+1
+	//dX := (camera.GetPositionX()) / tileSize
+	//dY := (camera.GetPositionY()) / tileSize
+	defer b.DrawOp.GeoM.Reset()
+	b.DrawOp.GeoM.Scale(
+		camera.GetScaleFactor(),
+		camera.GetScaleFactor(),
+	)
+	leftX, leftY, cellX, cellY := GetLeftXY(camera.GetPositionX(), camera.GetPositionY(), tileSize)
+	b.DrawOp.GeoM.Translate(leftX, leftY)
 	cellNumber := int64(0)
-	for j := float64(-1); j < maxY; j++ {
-		for i := float64(-1); i < maxX; i++ {
-			op.GeoM.Translate(float64(i*TileSize), float64(j*TileSize))
-			//op.GeoM.Translate(W.ViewPortCenter(false))
-			op.GeoM.Scale(
-				camera.GetScaleFactor(),
-				camera.GetScaleFactor(),
-			)
-			op.GeoM.Translate(-shiftX, -shiftY)
-			if posY := tileCount/2 + j + dY; posY < tileCount && posY >= 0 {
-				if posX := tileCount/2 + i + dX; posX < tileCount && posX >= 0 {
-					if camera.GetZoomFactor() > minZoom/2 {
-						screen.DrawImage(b.Cells[int(posY)][int(posX)].tileImage, op)
+	for j := float64(0); j < maxY; j++ {
+		for i := float64(0); i < maxX; i++ {
+			if posY := cellY + j; posY < tileCount && posY >= 0 {
+				if posX := cellX + i; posX < tileCount && posX >= 0 {
+					if int(posY) == 2050 && int(posX) == 2050 {
+						screen.DrawImage(b.EmptyCell, &b.DrawOp)
+					} else if int(posY) == 2052 && int(posX) == 2052 {
+						screen.DrawImage(b.EmptyCell, &b.DrawOp)
+					} else if int(posY) == 2054 && int(posX) == 2054 {
+						screen.DrawImage(b.EmptyCell, &b.DrawOp)
+					} else if int(posY) == 2054 && int(posX) == 2054 {
+						screen.DrawImage(b.EmptyCell, &b.DrawOp)
 					} else {
-						//TODO оптимизация провалилась, нужно пробовать уменьшать кол-во объектов
-						screen.DrawImage(b.Cells[int(posY)][int(posX)].tileImageSmall, op)
+						if camera.GetZoomFactor() > minZoom/2 {
+							screen.DrawImage(b.Cells[int(posY)][int(posX)].tileImage, &b.DrawOp)
+						} else {
+							//TODO оптимизация провалилась, нужно пробовать уменьшать кол-во объектов
+							screen.DrawImage(b.Cells[int(posY)][int(posX)].tileImageSmall, &b.DrawOp)
+						}
 					}
+
 					cellNumber++
 				}
 			}
-			op.GeoM.Reset()
+			b.DrawOp.GeoM.Translate(tileSize, 0)
 		}
+		b.DrawOp.GeoM.Reset()
+		b.DrawOp.GeoM.Scale(
+			camera.GetScaleFactor(),
+			camera.GetScaleFactor(),
+		)
+		b.DrawOp.GeoM.Translate(leftX, leftY)
+		b.DrawOp.GeoM.Translate(0, (j+1)*tileSize)
 	}
 	b.CellOnScreen.Store(cellNumber)
+
 }
 
 func (b *Board) GetCellNumber() int64 {
 	return b.CellOnScreen.Load()
+}
+
+func GetLeftXY(cameraX float64, cameraY float64, tileSize float64) (float64, float64, float64, float64) {
+	var (
+		x, y         float64
+		cellX, cellY float64 = tileCount / 2, tileCount / 2
+	)
+
+	shiftX, shiftY := math.Mod(cameraX, tileSize), math.Mod(cameraY, tileSize)
+	if shiftX < 0 {
+		x = -tileSize - shiftX
+		cellX += -1
+	} else if shiftX > 0 {
+		x = -shiftX
+	}
+	cellX += math.Trunc(cameraX / tileSize)
+
+	if shiftY < 0 {
+		y = -tileSize - shiftY
+		cellY += -1
+	} else if shiftY > 0 {
+		y = -shiftY
+	}
+	cellY += math.Trunc(cameraY / tileSize)
+
+	return math.Round(x*100) / 100, math.Round(y*100) / 100, cellX, cellY
 }
