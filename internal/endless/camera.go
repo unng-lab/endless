@@ -5,7 +5,7 @@ import (
 )
 
 const (
-	maxZoom = 800
+	maxZoom = 200
 	minZoom = -100
 )
 
