@@ -27,8 +27,8 @@ func NewBoard() error {
 	for i := range B.Cells {
 		for j := range B.Cells[i] {
 			B.Cells[i][j] = Cell{
-				tileImage:      Tiles[rnd.Intn(len(Tiles))].Normal,
-				tileImageSmall: Tiles[rnd.Intn(len(Tiles))].Small,
+				TileImage:      Tiles[rnd.Intn(len(Tiles))].Normal,
+				TileImageSmall: Tiles[rnd.Intn(len(Tiles))].Small,
 			}
 		}
 	}
@@ -66,10 +66,10 @@ func (b *Board) Draw(screen *ebiten.Image, camera Camera) (float64, float64, flo
 						screen.DrawImage(b.EmptyCell, &b.DrawOp)
 					} else {
 						if camera.GetZoomFactor() > minZoom/2 {
-							screen.DrawImage(b.Cells[int(posY)][int(posX)].tileImage, &b.DrawOp)
+							screen.DrawImage(b.Cells[int(posY)][int(posX)].TileImage, &b.DrawOp)
 						} else {
 							//TODO оптимизация провалилась, нужно пробовать уменьшать кол-во объектов
-							screen.DrawImage(b.Cells[int(posY)][int(posX)].tileImageSmall, &b.DrawOp)
+							screen.DrawImage(b.Cells[int(posY)][int(posX)].TileImageSmall, &b.DrawOp)
 						}
 					}
 
