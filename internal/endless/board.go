@@ -12,10 +12,10 @@ import (
 
 var B Board
 
-const tileCount = 4096
+const CountTile = 256
 
 type Board struct {
-	Cells        [tileCount][tileCount]Cell
+	Cells        [CountTile][CountTile]Cell
 	CellOnScreen atomic.Int64
 	EmptyCell    *ebiten.Image
 	DrawOp       ebiten.DrawImageOptions
@@ -54,8 +54,8 @@ func (b *Board) Draw(screen *ebiten.Image, camera Camera) (float64, float64, flo
 	cellNumber := int64(0)
 	for j := float64(0); j < maxY; j++ {
 		for i := float64(0); i < maxX; i++ {
-			if posY := cellY + j; posY < tileCount && posY >= 0 {
-				if posX := cellX + i; posX < tileCount && posX >= 0 {
+			if posY := cellY + j; posY < CountTile && posY >= 0 {
+				if posX := cellX + i; posX < CountTile && posX >= 0 {
 					if int(posY) == 2050 && int(posX) == 2050 {
 						screen.DrawImage(b.EmptyCell, &b.DrawOp)
 					} else if int(posY) == 2052 && int(posX) == 2052 {
@@ -99,7 +99,7 @@ func (b *Board) GetCellNumber() int64 {
 func GetLeftXY(cameraX float64, cameraY float64, tileSize float64) (float64, float64, float64, float64) {
 	var (
 		x, y         float64
-		cellX, cellY float64 = tileCount / 2, tileCount / 2
+		cellX, cellY float64 = CountTile / 2, CountTile / 2
 	)
 
 	shiftX, shiftY := math.Mod(cameraX, tileSize), math.Mod(cameraY, tileSize)

@@ -11,8 +11,8 @@ require (
 	github.com/knadh/koanf/providers/env v0.1.0
 	github.com/knadh/koanf/v2 v2.1.0
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646
+	github.com/quasilyte/pathing v0.0.0-20231012081721-0370212e864a
 	github.com/robbert229/fxslog v0.1.0
-	go.uber.org/atomic v1.7.0
 	go.uber.org/fx v1.20.1
 	go.uber.org/zap v1.27.0
 	golang.org/x/image v0.15.0
