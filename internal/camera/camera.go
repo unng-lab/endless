@@ -12,7 +12,7 @@ const (
 	MinZoom = -100
 )
 
-var TileSize float64
+var DefaultTileSize float64
 var CountTile float64
 
 // Camera TODO add maxX and maxY camera
@@ -64,7 +64,7 @@ func (c *Camera) scale() float64 {
 }
 
 func (c *Camera) GetTileSize() float64 {
-	return TileSize * c.scale()
+	return DefaultTileSize * c.scale()
 }
 
 func (c *Camera) GetZoomFactor() float64 {

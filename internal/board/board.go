@@ -35,6 +35,7 @@ func NewBoard() error {
 			B.Cells[i][j] = Cell{
 				TileImage:      Tiles[rnd.Intn(len(Tiles))].Normal,
 				TileImageSmall: Tiles[rnd.Intn(len(Tiles))].Small,
+				Cost:           1,
 			}
 		}
 	}
@@ -83,7 +84,7 @@ func (b *Board) Draw(screen *ebiten.Image, camera camera.Camera) {
 			camera.GetScaleFactor(),
 		)
 		b.DrawOp.GeoM.Translate(camera.Pixels.Min.X, camera.Pixels.Min.Y)
-		b.DrawOp.GeoM.Translate(0, (j+1)*camera.TileSize)
+		b.DrawOp.GeoM.Translate(0, (j+1-camera.Coordinates.Min.Y)*camera.TileSize)
 	}
 	b.CellOnScreen.Store(cellNumber)
 

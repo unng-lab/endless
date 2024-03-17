@@ -110,12 +110,6 @@ func (a *Astar) BuildPath(fromX, fromY, toX, toY float64) error {
 				y:        current.y + neighbors[i].Y,
 				priority: 0,
 			}
-			if neighbor.x < -board.CountTile/2 ||
-				neighbor.y < 0-board.CountTile/2 ||
-				neighbor.x >= board.CountTile/2 ||
-				neighbor.y >= board.CountTile/2 {
-				continue
-			}
 			score := a.b.Cells[int(neighbor.x)][int(neighbor.y)].MoveCost()
 			if score <= 0 {
 				continue

@@ -12,7 +12,7 @@ type Item struct {
 }
 
 func (i Item) heuristic(goalX, goalY float64) float64 {
-	return float64(abs(i.x-goalX) + abs(i.y-goalY))
+	return abs(i.x-goalX) + abs(i.y-goalY)
 }
 func abs(x float64) float64 {
 	if x < 0 {

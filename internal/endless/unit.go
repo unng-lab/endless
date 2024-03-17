@@ -46,7 +46,7 @@ func (u *Unit) New(positionX float64, positionY float64) Unit {
 
 	unit.Pathing = astar.NewAstar(&board.B)
 
-	err := unit.Pathing.BuildPath(unit.PositionX, unit.PositionY, 40, 20)
+	err := unit.Pathing.BuildPath(unit.PositionX, unit.PositionY, board.CountTile/2+40, board.CountTile/2+20)
 	if err != nil {
 		panic(err)
 	}

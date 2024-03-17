@@ -21,16 +21,16 @@ type Game struct {
 
 func NewGame() *Game {
 	G.Units = make([]Unit, 0)
-	camera.TileSize = board.TileSize
+	camera.DefaultTileSize = board.TileSize
 	camera.CountTile = board.CountTile
 	err := board.NewBoard()
 	if err != nil {
 		panic(err)
 	}
 	NewInverntory()
-	G.Units = append(G.Units, I.Units["runner"].New(30, 10))
-	G.Units = append(G.Units, I.Units["runner"].New(500, 10))
-	G.Units = append(G.Units, I.Units["runner"].New(10, 10))
-	G.Units = append(G.Units, I.Units["runner"].New(-500, 10))
+	G.Units = append(G.Units, I.Units["runner"].New(board.CountTile/2+30, board.CountTile/2+10))
+	G.Units = append(G.Units, I.Units["runner"].New(board.CountTile/2+500, board.CountTile/2+10))
+	G.Units = append(G.Units, I.Units["runner"].New(board.CountTile/2+10, board.CountTile/2+10))
+	G.Units = append(G.Units, I.Units["runner"].New(board.CountTile/2+-500, board.CountTile/2+10))
 	return &G
 }
