@@ -3,6 +3,7 @@ package endless
 import (
 	"fmt"
 	"image/color"
+	"math/rand"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -42,13 +43,29 @@ func (u *Unit) New(positionX float64, positionY float64) Unit {
 	unit.SizeX = u.SizeX
 	unit.SizeY = u.SizeY
 
-	unit.Status = UnitStatusRunning
-
 	unit.Pathing = astar.NewAstar(&board.B)
-	if u.PositionX ==
-	err := unit.Pathing.BuildPath(unit.PositionX, unit.PositionY, board.CountTile/2+40, board.CountTile/2+20)
-	if err != nil {
-		panic(err)
+	if unit.PositionX == 2078 {
+		unit.Status = UnitStatusRunning
+		err := unit.Pathing.BuildPath(
+			unit.PositionX,
+			unit.PositionY,
+			board.CountTile/2+40,
+			board.CountTile/2+20,
+		)
+		if err != nil {
+			panic(err)
+		}
+	} else {
+		unit.Status = UnitStatusRunning
+		err := unit.Pathing.BuildPath(
+			unit.PositionX,
+			unit.PositionY,
+			float64(rand.Intn(board.CountTile)),
+			float64(rand.Intn(board.CountTile)),
+		)
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	for i := range u.Animation {

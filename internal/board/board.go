@@ -32,10 +32,11 @@ func NewBoard() error {
 	for i := range B.Cells {
 		B.Cells[i] = make([]Cell, CountTile)
 		for j := range B.Cells[i] {
+			seed := rnd.Intn(len(Tiles))
 			B.Cells[i][j] = Cell{
-				TileImage:      Tiles[rnd.Intn(len(Tiles))].Normal,
-				TileImageSmall: Tiles[rnd.Intn(len(Tiles))].Small,
-				Cost:           1,
+				TileImage:      Tiles[seed].Normal,
+				TileImageSmall: Tiles[seed].Small,
+				Cost:           getCost(seed),
 			}
 		}
 	}
@@ -92,4 +93,12 @@ func (b *Board) Draw(screen *ebiten.Image, camera camera.Camera) {
 
 func (b *Board) GetCellNumber() int64 {
 	return b.CellOnScreen.Load()
+}
+
+func getCost(seed int) float64 {
+	if (seed >= 0 && seed < 8) || (seed >= 16 && seed < 24) || (seed >= 32 && seed < 40) || (seed >= 48 && seed < 56) {
+		return 2
+	}
+
+	return 1
 }
