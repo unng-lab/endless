@@ -2,6 +2,8 @@ package endless
 
 import (
 	"testing"
+
+	"github/unng-lab/madfarmer/internal/board"
 )
 
 func TestGetLeftXY(t *testing.T) {
@@ -27,8 +29,8 @@ func TestGetLeftXY(t *testing.T) {
 			},
 			wantX:     0,
 			wantY:     0,
-			wantCellX: CountTile / 2,
-			wantCellY: CountTile / 2,
+			wantCellX: board.CountTile / 2,
+			wantCellY: board.CountTile / 2,
 		},
 		{
 			name: "2",
@@ -39,8 +41,8 @@ func TestGetLeftXY(t *testing.T) {
 			},
 			wantX:     -6,
 			wantY:     0,
-			wantCellX: CountTile/2 - 1,
-			wantCellY: CountTile / 2,
+			wantCellX: board.CountTile/2 - 1,
+			wantCellY: board.CountTile / 2,
 		},
 		{
 			name: "3",
@@ -51,8 +53,8 @@ func TestGetLeftXY(t *testing.T) {
 			},
 			wantX:     0,
 			wantY:     -6,
-			wantCellX: CountTile / 2,
-			wantCellY: CountTile/2 - 1,
+			wantCellX: board.CountTile / 2,
+			wantCellY: board.CountTile/2 - 1,
 		},
 		{
 			name: "4",
@@ -63,8 +65,8 @@ func TestGetLeftXY(t *testing.T) {
 			},
 			wantX:     0,
 			wantY:     0,
-			wantCellX: CountTile / 2,
-			wantCellY: CountTile / 2,
+			wantCellX: board.CountTile / 2,
+			wantCellY: board.CountTile / 2,
 		},
 		{
 			name: "5",
@@ -75,8 +77,8 @@ func TestGetLeftXY(t *testing.T) {
 			},
 			wantX:     0,
 			wantY:     0,
-			wantCellX: CountTile / 2,
-			wantCellY: CountTile / 2,
+			wantCellX: board.CountTile / 2,
+			wantCellY: board.CountTile / 2,
 		},
 		{
 			name: "6",
@@ -87,8 +89,8 @@ func TestGetLeftXY(t *testing.T) {
 			},
 			wantX:     -22.06,
 			wantY:     0,
-			wantCellX: CountTile/2 - 2,
-			wantCellY: CountTile / 2,
+			wantCellX: board.CountTile/2 - 2,
+			wantCellY: board.CountTile / 2,
 		},
 		{
 			name: "7",
@@ -99,8 +101,8 @@ func TestGetLeftXY(t *testing.T) {
 			},
 			wantX:     0,
 			wantY:     -22.06,
-			wantCellX: CountTile / 2,
-			wantCellY: CountTile/2 - 2,
+			wantCellX: board.CountTile / 2,
+			wantCellY: board.CountTile/2 - 2,
 		},
 		{
 			name: "8",
@@ -111,8 +113,8 @@ func TestGetLeftXY(t *testing.T) {
 			},
 			wantX:     0,
 			wantY:     0,
-			wantCellX: CountTile / 2,
-			wantCellY: CountTile / 2,
+			wantCellX: board.CountTile / 2,
+			wantCellY: board.CountTile / 2,
 		},
 		{
 			name: "9",
@@ -123,8 +125,8 @@ func TestGetLeftXY(t *testing.T) {
 			},
 			wantX:     0,
 			wantY:     0,
-			wantCellX: CountTile / 2,
-			wantCellY: CountTile / 2,
+			wantCellX: board.CountTile / 2,
+			wantCellY: board.CountTile / 2,
 		},
 	}
 	for _, tt := range tests {

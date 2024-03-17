@@ -1,15 +1,19 @@
-package endless
+package camera
 
 import (
 	"math"
 
 	"github/unng-lab/madfarmer/internal/geom"
+	"github/unng-lab/madfarmer/internal/window"
 )
 
 const (
-	maxZoom = 200
-	minZoom = -100
+	MaxZoom = 200
+	MinZoom = -100
 )
+
+var TileSize float64
+var CountTile float64
 
 // Camera TODO add maxX and maxY camera
 type Camera struct {
@@ -44,13 +48,13 @@ func (c *Camera) Right() {
 }
 
 func (c *Camera) ZoomUp() {
-	if c.zoomFactor < maxZoom {
+	if c.zoomFactor < MaxZoom {
 		c.zoomFactor += 10
 	}
 }
 
 func (c *Camera) ZoomDown() {
-	if c.zoomFactor > minZoom {
+	if c.zoomFactor > MinZoom {
 		c.zoomFactor += -10
 	}
 }
@@ -85,7 +89,7 @@ func (c *Camera) GetCurrentCoordinates() geom.Rectangle {
 
 func (c *Camera) Prepare() {
 	c.TileSize = c.GetTileSize()
-	maxX, maxY := (W.GetWidth())/c.TileSize+1, (W.GetHeight())/c.TileSize+1
+	maxX, maxY := (window.W.GetWidth())/c.TileSize+1, (window.W.GetHeight())/c.TileSize+1
 
 	var (
 		x, y         float64

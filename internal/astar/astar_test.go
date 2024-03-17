@@ -6,12 +6,12 @@ import (
 	"reflect"
 	"testing"
 
-	"github/unng-lab/madfarmer/internal/endless"
+	"github/unng-lab/madfarmer/internal/board"
 )
 
 func TestAstar_BuildPath(t *testing.T) {
 	type fields struct {
-		b     *endless.Board
+		b     *board.Board
 		items []Item
 		costs map[Item]float64
 		froms map[Item]Item
@@ -31,7 +31,7 @@ func TestAstar_BuildPath(t *testing.T) {
 		{
 			name: "1",
 			fields: fields{
-				b: &endless.Board{
+				b: &board.Board{
 					Cells: StringSliceToCells(astarTests[0].path),
 				},
 				costs: make(map[Item]float64, costsCapacity),
@@ -55,7 +55,7 @@ func TestAstar_BuildPath(t *testing.T) {
 		{
 			name: "2",
 			fields: fields{
-				b: &endless.Board{
+				b: &board.Board{
 					Cells: StringSliceToCells(astarTests[0].path),
 				},
 				costs: make(map[Item]float64, costsCapacity),
@@ -98,8 +98,8 @@ func TestAstar_BuildPath(t *testing.T) {
 	}
 }
 
-func StringSliceToCells(ss []string) [endless.CountTile][endless.CountTile]endless.Cell {
-	var cells [endless.CountTile][endless.CountTile]endless.Cell
+func StringSliceToCells(ss []string) [board.CountTile][board.CountTile]board.Cell {
+	var cells [board.CountTile][board.CountTile]board.Cell
 	for i, s := range ss {
 		for j := range s {
 			cells[i][j].Cost = letterToCost(rune(s[j]))

@@ -3,7 +3,7 @@ package astar
 import (
 	"errors"
 
-	"github/unng-lab/madfarmer/internal/endless"
+	"github/unng-lab/madfarmer/internal/board"
 	"github/unng-lab/madfarmer/internal/geom"
 )
 
@@ -29,14 +29,14 @@ const (
 var errNoPath = errors.New("no Path")
 
 type Astar struct {
-	b     *endless.Board
+	b     *board.Board
 	items []Item
 	costs map[Item]float64
 	froms map[Item]Item
 	Path  []geom.Point
 }
 
-func NewAstar(b *endless.Board) Astar {
+func NewAstar(b *board.Board) Astar {
 	return Astar{
 		b:     b,
 		costs: make(map[Item]float64, costsCapacity),
@@ -110,9 +110,10 @@ func (a *Astar) BuildPath(fromX, fromY, toX, toY float64) error {
 				y:        current.y + neighbors[i].Y,
 				priority: 0,
 			}
-			if neighbor.x < 0 || neighbor.y < 0 ||
-				neighbor.x >= endless.CountTile ||
-				neighbor.y >= endless.CountTile {
+			if neighbor.x < -board.CountTile/2 ||
+				neighbor.y < 0-board.CountTile/2 ||
+				neighbor.x >= board.CountTile/2 ||
+				neighbor.y >= board.CountTile/2 {
 				continue
 			}
 			score := a.b.Cells[int(neighbor.x)][int(neighbor.y)].MoveCost()

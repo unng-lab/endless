@@ -1,4 +1,4 @@
-package endless
+package board
 
 import "github.com/hajimehoshi/ebiten/v2"
 

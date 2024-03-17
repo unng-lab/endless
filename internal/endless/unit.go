@@ -9,6 +9,8 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/vector"
 
 	"github/unng-lab/madfarmer/internal/astar"
+	"github/unng-lab/madfarmer/internal/board"
+	"github/unng-lab/madfarmer/internal/camera"
 	"github/unng-lab/madfarmer/internal/geom"
 )
 
@@ -42,7 +44,7 @@ func (u *Unit) New(positionX float64, positionY float64) Unit {
 
 	unit.Status = UnitStatusRunning
 
-	unit.Pathing = astar.NewAstar(&B)
+	unit.Pathing = astar.NewAstar(&board.B)
 
 	err := unit.Pathing.BuildPath(unit.PositionX, unit.PositionY, 40, 20)
 	if err != nil {
@@ -55,7 +57,7 @@ func (u *Unit) New(positionX float64, positionY float64) Unit {
 	return unit
 }
 
-func (u *Unit) Draw(screen *ebiten.Image, counter int, camera Camera) bool {
+func (u *Unit) Draw(screen *ebiten.Image, counter int, camera camera.Camera) bool {
 	if u.Status == UnitStatusRunning {
 		u.DrawPath(screen, camera)
 	}
@@ -113,7 +115,7 @@ func (u *Unit) Drawable(cameraX, cameraY, tileSize, scale float64) bool {
 	return true
 }
 
-func (u *Unit) DrawPath(screen *ebiten.Image, camera Camera) {
+func (u *Unit) DrawPath(screen *ebiten.Image, camera camera.Camera) {
 	if len(u.Pathing.Path) <= 1 {
 		panic("path is empty")
 	}

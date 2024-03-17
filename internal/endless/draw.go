@@ -8,6 +8,8 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/vector"
+
+	"github/unng-lab/madfarmer/internal/board"
 )
 
 var Counter int
@@ -16,7 +18,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	Counter++
 	camera := g.camera
 	camera.Prepare()
-	B.Draw(screen, camera)
+	board.B.Draw(screen, camera)
 	unitNumber := 0
 	for i := range g.Units {
 		if g.Units[i].Draw(screen, Counter, camera) {
@@ -57,7 +59,7 @@ CellY: %0.2f`,
 			g.camera.GetPositionX(),
 			g.camera.GetPositionY(),
 			g.camera.GetZoomFactor(),
-			B.GetCellNumber(),
+			board.B.GetCellNumber(),
 			unitNumber,
 			camera.GetTileSize(),
 			posX,

@@ -1,4 +1,4 @@
-package endless
+package board
 
 import (
 	"math/rand"
@@ -7,6 +7,11 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"github/unng-lab/madfarmer/assets/img"
+	"github/unng-lab/madfarmer/internal/camera"
+)
+
+const (
+	hd = -50
 )
 
 var B Board
@@ -42,7 +47,7 @@ func NewBoard() error {
 	return nil
 }
 
-func (b *Board) Draw(screen *ebiten.Image, camera Camera) {
+func (b *Board) Draw(screen *ebiten.Image, camera camera.Camera) {
 	defer b.DrawOp.GeoM.Reset()
 	b.DrawOp.GeoM.Scale(
 		camera.GetScaleFactor(),
@@ -61,7 +66,7 @@ func (b *Board) Draw(screen *ebiten.Image, camera Camera) {
 			} else if int(j) == 2054 && int(i) == 2054 {
 				screen.DrawImage(b.EmptyCell, &b.DrawOp)
 			} else {
-				if camera.GetZoomFactor() > minZoom/2 {
+				if camera.GetZoomFactor() > hd {
 					screen.DrawImage(b.Cells[int(j)][int(i)].TileImage, &b.DrawOp)
 				} else {
 					//TODO оптимизация провалилась, нужно пробовать уменьшать кол-во объектов

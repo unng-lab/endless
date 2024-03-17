@@ -1,4 +1,4 @@
-package endless
+package board
 
 import (
 	"image"
@@ -6,36 +6,6 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"github/unng-lab/madfarmer/assets/img"
-)
-
-const (
-	bigTileZero int = iota
-	bigTileOne
-	bigTileTwo
-	bigTileThree
-	bigTileFour
-	bigTileFive
-	bigTileSix
-	bigTileSeven
-	bigTileEight
-	bigTileNine
-	bigTileTen
-	bigTileEleven
-	bigTileTwelve
-	bigTileThirteen
-	bigTileFourteen
-	bigTileFifteen
-	bigTileSixteen
-	bigTileSeventeen
-	bigTileEighteen
-	bigTileNineteen
-	bigTileTwenty
-	bigTileTwentyOne
-	bigTileTwentyTwo
-	bigTileTwentyThree
-	bigTileTwentyFour
-	bigTileTwentyFive
-	bigTileTwentySix
 )
 
 var Tiles [256]Tile
