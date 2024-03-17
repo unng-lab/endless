@@ -45,7 +45,7 @@ func (u *Unit) New(positionX float64, positionY float64) Unit {
 	unit.Status = UnitStatusRunning
 
 	unit.Pathing = astar.NewAstar(&board.B)
-
+	if u.PositionX ==
 	err := unit.Pathing.BuildPath(unit.PositionX, unit.PositionY, board.CountTile/2+40, board.CountTile/2+20)
 	if err != nil {
 		panic(err)
@@ -61,7 +61,7 @@ func (u *Unit) Draw(screen *ebiten.Image, counter int, camera camera.Camera) boo
 	if u.Status == UnitStatusRunning {
 		u.DrawPath(screen, camera)
 	}
-	if camera.Coordinates.Contains(geom.Pt(u.PositionX, u.PositionY)) {
+	if !camera.Coordinates.Contains(geom.Pt(u.PositionX, u.PositionY)) {
 		return false
 	}
 	defer u.DrawOptions.GeoM.Reset()
@@ -106,8 +106,8 @@ func (u *Unit) GetDrawPoint(
 	cameraX, cameraY, tileSize, scale float64,
 ) (float64, float64) {
 	var x, y float64
-	x = float64(u.PositionX)*tileSize + tileSize/2 - float64(u.SizeX)*scale/2 - cameraX
-	y = float64(u.PositionY)*tileSize + tileSize*3/4 - float64(u.SizeY)*scale - cameraY
+	x = (u.PositionX-board.CountTile/2)*tileSize + tileSize/2 - u.SizeX*scale/2 - cameraX
+	y = (u.PositionY-board.CountTile/2)*tileSize + tileSize*3/4 - u.SizeY*scale - cameraY
 	return x, y
 }
 
@@ -122,7 +122,8 @@ func (u *Unit) DrawPath(screen *ebiten.Image, camera camera.Camera) {
 	for i := range len(u.Pathing.Path) - 2 {
 		if camera.Coordinates.Contains(geom.Pt(u.Pathing.Path[i].X, u.Pathing.Path[i].Y)) ||
 			camera.Coordinates.Contains(geom.Pt(u.Pathing.Path[i+1].X, u.Pathing.Path[i+1].Y)) {
-			start, finish := camera.GetMiddleInPixels(u.Pathing.Path[i]), camera.GetMiddleInPixels(u.Pathing.Path[i+1])
+			start := camera.GetMiddleInPixels(u.Pathing.Path[i])
+			finish := camera.GetMiddleInPixels(u.Pathing.Path[i+1])
 			vector.StrokeLine(screen,
 				float32(start.X),
 				float32(start.Y),

@@ -143,7 +143,7 @@ func (c *Camera) GetCurrentPixels() geom.Rectangle {
 func (c *Camera) GetMiddleInPixels(point geom.Point) geom.Point {
 	distX, distY := c.Coordinates.Min.Distance(point)
 	return geom.Point{
-		X: c.Pixels.Min.X + distX*c.TileSize,
-		Y: c.Pixels.Min.Y + distY*c.TileSize,
+		X: c.Pixels.Min.X + distX*c.TileSize + c.TileSize/2,
+		Y: c.Pixels.Min.Y + distY*c.TileSize + c.TileSize/2,
 	}
 }
