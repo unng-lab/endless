@@ -49,7 +49,31 @@ func TestAstar_BuildPath(t *testing.T) {
 					Y: 1,
 				},
 			},
-			want:    []byte{DirRight, DirRight, DirRight},
+			want:    []byte{DirRight, DirRight, DirRight, DirRight},
+			wantErr: false,
+		},
+		{
+			name: "2",
+			fields: fields{
+				b: &endless.Board{
+					Cells: StringSliceToCells(astarTests[0].path),
+				},
+				costs: make(map[Item]float64, costsCapacity),
+				froms: make(map[Item]Item, fromsCapacity),
+				items: make([]Item, 0, queueCapacity),
+				path:  make([]byte, 0, pathCapacity),
+			},
+			args: args{
+				from: image.Point{
+					X: 1,
+					Y: 0,
+				},
+				to: image.Point{
+					X: 7,
+					Y: 1,
+				},
+			},
+			want:    []byte{DirRight, DirRight, DirRight, DirRight},
 			wantErr: false,
 		},
 	}
@@ -60,7 +84,7 @@ func TestAstar_BuildPath(t *testing.T) {
 				items: tt.fields.items,
 				costs: tt.fields.costs,
 				froms: tt.fields.froms,
-				path:  tt.fields.path,
+				Path:  tt.fields.path,
 			}
 			got, err := a.BuildPath(tt.args.from, tt.args.to)
 			if (err != nil) != tt.wantErr {

@@ -15,15 +15,12 @@ var Counter int
 func (g *Game) Draw(screen *ebiten.Image) {
 	Counter++
 	camera := g.camera
-	minX, minY, maxX, maxY := B.Draw(screen, camera)
+	camera.Prepare()
+	B.Draw(screen, camera)
 	unitNumber := 0
 	for i := range g.Units {
-		if g.Units[i].PositionX+CountTile/2 >= minX &&
-			g.Units[i].PositionX+CountTile/2 <= maxX &&
-			g.Units[i].PositionY+CountTile/2 >= minY &&
-			g.Units[i].PositionY+CountTile/2 <= maxY {
+		if g.Units[i].Draw(screen, Counter, camera) {
 			unitNumber++
-			g.Units[i].Draw(screen, Counter, camera)
 		}
 	}
 	a, b := ebiten.CursorPosition()

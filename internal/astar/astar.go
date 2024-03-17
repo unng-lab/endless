@@ -2,9 +2,9 @@ package astar
 
 import (
 	"errors"
-	"image"
 
 	"github/unng-lab/madfarmer/internal/endless"
+	"github/unng-lab/madfarmer/internal/geom"
 )
 
 const (
@@ -26,14 +26,14 @@ const (
 	DirUpLeft
 )
 
-var errNoPath = errors.New("no path")
+var errNoPath = errors.New("no Path")
 
 type Astar struct {
 	b     *endless.Board
 	items []Item
 	costs map[Item]float64
 	froms map[Item]Item
-	path  []byte
+	Path  []geom.Point
 }
 
 func NewAstar(b *endless.Board) Astar {
@@ -42,7 +42,7 @@ func NewAstar(b *endless.Board) Astar {
 		costs: make(map[Item]float64, costsCapacity),
 		froms: make(map[Item]Item, fromsCapacity),
 		items: make([]Item, 0, queueCapacity),
-		path:  make([]byte, 0, pathCapacity),
+		Path:  make([]geom.Point, 0, pathCapacity),
 	}
 }
 
@@ -64,46 +64,44 @@ func (a *Astar) Push(x Item) {
 }
 
 func (a *Astar) Pop() Item {
+	n := a.Len() - 1
+	a.Swap(0, n)
+	a.down(0, n)
 	item := a.items[len(a.items)-1]
 	a.items = a.items[0 : len(a.items)-1]
 	return item
 }
 
 func (a *Astar) ResetPath() {
-	a.path = a.path[:0]
+	a.Path = a.Path[:0]
 }
 
-func (a *Astar) BuildPath(from, to image.Point) ([]byte, error) {
+func (a *Astar) BuildPath(fromX, fromY, toX, toY float64) error {
 	a.ResetPath()
 	defer func() {
 		a.costs = make(map[Item]float64, costsCapacity)
 		a.froms = make(map[Item]Item, fromsCapacity)
 	}()
 
-	if from == to {
-		return a.path, nil
+	if fromX == toX && fromY == toY {
+		return nil
 	}
 
 	a.Push(Item{
-		x: from.X,
-		y: from.Y,
+		x: fromX,
+		y: fromY,
 	})
 
 	for a.Len() > 0 {
 		current := a.Pop()
-		if current.x == to.X && current.y == to.Y {
-			for !(current.x == from.X && current.y == from.Y) {
-				next := a.froms[current]
-				a.path = append(a.path, current.to(next))
-				current = next
+		if current.x == toX && current.y == toY {
+			for !(current.x == fromX && current.y == fromY) {
+				a.Path = append(a.Path, geom.Pt(current.x, current.y))
+				current = a.froms[current]
 			}
-			//a.path = append(a.path, current.to(Item{
-			//	x:        from.X,
-			//	y:        from.Y,
-			//	priority: 0,
-			//}))
+			a.Path = append(a.Path, geom.Pt(fromX, fromY))
 			a.reversePath()
-			return a.path, nil
+			return nil
 		}
 
 		for i := range neighbors {
@@ -117,26 +115,29 @@ func (a *Astar) BuildPath(from, to image.Point) ([]byte, error) {
 				neighbor.y >= endless.CountTile {
 				continue
 			}
-			score := a.b.Cells[neighbor.x][neighbor.y].MoveCost()
+			score := a.b.Cells[int(neighbor.x)][int(neighbor.y)].MoveCost()
+			if score <= 0 {
+				continue
+			}
 			if neighbors[i].X != 0 && neighbors[i].Y != 0 {
 				score = score * costDiagonal
 			}
 			totalScore := a.costs[current] + score
 			if oldScore, ok := a.costs[neighbor]; !ok || totalScore < oldScore {
 				a.costs[neighbor] = totalScore
-				neighbor.priority = totalScore + neighbor.heuristic(to.X, to.Y)
+				neighbor.priority = totalScore + neighbor.heuristic(toX, toY)
 				a.Push(neighbor)
 				a.froms[neighbor] = current
 			}
 		}
 	}
 
-	return nil, errNoPath
+	return errNoPath
 }
 
 func (a *Astar) reversePath() {
-	for i, j := 0, len(a.path)-1; i < j; i, j = i+1, j-1 {
-		a.path[i], a.path[j] = reverse(a.path[j]), reverse(a.path[i])
+	for i, j := 0, len(a.Path)-1; i < j; i, j = i+1, j-1 {
+		a.Path[i], a.Path[j] = a.Path[j], a.Path[i]
 	}
 
 }
@@ -182,25 +183,25 @@ func (a *Astar) down(i0, n int) bool {
 	return i > i0
 }
 
-func reverse(dir byte) byte {
-	switch dir {
-	case DirRight:
-		return DirLeft
-	case DirLeft:
-		return DirRight
-	case DirUp:
-		return DirDown
-	case DirDown:
-		return DirUp
-	case DirUpRight:
-		return DirDownLeft
-	case DirDownRight:
-		return DirUpLeft
-	case DirDownLeft:
-		return DirUpRight
-	case DirUpLeft:
-		return DirDownRight
-	default:
-		panic("unreachable")
-	}
-}
+//func reverse(dir byte) byte {
+//	switch dir {
+//	case DirRight:
+//		return DirLeft
+//	case DirLeft:
+//		return DirRight
+//	case DirUp:
+//		return DirDown
+//	case DirDown:
+//		return DirUp
+//	case DirUpRight:
+//		return DirDownLeft
+//	case DirDownRight:
+//		return DirUpLeft
+//	case DirDownLeft:
+//		return DirUpRight
+//	case DirUpLeft:
+//		return DirDownRight
+//	default:
+//		panic("unreachable")
+//	}
+//}

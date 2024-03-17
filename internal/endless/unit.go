@@ -2,9 +2,22 @@ package endless
 
 import (
 	"fmt"
+	"image/color"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
+	"github.com/hajimehoshi/ebiten/v2/vector"
+
+	"github/unng-lab/madfarmer/internal/astar"
+	"github/unng-lab/madfarmer/internal/geom"
+)
+
+const (
+	UnitStatusUndefined = iota
+	UnitStatusRunning
+	UnitStatusPaused
+	UnitStatusFinished
+	UnitStatusIdle
 )
 
 type Unit struct {
@@ -15,6 +28,8 @@ type Unit struct {
 	SizeX       float64
 	SizeY       float64
 	DrawOptions ebiten.DrawImageOptions
+	Pathing     astar.Astar
+	Status      int
 }
 
 func (u *Unit) New(positionX float64, positionY float64) Unit {
@@ -25,13 +40,28 @@ func (u *Unit) New(positionX float64, positionY float64) Unit {
 	unit.SizeX = u.SizeX
 	unit.SizeY = u.SizeY
 
+	unit.Status = UnitStatusRunning
+
+	unit.Pathing = astar.NewAstar(&B)
+
+	err := unit.Pathing.BuildPath(unit.PositionX, unit.PositionY, 40, 20)
+	if err != nil {
+		panic(err)
+	}
+
 	for i := range u.Animation {
 		unit.Animation = append(unit.Animation, u.Animation[i])
 	}
 	return unit
 }
 
-func (u *Unit) Draw(screen *ebiten.Image, counter int, camera Camera) {
+func (u *Unit) Draw(screen *ebiten.Image, counter int, camera Camera) bool {
+	if u.Status == UnitStatusRunning {
+		u.DrawPath(screen, camera)
+	}
+	if camera.Coordinates.Contains(geom.Pt(u.PositionX, u.PositionY)) {
+		return false
+	}
 	defer u.DrawOptions.GeoM.Reset()
 	u.DrawOptions.GeoM.Scale(
 		camera.GetScaleFactor(),
@@ -62,6 +92,7 @@ func (u *Unit) Draw(screen *ebiten.Image, counter int, camera Camera) {
 		100,
 		0,
 	)
+	return true
 }
 
 func (u *Unit) Update() error {
@@ -80,4 +111,25 @@ func (u *Unit) GetDrawPoint(
 
 func (u *Unit) Drawable(cameraX, cameraY, tileSize, scale float64) bool {
 	return true
+}
+
+func (u *Unit) DrawPath(screen *ebiten.Image, camera Camera) {
+	if len(u.Pathing.Path) <= 1 {
+		panic("path is empty")
+	}
+	for i := range len(u.Pathing.Path) - 2 {
+		if camera.Coordinates.Contains(geom.Pt(u.Pathing.Path[i].X, u.Pathing.Path[i].Y)) ||
+			camera.Coordinates.Contains(geom.Pt(u.Pathing.Path[i+1].X, u.Pathing.Path[i+1].Y)) {
+			start, finish := camera.GetMiddleInPixels(u.Pathing.Path[i]), camera.GetMiddleInPixels(u.Pathing.Path[i+1])
+			vector.StrokeLine(screen,
+				float32(start.X),
+				float32(start.Y),
+				float32(finish.X),
+				float32(finish.Y),
+				1,
+				color.White,
+				true,
+			)
+		}
+	}
 }
