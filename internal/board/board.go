@@ -55,10 +55,14 @@ func (b *Board) Draw(screen *ebiten.Image, camera camera.Camera) {
 		camera.GetScaleFactor(),
 		camera.GetScaleFactor(),
 	)
-	b.DrawOp.GeoM.Translate(camera.Pixels.Min.X, camera.Pixels.Min.Y)
+	b.DrawOp.GeoM.Translate(camera.DrawArea.Min.X, camera.DrawArea.Min.Y)
 	cellNumber := int64(0)
 	for j := camera.Coordinates.Min.Y; j < camera.Coordinates.Max.Y; j++ {
 		for i := camera.Coordinates.Min.X; i < camera.Coordinates.Max.X; i++ {
+			if i < 0 || i > CountTile-1 || j < 0 || j > CountTile-1 {
+				b.DrawOp.GeoM.Translate(camera.TileSize, 0)
+				continue
+			}
 			if int(j) == 2050 && int(i) == 2050 {
 				screen.DrawImage(b.EmptyCell, &b.DrawOp)
 			} else if int(j) == 2052 && int(i) == 2052 {
@@ -84,7 +88,7 @@ func (b *Board) Draw(screen *ebiten.Image, camera camera.Camera) {
 			camera.GetScaleFactor(),
 			camera.GetScaleFactor(),
 		)
-		b.DrawOp.GeoM.Translate(camera.Pixels.Min.X, camera.Pixels.Min.Y)
+		b.DrawOp.GeoM.Translate(camera.DrawArea.Min.X, camera.DrawArea.Min.Y)
 		b.DrawOp.GeoM.Translate(0, (j+1-camera.Coordinates.Min.Y)*camera.TileSize)
 	}
 	b.CellOnScreen.Store(cellNumber)

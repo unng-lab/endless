@@ -24,25 +24,29 @@ const (
 )
 
 type Unit struct {
-	Name        string
-	Animation   []*ebiten.Image
-	PositionX   float64
-	PositionY   float64
-	SizeX       float64
-	SizeY       float64
-	DrawOptions ebiten.DrawImageOptions
-	Pathing     astar.Astar
-	Status      int
+	Name            string
+	Animation       []*ebiten.Image
+	PositionX       float64
+	PositionY       float64
+	SizeX           float64
+	SizeY           float64
+	Speed           float64 // tiles per update tick
+	PositionShiftX  float64 // in tiles
+	PositionShiftY  float64 // in tiles
+	CurrentPosition geom.Point
+	DrawOptions     ebiten.DrawImageOptions
+	Pathing         astar.Astar
+	Status          int
 }
 
-func (u *Unit) New(positionX float64, positionY float64) Unit {
+func (u *Unit) New(positionX float64, positionY float64, tileSize float64) Unit {
 	var unit Unit
 	unit.Name = u.Name
 	unit.PositionX = positionX
 	unit.PositionY = positionY
 	unit.SizeX = u.SizeX
 	unit.SizeY = u.SizeY
-
+	unit.Speed = 1 / ebiten.DefaultTPS
 	unit.Pathing = astar.NewAstar(&board.B)
 	if unit.PositionX == 2078 {
 		unit.Status = UnitStatusRunning
@@ -71,6 +75,9 @@ func (u *Unit) New(positionX float64, positionY float64) Unit {
 	for i := range u.Animation {
 		unit.Animation = append(unit.Animation, u.Animation[i])
 	}
+	unit.PositionShiftX = -u.SizeX / 2
+	unit.PositionShiftY = tileSize/4 - u.SizeY
+
 	return unit
 }
 
@@ -86,12 +93,8 @@ func (u *Unit) Draw(screen *ebiten.Image, counter int, camera camera.Camera) boo
 		camera.GetScaleFactor(),
 		camera.GetScaleFactor(),
 	)
-	u.DrawOptions.GeoM.Translate(u.GetDrawPoint(
-		camera.GetPositionX(),
-		camera.GetPositionY(),
-		camera.GetTileSize(),
-		camera.GetScaleFactor(),
-	))
+	drawPoint := u.GetDrawPoint(camera)
+	u.DrawOptions.GeoM.Translate(drawPoint.X, drawPoint.Y)
 	screen.DrawImage(u.Animation[counter%len(u.Animation)], &u.DrawOptions)
 
 	ebitenutil.DebugPrintAt(
@@ -120,12 +123,12 @@ func (u *Unit) Update() error {
 }
 
 func (u *Unit) GetDrawPoint(
-	cameraX, cameraY, tileSize, scale float64,
-) (float64, float64) {
-	var x, y float64
-	x = (u.PositionX-board.CountTile/2)*tileSize + tileSize/2 - u.SizeX*scale/2 - cameraX
-	y = (u.PositionY-board.CountTile/2)*tileSize + tileSize*3/4 - u.SizeY*scale - cameraY
-	return x, y
+	camera camera.Camera,
+) geom.Point {
+	drawPoint := camera.GetMiddleInPixels(geom.Pt(u.PositionX, u.PositionY))
+	drawPoint.X = drawPoint.X + u.PositionShiftX*camera.GetScaleFactor()
+	drawPoint.Y = drawPoint.Y + u.PositionShiftY*camera.GetScaleFactor()
+	return drawPoint
 }
 
 func (u *Unit) Drawable(cameraX, cameraY, tileSize, scale float64) bool {
@@ -136,11 +139,11 @@ func (u *Unit) DrawPath(screen *ebiten.Image, camera camera.Camera) {
 	if len(u.Pathing.Path) <= 1 {
 		panic("path is empty")
 	}
+	start := camera.GetMiddleInPixels(geom.Pt(u.PositionX, u.PositionY))
 	for i := range len(u.Pathing.Path) - 2 {
-		if camera.Coordinates.Contains(geom.Pt(u.Pathing.Path[i].X, u.Pathing.Path[i].Y)) ||
-			camera.Coordinates.Contains(geom.Pt(u.Pathing.Path[i+1].X, u.Pathing.Path[i+1].Y)) {
-			start := camera.GetMiddleInPixels(u.Pathing.Path[i])
-			finish := camera.GetMiddleInPixels(u.Pathing.Path[i+1])
+		finish := camera.GetMiddleInPixels(u.Pathing.Path[i+1])
+		if camera.Pixels.Contains(start) ||
+			camera.Pixels.Contains(finish) {
 			vector.StrokeLine(screen,
 				float32(start.X),
 				float32(start.Y),
@@ -151,5 +154,6 @@ func (u *Unit) DrawPath(screen *ebiten.Image, camera camera.Camera) {
 				true,
 			)
 		}
+		start = finish
 	}
 }

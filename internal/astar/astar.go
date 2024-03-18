@@ -79,6 +79,7 @@ func (a *Astar) ResetPath() {
 func (a *Astar) BuildPath(fromX, fromY, toX, toY float64) error {
 	a.ResetPath()
 	defer func() {
+		a.items = a.items[:0]
 		a.costs = make(map[Item]float64, costsCapacity)
 		a.froms = make(map[Item]Item, fromsCapacity)
 	}()

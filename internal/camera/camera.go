@@ -23,6 +23,8 @@ type Camera struct {
 	TileSize    float64
 	Coordinates geom.Rectangle
 	Pixels      geom.Rectangle
+	DrawArea    geom.Rectangle
+	ScaleFactor float64
 }
 
 func (c *Camera) Reset(w, h int) {
@@ -64,7 +66,7 @@ func (c *Camera) scale() float64 {
 }
 
 func (c *Camera) GetTileSize() float64 {
-	return DefaultTileSize * c.scale()
+	return DefaultTileSize * c.ScaleFactor
 }
 
 func (c *Camera) GetZoomFactor() float64 {
@@ -80,7 +82,7 @@ func (c *Camera) GetPositionY() float64 {
 }
 
 func (c *Camera) GetScaleFactor() float64 {
-	return c.scale()
+	return c.ScaleFactor
 }
 
 func (c *Camera) GetCurrentCoordinates() geom.Rectangle {
@@ -88,6 +90,7 @@ func (c *Camera) GetCurrentCoordinates() geom.Rectangle {
 }
 
 func (c *Camera) Prepare() {
+	c.ScaleFactor = c.scale()
 	c.TileSize = c.GetTileSize()
 	maxX, maxY := (window.W.GetWidth())/c.TileSize+1, (window.W.GetHeight())/c.TileSize+1
 
@@ -126,12 +129,22 @@ func (c *Camera) Prepare() {
 
 	c.Pixels = geom.Rectangle{
 		Min: geom.Point{
-			X: math.Round(x*100) / 100,
-			Y: math.Round(y*100) / 100,
+			X: math.Round(c.TileSize*cellX*100)/100 - x - c.positionX,
+			Y: math.Round(c.TileSize*cellY*100)/100 - y - c.positionY,
 		},
 		Max: geom.Point{
-			X: math.Round(x*100)/100 + c.TileSize*(cellX+maxX),
-			Y: math.Round(y*100)/100 + c.TileSize*(cellY+maxY),
+			X: math.Round(c.TileSize*(cellX+maxX)*100)/100 - x - c.positionX,
+			Y: math.Round(c.TileSize*(cellY+maxY)*100)/100 - y - c.positionY,
+		},
+	}
+	c.DrawArea = geom.Rectangle{
+		Min: geom.Point{
+			X: x,
+			Y: y,
+		},
+		Max: geom.Point{
+			X: x + c.TileSize*maxX,
+			Y: y + c.TileSize*maxY,
 		},
 	}
 }
@@ -143,7 +156,12 @@ func (c *Camera) GetCurrentPixels() geom.Rectangle {
 func (c *Camera) GetMiddleInPixels(point geom.Point) geom.Point {
 	distX, distY := c.Coordinates.Min.Distance(point)
 	return geom.Point{
-		X: c.Pixels.Min.X + distX*c.TileSize + c.TileSize/2,
-		Y: c.Pixels.Min.Y + distY*c.TileSize + c.TileSize/2,
+		X: c.DrawArea.Min.X + distX*c.TileSize + c.TileSize/2,
+		Y: c.DrawArea.Min.Y + distY*c.TileSize + c.TileSize/2,
 	}
 }
+
+//func (c *Camera) DrawPixelMinPoint() (float64, float64) {
+//	return c.Pixels.Min.X - c.TileSize*CountTile/2,
+//		c.Pixels.Min.Y - c.TileSize*CountTile/2
+//}

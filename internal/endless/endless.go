@@ -28,9 +28,25 @@ func NewGame() *Game {
 		panic(err)
 	}
 	NewInverntory()
-	G.Units = append(G.Units, I.Units["runner"].New(2078, 2058))
-	G.Units = append(G.Units, I.Units["runner"].New(board.CountTile/2+500, board.CountTile/2+10))
-	G.Units = append(G.Units, I.Units["runner"].New(board.CountTile/2+10, board.CountTile/2+10))
-	G.Units = append(G.Units, I.Units["runner"].New(board.CountTile/2+-500, board.CountTile/2+10))
+	G.Units = append(G.Units, I.Units["runner"].New(
+		2178,
+		2058,
+		board.TileSize,
+	))
+	G.Units = append(G.Units, I.Units["runner"].New(
+		board.CountTile/2+500,
+		board.CountTile/2+10,
+		board.TileSize,
+	))
+	G.Units = append(G.Units, I.Units["runner"].New(
+		board.CountTile/2+10,
+		board.CountTile/2+10,
+		board.TileSize,
+	))
+	G.Units = append(G.Units, I.Units["runner"].New(
+		board.CountTile/2+-500,
+		board.CountTile/2+10,
+		board.TileSize,
+	))
 	return &G
 }
