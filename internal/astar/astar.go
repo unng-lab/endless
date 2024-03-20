@@ -29,7 +29,7 @@ const (
 var errNoPath = errors.New("no Path")
 
 type Astar struct {
-	b     *board.Board
+	B     *board.Board
 	items []Item
 	costs map[Item]float64
 	froms map[Item]Item
@@ -38,7 +38,7 @@ type Astar struct {
 
 func NewAstar(b *board.Board) Astar {
 	return Astar{
-		b:     b,
+		B:     b,
 		costs: make(map[Item]float64, costsCapacity),
 		froms: make(map[Item]Item, fromsCapacity),
 		items: make([]Item, 0, queueCapacity),
@@ -101,7 +101,6 @@ func (a *Astar) BuildPath(fromX, fromY, toX, toY float64) error {
 				current = a.froms[current]
 			}
 			a.Path = append(a.Path, geom.Pt(fromX, fromY))
-			a.reversePath()
 			return nil
 		}
 
@@ -111,7 +110,8 @@ func (a *Astar) BuildPath(fromX, fromY, toX, toY float64) error {
 				y:        current.y + neighbors[i].Y,
 				priority: 0,
 			}
-			score := a.b.Cells[int(neighbor.x)][int(neighbor.y)].MoveCost()
+
+			score := a.B.GetCell(int(neighbor.x), int(neighbor.y)).MoveCost()
 			if score <= 0 {
 				continue
 			}

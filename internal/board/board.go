@@ -55,7 +55,7 @@ func (b *Board) Draw(screen *ebiten.Image, camera camera.Camera) {
 		camera.GetScaleFactor(),
 		camera.GetScaleFactor(),
 	)
-	b.DrawOp.GeoM.Translate(camera.DrawArea.Min.X, camera.DrawArea.Min.Y)
+	b.DrawOp.GeoM.Translate(camera.RelativePixels.Min.X, camera.RelativePixels.Min.Y)
 	cellNumber := int64(0)
 	for j := camera.Coordinates.Min.Y; j < camera.Coordinates.Max.Y; j++ {
 		for i := camera.Coordinates.Min.X; i < camera.Coordinates.Max.X; i++ {
@@ -88,7 +88,7 @@ func (b *Board) Draw(screen *ebiten.Image, camera camera.Camera) {
 			camera.GetScaleFactor(),
 			camera.GetScaleFactor(),
 		)
-		b.DrawOp.GeoM.Translate(camera.DrawArea.Min.X, camera.DrawArea.Min.Y)
+		b.DrawOp.GeoM.Translate(camera.RelativePixels.Min.X, camera.RelativePixels.Min.Y)
 		b.DrawOp.GeoM.Translate(0, (j+1-camera.Coordinates.Min.Y)*camera.TileSize)
 	}
 	b.CellOnScreen.Store(cellNumber)
@@ -105,4 +105,11 @@ func getCost(seed int) float64 {
 	}
 
 	return 1
+}
+
+func (b *Board) GetCell(x, y int) Cell {
+	if x < 0 || x > CountTile-1 || y < 0 || y > CountTile-1 {
+		return Cell{}
+	}
+	return b.Cells[y][x]
 }

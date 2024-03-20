@@ -7,6 +7,8 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/examples/resources/images"
+
+	"github/unng-lab/madfarmer/internal/board"
 )
 
 var I Inverntory
@@ -32,8 +34,8 @@ const (
 func NewRunner() *Unit {
 	var u Unit
 	u.Name = "runner"
-	u.SizeX = frameWidth
-	u.SizeY = frameHeight
+	u.SizeX = frameWidth / board.TileSize
+	u.SizeY = frameHeight / board.TileSize
 	img, _, err := image.Decode(bytes.NewReader(images.Runner_png))
 	if err != nil {
 		slog.Error("image.Decode", err)

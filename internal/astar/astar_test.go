@@ -80,7 +80,7 @@ func TestAstar_BuildPath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			a := &Astar{
-				b:     tt.fields.b,
+				B:     tt.fields.b,
 				items: tt.fields.items,
 				costs: tt.fields.costs,
 				froms: tt.fields.froms,

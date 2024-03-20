@@ -39,5 +39,10 @@ func (g *Game) Update() error {
 		// TODO сделать по центру карты
 		g.camera.Reset(0, 0)
 	}
+
+	for i := range g.Units {
+		g.Units[i].Update()
+	}
+
 	return UI.Update()
 }

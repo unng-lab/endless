@@ -1,12 +1,10 @@
 package endless
 
 import (
-	"fmt"
 	"image/color"
 	"math/rand"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/vector"
 
 	"github/unng-lab/madfarmer/internal/astar"
@@ -24,35 +22,36 @@ const (
 )
 
 type Unit struct {
-	Name            string
-	Animation       []*ebiten.Image
-	PositionX       float64
-	PositionY       float64
-	SizeX           float64
-	SizeY           float64
-	Speed           float64 // tiles per update tick
-	PositionShiftX  float64 // in tiles
-	PositionShiftY  float64 // in tiles
-	CurrentPosition geom.Point
-	DrawOptions     ebiten.DrawImageOptions
-	Pathing         astar.Astar
-	Status          int
+	ID               int
+	Name             string
+	Animation        []*ebiten.Image
+	Position         geom.Point
+	SizeX            float64
+	SizeY            float64
+	Speed            float64 // tiles per update tick
+	PositionShiftX   float64 // in tiles
+	PositionShiftY   float64 // in tiles
+	AbsolutePosition geom.Point
+	DrawOptions      ebiten.DrawImageOptions
+	Pathing          astar.Astar
+	Status           int
 }
 
-func (u *Unit) New(positionX float64, positionY float64, tileSize float64) Unit {
+func (u *Unit) New(id int, positionX float64, positionY float64) Unit {
 	var unit Unit
+	unit.ID = id
 	unit.Name = u.Name
-	unit.PositionX = positionX
-	unit.PositionY = positionY
+	unit.Position.X = positionX
+	unit.Position.Y = positionY
 	unit.SizeX = u.SizeX
 	unit.SizeY = u.SizeY
-	unit.Speed = 1 / ebiten.DefaultTPS
+	unit.Speed = 10 / float64(ebiten.DefaultTPS)
 	unit.Pathing = astar.NewAstar(&board.B)
-	if unit.PositionX == 2078 {
+	if unit.Position.X == 2058 {
 		unit.Status = UnitStatusRunning
 		err := unit.Pathing.BuildPath(
-			unit.PositionX,
-			unit.PositionY,
+			unit.Position.X,
+			unit.Position.Y,
 			board.CountTile/2+40,
 			board.CountTile/2+20,
 		)
@@ -62,8 +61,8 @@ func (u *Unit) New(positionX float64, positionY float64, tileSize float64) Unit 
 	} else {
 		unit.Status = UnitStatusRunning
 		err := unit.Pathing.BuildPath(
-			unit.PositionX,
-			unit.PositionY,
+			unit.Position.X,
+			unit.Position.Y,
 			float64(rand.Intn(board.CountTile)),
 			float64(rand.Intn(board.CountTile)),
 		)
@@ -75,8 +74,8 @@ func (u *Unit) New(positionX float64, positionY float64, tileSize float64) Unit 
 	for i := range u.Animation {
 		unit.Animation = append(unit.Animation, u.Animation[i])
 	}
-	unit.PositionShiftX = -u.SizeX / 2
-	unit.PositionShiftY = tileSize/4 - u.SizeY
+	unit.PositionShiftX = 0.5 - u.SizeX/2
+	unit.PositionShiftY = 0.75 - u.SizeY
 
 	return unit
 }
@@ -85,7 +84,7 @@ func (u *Unit) Draw(screen *ebiten.Image, counter int, camera camera.Camera) boo
 	if u.Status == UnitStatusRunning {
 		u.DrawPath(screen, camera)
 	}
-	if !camera.Coordinates.Contains(geom.Pt(u.PositionX, u.PositionY)) {
+	if !camera.Coordinates.Contains(geom.Pt(u.Position.X, u.Position.Y)) {
 		return false
 	}
 	defer u.DrawOptions.GeoM.Reset()
@@ -97,37 +96,48 @@ func (u *Unit) Draw(screen *ebiten.Image, counter int, camera camera.Camera) boo
 	u.DrawOptions.GeoM.Translate(drawPoint.X, drawPoint.Y)
 	screen.DrawImage(u.Animation[counter%len(u.Animation)], &u.DrawOptions)
 
-	ebitenutil.DebugPrintAt(
-		screen,
-		fmt.Sprintf(
-			`posX: %0.2f,
-	posY: %0.2f,
-	TileSize: %0.2f,
-	cposX: %0.2f,
-	cposY: %0.2f`,
-			u.DrawOptions.GeoM.Element(0, 2),
-			u.DrawOptions.GeoM.Element(1, 2),
-			camera.GetTileSize(),
-			camera.GetPositionX(),
-			camera.GetPositionY(),
-		),
-		100,
-		0,
-	)
+	//ebitenutil.DebugPrintAt(
+	//	screen,
+	//	fmt.Sprintf(
+	//		`posX: %0.2f,
+	//posY: %0.2f,
+	//TileSize: %0.2f,
+	//cposX: %0.2f,
+	//cposY: %0.2f`,
+	//		u.DrawOptions.GeoM.Element(0, 2),
+	//		u.DrawOptions.GeoM.Element(1, 2),
+	//		camera.GetTileSize(),
+	//		camera.GetPositionX(),
+	//		camera.GetPositionY(),
+	//	),
+	//	100,
+	//	0,
+	//)
 	return true
 }
 
 func (u *Unit) Update() error {
-	//u.DrawOptions.GeoM.Translate(u.PositionX, u.PositionY)
+	switch u.Status {
+	case UnitStatusRunning:
+		u.Move()
+	case UnitStatusIdle:
+		err := u.Pathing.BuildPath(u.Position.X, u.Position.Y, float64(rand.Intn(board.CountTile)), float64(rand.Intn(board.CountTile)))
+		if err != nil {
+			return err
+		}
+		u.Status = UnitStatusRunning
+	}
+
 	return nil
 }
 
 func (u *Unit) GetDrawPoint(
 	camera camera.Camera,
 ) geom.Point {
-	drawPoint := camera.GetMiddleInPixels(geom.Pt(u.PositionX, u.PositionY))
-	drawPoint.X = drawPoint.X + u.PositionShiftX*camera.GetScaleFactor()
-	drawPoint.Y = drawPoint.Y + u.PositionShiftY*camera.GetScaleFactor()
+	drawPoint := camera.PointToCameraPixel(geom.Point{
+		X: u.Position.X + u.PositionShiftX,
+		Y: u.Position.Y + u.PositionShiftY,
+	})
 	return drawPoint
 }
 
@@ -139,11 +149,13 @@ func (u *Unit) DrawPath(screen *ebiten.Image, camera camera.Camera) {
 	if len(u.Pathing.Path) <= 1 {
 		panic("path is empty")
 	}
-	start := camera.GetMiddleInPixels(geom.Pt(u.PositionX, u.PositionY))
-	for i := range len(u.Pathing.Path) - 2 {
-		finish := camera.GetMiddleInPixels(u.Pathing.Path[i+1])
-		if camera.Pixels.Contains(start) ||
-			camera.Pixels.Contains(finish) {
+	u.Pathing.Path[len(u.Pathing.Path)-1] = geom.Pt(u.Position.X, u.Position.Y)
+
+	for i := len(u.Pathing.Path) - 1; i > 0; i-- {
+		if camera.Coordinates.Contains(u.Pathing.Path[i]) ||
+			camera.Coordinates.Contains(u.Pathing.Path[i-1]) {
+			start := camera.MiddleOfPointInRelativePixels(u.Pathing.Path[i])
+			finish := camera.MiddleOfPointInRelativePixels(u.Pathing.Path[i-1])
 			vector.StrokeLine(screen,
 				float32(start.X),
 				float32(start.Y),
@@ -154,6 +166,27 @@ func (u *Unit) DrawPath(screen *ebiten.Image, camera camera.Camera) {
 				true,
 			)
 		}
-		start = finish
+	}
+}
+
+func (u *Unit) Move() {
+	distance := u.Speed * u.Pathing.B.Cells[int(u.Position.X)][int(u.Position.Y)].MoveCost()
+	part := distance / u.Position.Length(u.Pathing.Path[len(u.Pathing.Path)-2])
+	if part > 1 {
+		if len(u.Pathing.Path) > 2 {
+			u.Pathing.Path = u.Pathing.Path[:len(u.Pathing.Path)-1]
+			u.Move()
+		} else {
+			u.Status = UnitStatusIdle
+			u.Position.X = u.Pathing.Path[len(u.Pathing.Path)-2].X
+			u.Position.Y = u.Pathing.Path[len(u.Pathing.Path)-2].Y
+		}
+	} else if part == 1 {
+		u.Pathing.Path = u.Pathing.Path[:len(u.Pathing.Path)-1]
+		u.Position.X = u.Pathing.Path[len(u.Pathing.Path)-2].X
+		u.Position.Y = u.Pathing.Path[len(u.Pathing.Path)-2].Y
+	} else {
+		u.Position.X = u.Position.X + part*(u.Pathing.Path[len(u.Pathing.Path)-2].X-u.Position.X)
+		u.Position.Y = u.Position.Y + part*(u.Pathing.Path[len(u.Pathing.Path)-2].Y-u.Position.Y)
 	}
 }

@@ -204,13 +204,13 @@ func TestUnit_GetDrawPoint(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			u := &Unit{
-				Name:        tt.fields.Name,
-				Animation:   tt.fields.Animation,
-				PositionX:   tt.fields.PositionX,
-				PositionY:   tt.fields.PositionY,
-				SizeX:       tt.fields.SizeX,
-				SizeY:       tt.fields.SizeY,
-				DrawOptions: tt.fields.DrawOptions,
+				Name:               tt.fields.Name,
+				Animation:          tt.fields.Animation,
+				RelativePosition.X: tt.fields.PositionX,
+				RelativePosition.Y: tt.fields.PositionY,
+				SizeX:              tt.fields.SizeX,
+				SizeY:              tt.fields.SizeY,
+				DrawOptions:        tt.fields.DrawOptions,
 			}
 			got, got1 := u.GetDrawPoint(tt.args.cameraX, tt.args.cameraY, tt.args.tileSize, tt.args.scale)
 			if got != tt.want {
