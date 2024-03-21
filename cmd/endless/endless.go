@@ -2,6 +2,8 @@ package main
 
 import (
 	"log/slog"
+	"net/http"
+	_ "net/http/pprof"
 	"runtime"
 	"time"
 
@@ -11,6 +13,7 @@ import (
 )
 
 func main() {
+	go StartPProfHttp()
 	ebiten.SetWindowSize(800, 800)
 	//ebiten.SetFullscreen(true)
 	ebiten.SetWindowTitle("MadFarmer")
@@ -30,5 +33,12 @@ func main() {
 	err := ebiten.RunGame(endless.NewGame())
 	if err != nil {
 		panic(err)
+	}
+}
+
+func StartPProfHttp() {
+	err := http.ListenAndServe("localhost:38080", nil)
+	if err != nil {
+		return
 	}
 }

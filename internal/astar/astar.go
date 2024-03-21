@@ -93,11 +93,15 @@ func (a *Astar) BuildPath(fromX, fromY, toX, toY float64) error {
 		y: fromY,
 	})
 
+	var newPoint geom.Point
 	for a.Len() > 0 {
 		current := a.Pop()
 		if current.x == toX && current.y == toY {
 			for !(current.x == fromX && current.y == fromY) {
-				a.Path = append(a.Path, geom.Pt(current.x, current.y))
+				newPoint = geom.Pt(current.x, current.y)
+				if len(a.Path) <= 2 || a.Path[len(a.Path)-2].To(a.Path[len(a.Path)-1]) == a.Path[len(a.Path)-1].To(newPoint) {
+					a.Path = append(a.Path, newPoint)
+				}
 				current = a.froms[current]
 			}
 			a.Path = append(a.Path, geom.Pt(fromX, fromY))

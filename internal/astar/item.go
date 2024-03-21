@@ -21,25 +21,25 @@ func abs(x float64) float64 {
 	return x
 }
 
-//func (i Item) to(targer Item) byte {
-//	switch x, y := targer.x-i.x, targer.y-i.y; {
-//	case x == 0 && y == -1:
-//		return DirUp
-//	case x == 0 && y == 1:
-//		return DirDown
-//	case x == -1 && y == 0:
-//		return DirLeft
-//	case x == 1 && y == 0:
-//		return DirRight
-//	case x == -1 && y == -1:
-//		return DirUpLeft
-//	case x == -1 && y == 1:
-//		return DirDownLeft
-//	case x == 1 && y == -1:
-//		return DirUpRight
-//	case x == 1 && y == 1:
-//		return DirDownRight
-//	default:
-//		panic("unreachable")
-//	}
-//}
+func (i Item) to(targer Item) byte {
+	switch x, y := targer.x-i.x, targer.y-i.y; {
+	case x == 0 && y == -1:
+		return DirUp
+	case x == 0 && y == 1:
+		return DirDown
+	case x == -1 && y == 0:
+		return DirLeft
+	case x == 1 && y == 0:
+		return DirRight
+	case x == -1 && y == -1:
+		return DirUpLeft
+	case x == -1 && y == 1:
+		return DirDownLeft
+	case x == 1 && y == -1:
+		return DirUpRight
+	case x == 1 && y == 1:
+		return DirDownRight
+	default:
+		panic("unreachable")
+	}
+}

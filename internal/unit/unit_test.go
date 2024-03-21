@@ -1,4 +1,4 @@
-package endless
+package unit
 
 import (
 	"testing"

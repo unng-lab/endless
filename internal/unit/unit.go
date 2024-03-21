@@ -1,4 +1,4 @@
-package endless
+package unit
 
 import (
 	"image/color"
@@ -84,7 +84,7 @@ func (u *Unit) Draw(screen *ebiten.Image, counter int, camera camera.Camera) boo
 	if u.Status == UnitStatusRunning {
 		u.DrawPath(screen, camera)
 	}
-	if !camera.Coordinates.Contains(geom.Pt(u.Position.X, u.Position.Y)) {
+	if camera.Coordinates.ContainsOR(geom.Pt(u.Position.X, u.Position.Y)) {
 		return false
 	}
 	defer u.DrawOptions.GeoM.Reset()

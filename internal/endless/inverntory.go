@@ -9,16 +9,17 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/examples/resources/images"
 
 	"github/unng-lab/madfarmer/internal/board"
+	"github/unng-lab/madfarmer/internal/unit"
 )
 
 var I Inverntory
 
 type Inverntory struct {
-	Units map[string]*Unit
+	Units map[string]*unit.Unit
 }
 
 func NewInverntory() {
-	I.Units = make(map[string]*Unit)
+	I.Units = make(map[string]*unit.Unit)
 	runner := NewRunner()
 	I.Units[runner.Name] = runner
 }
@@ -31,8 +32,8 @@ const (
 	frameCount  = 8
 )
 
-func NewRunner() *Unit {
-	var u Unit
+func NewRunner() *unit.Unit {
+	var u unit.Unit
 	u.Name = "runner"
 	u.SizeX = frameWidth / board.TileSize
 	u.SizeY = frameHeight / board.TileSize
