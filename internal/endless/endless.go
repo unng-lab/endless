@@ -3,6 +3,7 @@ package endless
 import (
 	"log/slog"
 	"math/rand"
+	"sync"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
@@ -15,14 +16,21 @@ var _ ebiten.Game = (*Game)(nil) // ensure Game implements ebiten.Game
 
 var G Game
 
+type u struct {
+	unit *unit.Unit
+	wg   unit.WG
+	c    chan *unit.WG
+}
+
 type Game struct {
 	log    *slog.Logger
 	camera camera.Camera
-	Units  []unit.Unit
+	wg     sync.WaitGroup
+	Units  []u
 }
 
 func NewGame() *Game {
-	G.Units = make([]unit.Unit, 0)
+	G.Units = make([]u, 0, 10000)
 	camera.DefaultTileSize = board.TileSize
 	camera.CountTile = board.CountTile
 	err := board.NewBoard()
@@ -31,11 +39,20 @@ func NewGame() *Game {
 	}
 	NewInverntory()
 	for i := range 10000 {
-		G.Units = append(G.Units, I.Units["runner"].New(
+		newUnit := I.Units["runner"].New(
 			i,
 			float64(rand.Intn(board.CountTile)),
 			float64(rand.Intn(board.CountTile)),
-		))
+		)
+		newU := u{
+			unit: &newUnit,
+			wg: unit.WG{
+				WG: &G.wg,
+			},
+			c: make(chan *unit.WG, 1),
+		}
+		G.Units = append(G.Units, newU)
+		G.Units[i].unit.Run(newU.c)
 	}
 
 	return &G

@@ -23,7 +23,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	board.B.Draw(screen, camera)
 	unitNumber := 0
 	for i := range g.Units {
-		if g.Units[i].Draw(screen, Counter, camera) {
+		if g.Units[i].unit.Draw(screen, Counter, camera) {
 			unitNumber++
 		}
 	}
@@ -48,7 +48,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 FPS: %0.2f
 Goroutines: %d
 Memory in mb: %d
-Last gc was: %d
+Last gc was: %0.2f
 CameraX: %0.2f
 CameraY: %0.2f
 Zoom: %0.2f

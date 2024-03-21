@@ -3,6 +3,7 @@ package unit
 import (
 	"image/color"
 	"math/rand"
+	"sync"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/vector"
@@ -35,12 +36,24 @@ type Unit struct {
 	DrawOptions      ebiten.DrawImageOptions
 	Pathing          astar.Astar
 	Status           int
+	Ticks            chan *WG
+}
+
+type WG struct {
+	WG *sync.WaitGroup
+	S  int
+}
+
+func (wg *WG) Done(sleeper int) {
+	wg.S = sleeper
+	wg.WG.Done()
 }
 
 func (u *Unit) New(id int, positionX float64, positionY float64) Unit {
 	var unit Unit
 	unit.ID = id
 	unit.Name = u.Name
+	//unit.Ticks = wg
 	unit.Position.X = positionX
 	unit.Position.Y = positionY
 	unit.SizeX = u.SizeX
@@ -127,7 +140,7 @@ func (u *Unit) Update() error {
 		}
 		u.Status = UnitStatusRunning
 	}
-
+	//slog.Info("unit position: ", "X: ", u.Position.X, "Y: ", u.Position.Y)
 	return nil
 }
 
@@ -188,5 +201,22 @@ func (u *Unit) Move() {
 	} else {
 		u.Position.X = u.Position.X + part*(u.Pathing.Path[len(u.Pathing.Path)-2].X-u.Position.X)
 		u.Position.Y = u.Position.Y + part*(u.Pathing.Path[len(u.Pathing.Path)-2].Y-u.Position.Y)
+	}
+}
+func (u *Unit) Run(wg chan *WG) {
+	go u.run(wg)
+}
+
+func (u *Unit) run(wg chan *WG) {
+	u.Ticks = wg
+	for {
+		select {
+		case wg := <-u.Ticks:
+			err := u.Update()
+			if err != nil {
+				return
+			}
+			wg.Done(0)
+		}
 	}
 }

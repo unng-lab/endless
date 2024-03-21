@@ -1,36 +1,34 @@
 package endless
 
 import (
-	"log/slog"
-
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
 func (g *Game) Update() error {
 	if ebiten.IsKeyPressed(ebiten.KeyA) || ebiten.IsKeyPressed(ebiten.KeyArrowLeft) {
-		slog.Info("Left")
+		//slog.Info("Left")
 		g.camera.Left()
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyD) || ebiten.IsKeyPressed(ebiten.KeyArrowRight) {
-		slog.Info("Right")
+		//slog.Info("Right")
 		g.camera.Right()
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyW) || ebiten.IsKeyPressed(ebiten.KeyArrowUp) {
-		slog.Info("Up")
+		//slog.Info("Up")
 		g.camera.Up()
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyS) || ebiten.IsKeyPressed(ebiten.KeyArrowDown) {
-		slog.Info("Down")
+		//slog.Info("Down")
 		g.camera.Down()
 	}
 
 	if ebiten.IsKeyPressed(ebiten.KeyQ) {
-		slog.Info("ZoomDown")
+		//slog.Info("ZoomDown")
 		g.camera.ZoomDown()
 	}
 
 	if ebiten.IsKeyPressed(ebiten.KeyE) {
-		slog.Info("ZoomUp")
+		//slog.Info("ZoomUp")
 		g.camera.ZoomUp()
 	}
 
@@ -39,10 +37,22 @@ func (g *Game) Update() error {
 		// TODO сделать по центру карты
 		g.camera.Reset(0, 0)
 	}
+	//for i := range g.Units {
+	//	err := g.Units[i].unit.Update()
+	//	if err != nil {
+	//		slog.Error("Update", err)
+	//		return err
+	//	}
+	//}
 
 	for i := range g.Units {
-		g.Units[i].Update()
+		if g.Units[i].wg.S > 0 {
+			g.Units[i].wg.S--
+		} else {
+			g.wg.Add(1)
+			g.Units[i].c <- &g.Units[i].wg
+		}
 	}
-
+	g.wg.Wait()
 	return UI.Update()
 }
