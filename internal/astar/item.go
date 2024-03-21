@@ -4,7 +4,16 @@ import (
 	"github/unng-lab/madfarmer/internal/geom"
 )
 
-var neighbors = [8]geom.Point{{0, -1}, {0, 1}, {-1, 0}, {1, 0}, {-1, -1}, {-1, 1}, {1, -1}, {1, 1}} // 8 directions
+var neighbors = [8]geom.Point{
+	{0, -1},
+	{0, 1},
+	{-1, 0},
+	{1, 0},
+	{-1, -1},
+	{-1, 1},
+	{1, -1},
+	{1, 1},
+} // 8 directions
 
 type Item struct {
 	x, y     float64

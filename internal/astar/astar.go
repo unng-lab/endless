@@ -2,6 +2,7 @@ package astar
 
 import (
 	"errors"
+	"sync"
 
 	"github/unng-lab/madfarmer/internal/board"
 	"github/unng-lab/madfarmer/internal/geom"
@@ -9,7 +10,8 @@ import (
 
 const (
 	pathCapacity  = 256
-	queueCapacity = 256
+	queueCapacity = 4096
+	smallCapacity = 64
 	costsCapacity = 256
 	fromsCapacity = 256
 	costDiagonal  = 1.414
@@ -28,6 +30,19 @@ const (
 
 var errNoPath = errors.New("no Path")
 
+var (
+	bigPool = sync.Pool{
+		New: func() any {
+			return make([]Item, 0, queueCapacity)
+		},
+	}
+	smallPool = sync.Pool{
+		New: func() any {
+			return make([]Item, 0, smallCapacity)
+		},
+	}
+)
+
 type Astar struct {
 	B     *board.Board
 	items []Item
@@ -41,7 +56,6 @@ func NewAstar(b *board.Board) Astar {
 		B:     b,
 		costs: make(map[Item]float64, costsCapacity),
 		froms: make(map[Item]Item, fromsCapacity),
-		items: make([]Item, 0, queueCapacity),
 		Path:  make([]geom.Point, 0, pathCapacity),
 	}
 }
@@ -73,25 +87,44 @@ func (a *Astar) Pop() Item {
 }
 
 func (a *Astar) ResetPath() {
-	a.Path = a.Path[:0]
+	if len(a.Path) > 256 {
+		a.Path = make([]geom.Point, 0, pathCapacity)
+	} else {
+		a.Path = a.Path[:0]
+	}
 }
 
 func (a *Astar) BuildPath(fromX, fromY, toX, toY float64) error {
 	a.ResetPath()
 	defer func() {
-		a.items = a.items[:0]
+		//slog.Info("item ", "len", len(a.items))
+		if len(a.items) > 64 {
+			bigPool.Put(a.items[:0])
+		} else {
+			smallPool.Put(a.items[:0])
+		}
+		a.items = nil
+		a.costs = nil
 		a.costs = make(map[Item]float64, costsCapacity)
+		a.froms = nil
 		a.froms = make(map[Item]Item, fromsCapacity)
 	}()
 
 	if fromX == toX && fromY == toY {
 		return nil
 	}
-
-	a.Push(Item{
+	from := Item{
 		x: fromX,
 		y: fromY,
-	})
+	}
+
+	if from.heuristic(toX, toY) > 64 {
+		a.items = bigPool.Get().([]Item)
+	} else {
+		a.items = smallPool.Get().([]Item)
+	}
+
+	a.Push(from)
 
 	var newPoint geom.Point
 	for a.Len() > 0 {

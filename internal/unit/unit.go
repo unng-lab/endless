@@ -82,7 +82,7 @@ func (u *Unit) New(id int, positionX float64, positionY float64) Unit {
 
 func (u *Unit) Draw(screen *ebiten.Image, counter int, camera camera.Camera) bool {
 	if u.Status == UnitStatusRunning {
-		u.DrawPath(screen, camera)
+		//u.DrawPath(screen, camera)
 	}
 	if camera.Coordinates.ContainsOR(geom.Pt(u.Position.X, u.Position.Y)) {
 		return false
@@ -152,8 +152,8 @@ func (u *Unit) DrawPath(screen *ebiten.Image, camera camera.Camera) {
 	u.Pathing.Path[len(u.Pathing.Path)-1] = geom.Pt(u.Position.X, u.Position.Y)
 
 	for i := len(u.Pathing.Path) - 1; i > 0; i-- {
-		if camera.Coordinates.Contains(u.Pathing.Path[i]) ||
-			camera.Coordinates.Contains(u.Pathing.Path[i-1]) {
+		if !camera.Coordinates.ContainsOR(u.Pathing.Path[i]) ||
+			!camera.Coordinates.ContainsOR(u.Pathing.Path[i-1]) {
 			start := camera.MiddleOfPointInRelativePixels(u.Pathing.Path[i])
 			finish := camera.MiddleOfPointInRelativePixels(u.Pathing.Path[i-1])
 			vector.StrokeLine(screen,

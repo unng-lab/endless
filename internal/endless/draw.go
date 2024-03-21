@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"image/color"
 	"math"
+	"runtime"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -37,11 +39,16 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		color.White,
 		false,
 	)
+	m := &runtime.MemStats{}
+	runtime.ReadMemStats(m)
 
 	ebitenutil.DebugPrint(
 		screen,
 		fmt.Sprintf(`TPS: %0.2f
 FPS: %0.2f
+Goroutines: %d
+Memory in mb: %d
+Last gc was: %d
 CameraX: %0.2f
 CameraY: %0.2f
 Zoom: %0.2f
@@ -56,6 +63,9 @@ CellX: %0.2f
 CellY: %0.2f`,
 			ebiten.ActualTPS(),
 			ebiten.ActualFPS(),
+			runtime.NumGoroutine(),
+			m.Alloc/1024/1024,
+			time.Now().Sub(time.Unix(0, int64(m.LastGC))).Seconds(),
 			g.camera.GetPositionX(),
 			g.camera.GetPositionY(),
 			g.camera.GetZoomFactor(),

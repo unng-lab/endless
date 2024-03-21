@@ -30,7 +30,7 @@ func NewGame() *Game {
 		panic(err)
 	}
 	NewInverntory()
-	for i := range 100 {
+	for i := range 10000 {
 		G.Units = append(G.Units, I.Units["runner"].New(
 			i,
 			float64(rand.Intn(board.CountTile)),
