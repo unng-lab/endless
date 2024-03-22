@@ -9,6 +9,7 @@ import (
 
 	"github/unng-lab/madfarmer/internal/board"
 	"github/unng-lab/madfarmer/internal/camera"
+	"github/unng-lab/madfarmer/internal/ui"
 	"github/unng-lab/madfarmer/internal/unit"
 )
 
@@ -24,21 +25,22 @@ type u struct {
 
 type Game struct {
 	log    *slog.Logger
-	camera camera.Camera
+	camera *camera.Camera
 	wg     sync.WaitGroup
+	ui     *ui.UIEngine
 	Units  []u
 }
 
 func NewGame() *Game {
 	G.Units = make([]u, 0, 10000)
-	camera.DefaultTileSize = board.TileSize
-	camera.CountTile = board.CountTile
+	G.camera = camera.New(board.TileSize, board.CountTile)
+	G.ui = ui.New(G.camera)
 	err := board.NewBoard()
 	if err != nil {
 		panic(err)
 	}
 	NewInverntory()
-	for i := range 10000 {
+	for i := range 100 {
 		newUnit := I.Units["runner"].New(
 			i,
 			float64(rand.Intn(board.CountTile)),

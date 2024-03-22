@@ -12,11 +12,14 @@ const (
 	MinZoom = -100
 )
 
-var DefaultTileSize float64
-var CountTile float64
+type cfg struct {
+	TileSize  float64
+	TileCount float64
+}
 
 // Camera TODO add maxX and maxY camera
 type Camera struct {
+	cfg        cfg
 	positionX  float64
 	positionY  float64
 	zoomFactor float64
@@ -67,7 +70,7 @@ func (c *Camera) scale() float64 {
 }
 
 func (c *Camera) GetTileSize() float64 {
-	return DefaultTileSize * c.ScaleFactor
+	return c.cfg.TileSize * c.ScaleFactor
 }
 
 func (c *Camera) GetZoomFactor() float64 {
@@ -90,14 +93,14 @@ func (c *Camera) GetCurrentCoordinates() geom.Rectangle {
 	return c.Coordinates
 }
 
-func (c *Camera) Prepare() {
+func (c *Camera) Prepare() Camera {
 	c.ScaleFactor = c.scale()
 	c.TileSize = c.GetTileSize()
 	maxX, maxY := (window.W.GetWidth())/c.TileSize+1, (window.W.GetHeight())/c.TileSize+1
 
 	var (
 		x, y         float64
-		cellX, cellY float64 = CountTile / 2, CountTile / 2
+		cellX, cellY float64 = c.cfg.TileCount / 2, c.cfg.TileCount / 2
 	)
 
 	shiftX, shiftY := math.Mod(c.positionX, c.TileSize), math.Mod(c.positionY, c.TileSize)
@@ -148,6 +151,7 @@ func (c *Camera) Prepare() {
 			Y: y + c.TileSize*maxY,
 		},
 	}
+	return *c
 }
 
 func (c *Camera) GetCurrentPixels() geom.Rectangle {
@@ -162,26 +166,26 @@ func (c *Camera) MiddleOfPointInRelativePixels(point geom.Point) geom.Point {
 	}
 }
 
-func AbsoluteToRelative(point geom.Point) geom.Point {
-	return geom.Point{
-		X: math.Trunc(point.X / DefaultTileSize),
-		Y: math.Trunc(point.Y / DefaultTileSize),
-	}
-}
-
-func RelativeToAbsolute(point geom.Point) geom.Point {
-	return geom.Point{
-		X: point.X * DefaultTileSize,
-		Y: point.Y * DefaultTileSize,
-	}
-}
-
-func MiddleOfRelativePointInAbsolutePixels(point geom.Point) geom.Point {
-	return geom.Point{
-		X: point.X*DefaultTileSize + DefaultTileSize/2,
-		Y: point.Y*DefaultTileSize + DefaultTileSize/2,
-	}
-}
+//func AbsoluteToRelative(point geom.Point) geom.Point {
+//	return geom.Point{
+//		X: math.Trunc(point.X / c.cfg.TileSize),
+//		Y: math.Trunc(point.Y / c.cfg.TileSize),
+//	}
+//}
+//
+//func RelativeToAbsolute(point geom.Point) geom.Point {
+//	return geom.Point{
+//		X: point.X * DefaultTileSize,
+//		Y: point.Y * DefaultTileSize,
+//	}
+//}
+//
+//func MiddleOfRelativePointInAbsolutePixels(point geom.Point) geom.Point {
+//	return geom.Point{
+//		X: point.X*DefaultTileSize + DefaultTileSize/2,
+//		Y: point.Y*DefaultTileSize + DefaultTileSize/2,
+//	}
+//}
 
 func (c *Camera) PointToCameraPixel(point geom.Point) geom.Point {
 	return geom.Point{
@@ -194,3 +198,47 @@ func (c *Camera) PointToCameraPixel(point geom.Point) geom.Point {
 //	return c.AbsolutePixels.Min.X - c.TileSize*CountTile/2,
 //		c.AbsolutePixels.Min.Y - c.TileSize*CountTile/2
 //}
+
+func New(tileSize float64, tileCount float64) *Camera {
+	return &Camera{
+		cfg: cfg{
+			TileSize:  tileSize,
+			TileCount: tileCount,
+		},
+		positionX:  0,
+		positionY:  0,
+		zoomFactor: 0,
+		TileSize:   0,
+		Coordinates: geom.Rectangle{
+			Min: geom.Point{
+				X: 0,
+				Y: 0,
+			},
+			Max: geom.Point{
+				X: 0,
+				Y: 0,
+			},
+		},
+		AbsolutePixels: geom.Rectangle{
+			Min: geom.Point{
+				X: 0,
+				Y: 0,
+			},
+			Max: geom.Point{
+				X: 0,
+				Y: 0,
+			},
+		},
+		RelativePixels: geom.Rectangle{
+			Min: geom.Point{
+				X: 0,
+				Y: 0,
+			},
+			Max: geom.Point{
+				X: 0,
+				Y: 0,
+			},
+		},
+		ScaleFactor: 0,
+	}
+}

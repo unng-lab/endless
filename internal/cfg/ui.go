@@ -1,10 +1,6 @@
 package cfg
 
-import (
-	"github/unng-lab/madfarmer/internal/ui"
-)
-
-var _ ui.Config = (*Default)(nil)
+var _ ui_old.Config = (*Default)(nil)
 
 type uiConfig struct {
 }

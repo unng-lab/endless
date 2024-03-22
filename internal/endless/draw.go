@@ -18,8 +18,7 @@ var Counter int
 
 func (g *Game) Draw(screen *ebiten.Image) {
 	Counter++
-	camera := g.camera
-	camera.Prepare()
+	camera := g.camera.Prepare()
 	board.B.Draw(screen, camera)
 	unitNumber := 0
 	for i := range g.Units {

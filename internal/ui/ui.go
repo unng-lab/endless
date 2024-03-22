@@ -1,92 +1,53 @@
 package ui
 
 import (
-	"image/color"
-	"log/slog"
-	"sync/atomic"
-
 	"github.com/hajimehoshi/ebiten/v2"
 
-	"github/unng-lab/madfarmer/internal/ebitenfx"
-	"github/unng-lab/madfarmer/internal/window"
+	"github/unng-lab/madfarmer/internal/camera"
 )
 
-var _ ebitenfx.UI = (*Default)(nil)
-
-type Config interface {
-	Test()
+type UIEngine struct {
+	camera *camera.Camera
 }
 
-type block interface {
-	Draw(screen *ebiten.Image)
-	Clicked(x, y int) bool
-}
-
-type Default struct {
-	log       *slog.Logger
-	cfg       Config
-	blocks    []block
-	showPopup atomic.Bool
-	window    *window.Default
-}
-
-func (d *Default) Clicked(x, y int) bool {
-	for i := range d.blocks {
-		if d.blocks[i].Clicked(x, y) {
-			return true
-		}
+func New(camera *camera.Camera) *UIEngine {
+	return &UIEngine{
+		camera: camera,
 	}
-	return false
 }
 
-func (d *Default) Update() error {
+func (ui *UIEngine) Update() error {
+	if ebiten.IsKeyPressed(ebiten.KeyA) || ebiten.IsKeyPressed(ebiten.KeyArrowLeft) {
+		//slog.Info("Left")
+		ui.camera.Left()
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyD) || ebiten.IsKeyPressed(ebiten.KeyArrowRight) {
+		//slog.Info("Right")
+		ui.camera.Right()
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyW) || ebiten.IsKeyPressed(ebiten.KeyArrowUp) {
+		//slog.Info("Up")
+		ui.camera.Up()
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyS) || ebiten.IsKeyPressed(ebiten.KeyArrowDown) {
+		//slog.Info("Down")
+		ui.camera.Down()
+	}
+
+	if ebiten.IsKeyPressed(ebiten.KeyQ) {
+		//slog.Info("ZoomDown")
+		ui.camera.ZoomDown()
+	}
+
+	if ebiten.IsKeyPressed(ebiten.KeyE) {
+		//slog.Info("ZoomUp")
+		ui.camera.ZoomUp()
+	}
+
+	if ebiten.IsKeyPressed(ebiten.KeySpace) {
+		//slog.Info("w/h", zap.Int("w", ui.camera.cfg.Width()), zap.Int("h", ui.camera.cfg.Height()))
+		// TODO сделать по центру карты
+		ui.camera.Reset(0, 0)
+	}
 	return nil
-}
-
-func (d *Default) Draw(screen *ebiten.Image) {
-	for i := range d.blocks {
-		d.blocks[i].Draw(screen)
-	}
-}
-
-func New(log *slog.Logger, cfg Config, window *window.Default) *Default {
-	var d Default
-	d.log = log.With("ui", "Default")
-	d.cfg = cfg
-	d.window = window
-
-	topPanel := NewPanel(
-		d.log.With("name", "top panel"),
-		10,
-		0,
-		80,
-		10,
-		d.window,
-		color.White,
-		true,
-	)
-	bottomPanel := NewPanel(
-		d.log.With("name", "bottom panel"),
-		10,
-		80,
-		80,
-		15,
-		d.window,
-		color.White,
-		true,
-	)
-
-	popup := NewPopup(
-		d.log.With("name", "bottom panel"),
-		10,
-		20,
-		80,
-		50,
-		d.window,
-		color.White,
-		true,
-	)
-
-	d.blocks = append(d.blocks, topPanel, bottomPanel, popup)
-	return &d
 }
