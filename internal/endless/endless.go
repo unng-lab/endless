@@ -15,8 +15,6 @@ import (
 
 var _ ebiten.Game = (*Game)(nil) // ensure Game implements ebiten.Game
 
-var G Game
-
 type u struct {
 	unit *unit.Unit
 	wg   unit.WG
@@ -24,24 +22,26 @@ type u struct {
 }
 
 type Game struct {
-	log    *slog.Logger
-	camera *camera.Camera
-	wg     sync.WaitGroup
-	ui     *ui.UIEngine
-	Units  []u
+	log       *slog.Logger
+	camera    *camera.Camera
+	wg        sync.WaitGroup
+	ui        *ui.UIEngine
+	inventory *Inventory
+	Units     []u
 }
 
 func NewGame() *Game {
-	G.Units = make([]u, 0, 10000)
-	G.camera = camera.New(board.TileSize, board.CountTile)
-	G.ui = ui.New(G.camera)
+	var g Game
+	g.Units = make([]u, 0, 10000)
+	g.camera = camera.New(board.TileSize, board.CountTile)
+	g.ui = ui.New(g.camera)
 	err := board.NewBoard()
 	if err != nil {
 		panic(err)
 	}
-	NewInverntory()
+	g.inventory = NewInverntory(g.camera)
 	for i := range 100 {
-		newUnit := I.Units["runner"].New(
+		newUnit := g.inventory.Units["runner"].New(
 			i,
 			float64(rand.Intn(board.CountTile)),
 			float64(rand.Intn(board.CountTile)),
@@ -49,13 +49,13 @@ func NewGame() *Game {
 		newU := u{
 			unit: &newUnit,
 			wg: unit.WG{
-				WG: &G.wg,
+				WG: &g.wg,
 			},
 			c: make(chan *unit.WG, 1),
 		}
-		G.Units = append(G.Units, newU)
-		G.Units[i].unit.Run(newU.c)
+		g.Units = append(g.Units, newU)
+		g.Units[i].unit.Run(newU.c)
 	}
 
-	return &G
+	return &g
 }

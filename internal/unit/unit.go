@@ -37,6 +37,7 @@ type Unit struct {
 	Pathing          astar.Astar
 	Status           int
 	Ticks            chan *WG
+	Camera           *camera.Camera
 }
 
 type WG struct {
@@ -53,6 +54,7 @@ func (u *Unit) New(id int, positionX float64, positionY float64) Unit {
 	var unit Unit
 	unit.ID = id
 	unit.Name = u.Name
+	unit.Camera = u.Camera
 	//unit.Ticks = wg
 	unit.Position.X = positionX
 	unit.Position.Y = positionY
@@ -93,19 +95,19 @@ func (u *Unit) New(id int, positionX float64, positionY float64) Unit {
 	return unit
 }
 
-func (u *Unit) Draw(screen *ebiten.Image, counter int, camera camera.Camera) bool {
+func (u *Unit) Draw(screen *ebiten.Image, counter int) bool {
 	if u.Status == UnitStatusRunning {
 		//u.DrawPath(screen, camera)
 	}
-	if camera.Coordinates.ContainsOR(geom.Pt(u.Position.X, u.Position.Y)) {
+	if u.Camera.Coordinates.ContainsOR(geom.Pt(u.Position.X, u.Position.Y)) {
 		return false
 	}
 	defer u.DrawOptions.GeoM.Reset()
 	u.DrawOptions.GeoM.Scale(
-		camera.GetScaleFactor(),
-		camera.GetScaleFactor(),
+		u.Camera.GetScaleFactor(),
+		u.Camera.GetScaleFactor(),
 	)
-	drawPoint := u.GetDrawPoint(camera)
+	drawPoint := u.GetDrawPoint(u.Camera)
 	u.DrawOptions.GeoM.Translate(drawPoint.X, drawPoint.Y)
 	screen.DrawImage(u.Animation[counter%len(u.Animation)], &u.DrawOptions)
 
@@ -145,7 +147,7 @@ func (u *Unit) Update() error {
 }
 
 func (u *Unit) GetDrawPoint(
-	camera camera.Camera,
+	camera *camera.Camera,
 ) geom.Point {
 	drawPoint := camera.PointToCameraPixel(geom.Point{
 		X: u.Position.X + u.PositionShiftX,

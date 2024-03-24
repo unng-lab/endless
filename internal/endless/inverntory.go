@@ -9,19 +9,20 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/examples/resources/images"
 
 	"github/unng-lab/madfarmer/internal/board"
+	"github/unng-lab/madfarmer/internal/camera"
 	"github/unng-lab/madfarmer/internal/unit"
 )
 
-var I Inverntory
-
-type Inverntory struct {
+type Inventory struct {
 	Units map[string]*unit.Unit
 }
 
-func NewInverntory() {
-	I.Units = make(map[string]*unit.Unit)
-	runner := NewRunner()
-	I.Units[runner.Name] = runner
+func NewInverntory(camera *camera.Camera) *Inventory {
+	var i Inventory
+	i.Units = make(map[string]*unit.Unit)
+	runner := NewRunner(camera)
+	i.Units[runner.Name] = runner
+	return &i
 }
 
 const (
@@ -32,11 +33,12 @@ const (
 	frameCount  = 8
 )
 
-func NewRunner() *unit.Unit {
-	var u unit.Unit
-	u.Name = "runner"
-	u.SizeX = frameWidth / board.TileSize
-	u.SizeY = frameHeight / board.TileSize
+func NewRunner(camera *camera.Camera) *unit.Unit {
+	var newUnit unit.Unit
+	newUnit.Name = "runner"
+	newUnit.Camera = camera
+	newUnit.SizeX = frameWidth / board.TileSize
+	newUnit.SizeY = frameHeight / board.TileSize
 	img, _, err := image.Decode(bytes.NewReader(images.Runner_png))
 	if err != nil {
 		slog.Error("image.Decode", err)
@@ -50,8 +52,8 @@ func NewRunner() *unit.Unit {
 			sx+frameWidth,
 			sy+frameHeight,
 		)).(*ebiten.Image)
-		u.Animation = append(u.Animation, frame)
+		newUnit.Animation = append(newUnit.Animation, frame)
 	}
 
-	return &u
+	return &newUnit
 }

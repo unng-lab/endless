@@ -22,7 +22,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	board.B.Draw(screen, camera)
 	unitNumber := 0
 	for i := range g.Units {
-		if g.Units[i].unit.Draw(screen, Counter, camera) {
+		if g.Units[i].unit.Draw(screen, Counter) {
 			unitNumber++
 		}
 	}
