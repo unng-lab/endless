@@ -18,6 +18,8 @@ func main() {
 	//ebiten.SetFullscreen(true)
 	ebiten.SetWindowTitle("MadFarmer")
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
+	ebiten.SetScreenClearedEveryFrame(false)
+	ebiten.SetVsyncEnabled(false)
 	go func() {
 		for {
 			time.Sleep(10 * time.Second)

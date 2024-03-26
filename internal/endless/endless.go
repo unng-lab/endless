@@ -13,6 +13,10 @@ import (
 	"github/unng-lab/madfarmer/internal/unit"
 )
 
+const (
+	unitCount = 100
+)
+
 var _ ebiten.Game = (*Game)(nil) // ensure Game implements ebiten.Game
 
 type u struct {
@@ -32,7 +36,7 @@ type Game struct {
 
 func NewGame() *Game {
 	var g Game
-	g.Units = make([]u, 0, 10000)
+	g.Units = make([]u, 0, unitCount)
 	g.camera = camera.New(board.TileSize, board.CountTile)
 	g.ui = ui.New(g.camera)
 	err := board.NewBoard()
@@ -40,7 +44,7 @@ func NewGame() *Game {
 		panic(err)
 	}
 	g.inventory = NewInverntory(g.camera)
-	for i := range 100 {
+	for i := range unitCount {
 		newUnit := g.inventory.Units["runner"].New(
 			i,
 			float64(rand.Intn(board.CountTile)),

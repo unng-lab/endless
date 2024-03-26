@@ -41,6 +41,8 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	m := &runtime.MemStats{}
 	runtime.ReadMemStats(m)
 
+	g.ui.Draw(screen)
+
 	ebitenutil.DebugPrint(
 		screen,
 		fmt.Sprintf(`TPS: %0.2f

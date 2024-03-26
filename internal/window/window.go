@@ -1,7 +1,5 @@
 package window
 
-var W Window
-
 type Window struct {
 	Width  float64
 	Height float64

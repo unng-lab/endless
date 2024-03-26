@@ -2,6 +2,7 @@ package astar
 
 import (
 	"errors"
+	"log/slog"
 	"sync"
 
 	"github/unng-lab/madfarmer/internal/board"
@@ -87,7 +88,8 @@ func (a *Astar) Pop() Item {
 }
 
 func (a *Astar) ResetPath() {
-	if len(a.Path) > 256 {
+	if len(a.Path) > pathCapacity {
+		slog.Debug("reset path", "len", len(a.Path))
 		a.Path = make([]geom.Point, 0, pathCapacity)
 	} else {
 		a.Path = a.Path[:0]

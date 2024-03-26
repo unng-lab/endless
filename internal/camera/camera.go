@@ -29,6 +29,7 @@ type Camera struct {
 	AbsolutePixels geom.Rectangle
 	RelativePixels geom.Rectangle
 	ScaleFactor    float64
+	W              window.Window
 }
 
 func (c *Camera) Reset(w, h int) {
@@ -96,7 +97,7 @@ func (c *Camera) GetCurrentCoordinates() geom.Rectangle {
 func (c *Camera) Prepare() Camera {
 	c.ScaleFactor = c.scale()
 	c.TileSize = c.GetTileSize()
-	maxX, maxY := (window.W.GetWidth())/c.TileSize+1, (window.W.GetHeight())/c.TileSize+1
+	maxX, maxY := (c.W.GetWidth())/c.TileSize+1, (c.W.GetHeight())/c.TileSize+1
 
 	var (
 		x, y         float64
