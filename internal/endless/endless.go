@@ -31,6 +31,7 @@ type Game struct {
 	wg        sync.WaitGroup
 	ui        *ui.UIEngine
 	inventory *Inventory
+	board     *board.Board
 	Units     []u
 }
 
@@ -39,16 +40,18 @@ func NewGame() *Game {
 	g.Units = make([]u, 0, unitCount)
 	g.camera = camera.New(board.TileSize, board.CountTile)
 	g.ui = ui.New(g.camera)
-	err := board.NewBoard()
+	newBoard, err := board.NewBoard(g.camera)
 	if err != nil {
 		panic(err)
 	}
+	g.board = newBoard
 	g.inventory = NewInverntory(g.camera)
 	for i := range unitCount {
 		newUnit := g.inventory.Units["runner"].New(
 			i,
 			float64(rand.Intn(board.CountTile)),
 			float64(rand.Intn(board.CountTile)),
+			g.board,
 		)
 		newU := u{
 			unit: &newUnit,

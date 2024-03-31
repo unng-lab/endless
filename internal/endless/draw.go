@@ -19,7 +19,7 @@ var Counter int
 func (g *Game) Draw(screen *ebiten.Image) {
 	Counter++
 	camera := g.camera.Prepare()
-	board.B.Draw(screen, camera)
+	g.board.Draw(screen)
 	unitNumber := 0
 	for i := range g.Units {
 		if g.Units[i].unit.Draw(screen, Counter) {
@@ -28,13 +28,13 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	}
 	a, b := ebiten.CursorPosition()
 	x, y := float64(a), float64(b)
-	posX, posY := GetLeftAngle(camera.GetPositionX(), camera.GetPositionY(), x, y, camera.GetTileSize())
+	posX, posY := GetLeftAngle(camera.GetPositionX(), camera.GetPositionY(), x, y, camera.TileSizeX, camera.TileSizeY)
 	vector.DrawFilledRect(
 		screen,
 		float32(posX),
 		float32(posY),
-		float32(camera.GetTileSize()),
-		float32(camera.GetTileSize()),
+		float32(camera.TileSizeX),
+		float32(camera.TileSizeY),
 		color.White,
 		false,
 	)
@@ -55,7 +55,8 @@ CameraY: %0.2f
 Zoom: %0.2f
 CellNumber: %d
 UnitNumber: %d
-TileSize: %0.2f
+TileSizeX: %0.2f
+TileSizeY: %0.2f
 posX: %0.2f
 posY: %0.2f
 CursorX: %0.2f
@@ -70,15 +71,16 @@ CellY: %0.2f`,
 			g.camera.GetPositionX(),
 			g.camera.GetPositionY(),
 			g.camera.GetZoomFactor(),
-			board.B.GetCellNumber(),
+			g.board.GetCellNumber(),
 			unitNumber,
-			camera.GetTileSize(),
+			camera.TileSizeX,
+			camera.TileSizeY,
 			posX,
 			posY,
 			x,
 			y,
-			GetCellNumber(x, camera.GetPositionX(), camera.GetTileSize()),
-			GetCellNumber(y, camera.GetPositionY(), camera.GetTileSize()),
+			GetCellNumber(x, camera.GetPositionX(), camera.TileSizeX),
+			GetCellNumber(y, camera.GetPositionY(), camera.TileSizeY),
 		),
 	)
 }
@@ -87,23 +89,23 @@ func GetCellNumber(cursor float64, camera float64, tileSize float64) float64 {
 	return math.Trunc((cursor+camera)/tileSize) + board.CountTile/2
 }
 
-func GetLeftAngle(cameraX, cameraY, cursorX, cursorY, tileSize float64) (float64, float64) {
+func GetLeftAngle(cameraX, cameraY, cursorX, cursorY, tileSizeX, tileSizeY float64) (float64, float64) {
 	var (
 		x, y float64
 	)
 
-	shiftX, shiftY := math.Mod(cameraX, tileSize), math.Mod(cameraY, tileSize)
+	shiftX, shiftY := math.Mod(cameraX, tileSizeX), math.Mod(cameraY, tileSizeY)
 	if shiftX < 0 {
-		x = -tileSize - shiftX
+		x = -tileSizeX - shiftX
 	} else if shiftX > 0 {
 		x = -shiftX
 	}
 
 	if shiftY < 0 {
-		y = -tileSize - shiftY
+		y = -tileSizeY - shiftY
 	} else if shiftY > 0 {
 		y = -shiftY
 	}
 
-	return x + math.Trunc((cursorX-x)/tileSize)*tileSize, y + math.Trunc((cursorY-y)/tileSize)*tileSize
+	return x + math.Trunc((cursorX-x)/tileSizeX)*tileSizeX, y + math.Trunc((cursorY-y)/tileSizeY)*tileSizeY
 }

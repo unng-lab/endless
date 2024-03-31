@@ -10,11 +10,11 @@ import (
 )
 
 const (
-	pathCapacity  = 256
-	queueCapacity = 4096
-	smallCapacity = 64
-	costsCapacity = 256
-	fromsCapacity = 256
+	pathCapacity  = 32
+	queueCapacity = 512
+	smallCapacity = 8
+	costsCapacity = 32
+	fromsCapacity = 32
 	costDiagonal  = 1.414
 )
 
@@ -42,6 +42,16 @@ var (
 			return make([]Item, 0, smallCapacity)
 		},
 	}
+	costsPool = sync.Pool{
+		New: func() any {
+			return make(map[Item]float64, costsCapacity)
+		},
+	}
+	fromsPool = sync.Pool{
+		New: func() any {
+			return make(map[Item]Item, costsCapacity)
+		},
+	}
 )
 
 type Astar struct {
@@ -54,10 +64,8 @@ type Astar struct {
 
 func NewAstar(b *board.Board) Astar {
 	return Astar{
-		B:     b,
-		costs: make(map[Item]float64, costsCapacity),
-		froms: make(map[Item]Item, fromsCapacity),
-		Path:  make([]geom.Point, 0, pathCapacity),
+		B:    b,
+		Path: make([]geom.Point, 0, pathCapacity),
 	}
 }
 
@@ -99,17 +107,30 @@ func (a *Astar) ResetPath() {
 func (a *Astar) BuildPath(fromX, fromY, toX, toY float64) error {
 	a.ResetPath()
 	defer func() {
-		//slog.Info("item ", "len", len(a.items))
-		if len(a.items) > 64 {
+		if cap(a.items) > 8*smallCapacity {
 			bigPool.Put(a.items[:0])
 		} else {
 			smallPool.Put(a.items[:0])
 		}
+
+		//if len(a.costs) < 8*costsCapacity {
+		//	clear(a.costs)
+		//	costsPool.Put(a.costs)
+		//}
+		//
+		//if len(a.froms) < 8*fromsCapacity {
+		//	clear(a.froms)
+		//	fromsPool.Put(a.froms)
+		//}
+
+		clear(a.costs)
+		costsPool.Put(a.costs)
+		clear(a.froms)
+		fromsPool.Put(a.froms)
+
 		a.items = nil
 		a.costs = nil
-		a.costs = make(map[Item]float64, costsCapacity)
 		a.froms = nil
-		a.froms = make(map[Item]Item, fromsCapacity)
 	}()
 
 	if fromX == toX && fromY == toY {
@@ -120,11 +141,14 @@ func (a *Astar) BuildPath(fromX, fromY, toX, toY float64) error {
 		y: fromY,
 	}
 
-	if from.heuristic(toX, toY) > 64 {
+	if from.heuristic(toX, toY) > 8*smallCapacity {
 		a.items = bigPool.Get().([]Item)
 	} else {
 		a.items = smallPool.Get().([]Item)
 	}
+
+	a.costs = costsPool.Get().(map[Item]float64)
+	a.froms = fromsPool.Get().(map[Item]Item)
 
 	a.Push(from)
 

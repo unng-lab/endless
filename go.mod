@@ -40,4 +40,4 @@ require (
 	golang.org/x/sys v0.18.0 // indirect
 )
 
-replace github.com/ebitenui/ebitenui v0.5.6 => ../ebitenui
+replace github.com/ebitenui/ebitenui v0.5.6 => /ebitenui

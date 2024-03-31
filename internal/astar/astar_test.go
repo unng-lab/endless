@@ -489,7 +489,7 @@ var astarTests = []pathfindTestCase{
 	{
 		name: "nopath1",
 		path: []string{
-			"A    x.B",
+			"A    x.b",
 			".....x..",
 		},
 		partial: true,
@@ -499,7 +499,7 @@ var astarTests = []pathfindTestCase{
 	{
 		name: "nopath2",
 		path: []string{
-			"....Ax.B",
+			"....Ax.b",
 			".....x..",
 		},
 		partial: true,
@@ -515,7 +515,7 @@ var astarTests = []pathfindTestCase{
 			".x.A x..",
 			".x.. x..",
 			".xxxxx..",
-			".......B",
+			".......b",
 		},
 		cost:    2,
 		partial: true,
@@ -531,7 +531,7 @@ var astarTests = []pathfindTestCase{
 			".x.A x. x. x..",
 			".x..    xxxx..",
 			".xxxxxxxx.....",
-			".............B",
+			".............b",
 		},
 		partial: true,
 		bench:   true,
@@ -540,7 +540,7 @@ var astarTests = []pathfindTestCase{
 	{
 		name: "nopath5",
 		path: []string{
-			".B...x.....x..",
+			".b...x.....x..",
 			".xxxxx.....x..",
 			".x ..x..x..x..",
 			".x A.x..x..x..",
@@ -825,7 +825,7 @@ var astarTests = []pathfindTestCase{
 	{
 		name: "distlimit1",
 		path: []string{
-			"A                                                        ..........B",
+			"A                                                        ..........b",
 		},
 		bench:   true,
 		partial: true,
@@ -837,7 +837,7 @@ var astarTests = []pathfindTestCase{
 			"A   ..........x......                      ...x.....x.....x....",
 			"... ..........x...... x......xxxxxxxxxx... ...x..x..x..x..x....",
 			"... xxxxxxxxxxx...... x...............x... ...x..x..x..x..x....",
-			"...                   x...............x...      .x.....x......B",
+			"...                   x...............x...      .x.....x......b",
 		},
 		bench:   true,
 		partial: true,

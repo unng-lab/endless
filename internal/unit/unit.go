@@ -50,7 +50,7 @@ func (wg *WG) Done(sleeper int) {
 	wg.WG.Done()
 }
 
-func (u *Unit) New(id int, positionX float64, positionY float64) Unit {
+func (u *Unit) New(id int, positionX float64, positionY float64, b *board.Board) Unit {
 	var unit Unit
 	unit.ID = id
 	unit.Name = u.Name
@@ -61,7 +61,7 @@ func (u *Unit) New(id int, positionX float64, positionY float64) Unit {
 	unit.SizeX = u.SizeX
 	unit.SizeY = u.SizeY
 	unit.Speed = 10 / float64(ebiten.DefaultTPS)
-	unit.Pathing = astar.NewAstar(&board.B)
+	unit.Pathing = astar.NewAstar(b)
 	if unit.Position.X == 2058 {
 		unit.Status = UnitStatusRunning
 		err := unit.Pathing.BuildPath(
@@ -104,8 +104,8 @@ func (u *Unit) Draw(screen *ebiten.Image, counter int) bool {
 	}
 	defer u.DrawOptions.GeoM.Reset()
 	u.DrawOptions.GeoM.Scale(
-		u.Camera.GetScaleFactor(),
-		u.Camera.GetScaleFactor(),
+		u.Camera.GetScaleFactorX(),
+		u.Camera.GetScaleFactorX(),
 	)
 	drawPoint := u.GetDrawPoint(u.Camera)
 	u.DrawOptions.GeoM.Translate(drawPoint.X, drawPoint.Y)
@@ -121,7 +121,7 @@ func (u *Unit) Draw(screen *ebiten.Image, counter int) bool {
 	//cposY: %0.2f`,
 	//		u.DrawOptions.GeoM.Element(0, 2),
 	//		u.DrawOptions.GeoM.Element(1, 2),
-	//		camera.GetTileSize(),
+	//		camera.getTileSizeX(),
 	//		camera.GetPositionX(),
 	//		camera.GetPositionY(),
 	//	),
