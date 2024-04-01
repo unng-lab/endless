@@ -7,6 +7,8 @@ import (
 	"runtime"
 	"time"
 
+	_ "github.com/silbinarywolf/preferdiscretegpu"
+
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"github/unng-lab/madfarmer/internal/endless"

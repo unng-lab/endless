@@ -31,15 +31,17 @@ type Camera struct {
 	positionY  float64
 	zoomFactor float64
 	// TODO вынести в отдельную структуру например screen
-	TileSizeX      float64
-	TileSizeY      float64
+	tileSize       float64
 	Coordinates    geom.Rectangle
 	AbsolutePixels geom.Rectangle
 	RelativePixels geom.Rectangle
-	ScaleFactorX   float64
-	ScaleFactorY   float64
+	scaleFactor    float64
 	W              window.Window
 	geom           ebiten.GeoM
+}
+
+func (c *Camera) TileSize() float64 {
+	return c.tileSize
 }
 
 func (c *Camera) Reset(w, h int) {
@@ -75,25 +77,16 @@ func (c *Camera) ZoomDown() {
 		c.zoomFactor += -10
 	}
 }
+func (c *Camera) ScaleFactor() float64 {
+	return c.scaleFactor
+}
 
 func (c *Camera) scale() float64 {
 	return math.Pow(1.01, c.zoomFactor)
 }
 
-func (c *Camera) scaleX() float64 {
-	return c.scale() * c.W.GetWidth() / DefaultScreenWidth
-}
-
-func (c *Camera) scaleY() float64 {
-	return c.scale() * c.W.GetHeight() / DefaultScreenHeight
-}
-
-func (c *Camera) getTileSizeX() float64 {
-	return c.cfg.TileSize * c.ScaleFactorX
-}
-
-func (c *Camera) getTileSizeY() float64 {
-	return c.cfg.TileSize * c.ScaleFactorY
+func (c *Camera) getTileSize() float64 {
+	return c.cfg.TileSize * c.scaleFactor
 }
 
 func (c *Camera) GetZoomFactor() float64 {
@@ -108,42 +101,36 @@ func (c *Camera) GetPositionY() float64 {
 	return c.positionY
 }
 
-func (c *Camera) GetScaleFactorX() float64 {
-	return c.ScaleFactorX
-}
-
 func (c *Camera) GetCurrentCoordinates() geom.Rectangle {
 	return c.Coordinates
 }
 
-func (c *Camera) Prepare() Camera {
-	c.ScaleFactorX = c.scaleX()
-	c.ScaleFactorY = c.scaleY()
-	c.TileSizeX = c.getTileSizeX()
-	c.TileSizeY = c.getTileSizeY()
-	maxX, maxY := (c.W.GetWidth())/c.TileSizeX+1, (c.W.GetHeight())/c.TileSizeY+1
+func (c *Camera) Prepare() {
+	c.scaleFactor = c.scale()
+	c.tileSize = c.getTileSize()
+	maxX, maxY := (c.W.GetWidth())/c.tileSize+1, (c.W.GetHeight())/c.tileSize+1
 
 	var (
 		x, y         float64
 		cellX, cellY float64 = c.cfg.TileCount / 2, c.cfg.TileCount / 2
 	)
 
-	shiftX, shiftY := math.Mod(c.positionX, c.TileSizeX), math.Mod(c.positionY, c.TileSizeY)
+	shiftX, shiftY := math.Mod(c.positionX, c.tileSize), math.Mod(c.positionY, c.tileSize)
 	if shiftX < 0 {
-		x = -c.TileSizeX - shiftX
+		x = -c.tileSize - shiftX
 		cellX += -1
 	} else if shiftX > 0 {
 		x = -shiftX
 	}
-	cellX += math.Trunc(c.positionX / c.TileSizeX)
+	cellX += math.Trunc(c.positionX / c.tileSize)
 
 	if shiftY < 0 {
-		y = -c.TileSizeY - shiftY
+		y = -c.tileSize - shiftY
 		cellY += -1
 	} else if shiftY > 0 {
 		y = -shiftY
 	}
-	cellY += math.Trunc(c.positionY / c.TileSizeY)
+	cellY += math.Trunc(c.positionY / c.tileSize)
 
 	c.Coordinates = geom.Rectangle{
 		Min: geom.Point{
@@ -158,12 +145,12 @@ func (c *Camera) Prepare() Camera {
 
 	c.AbsolutePixels = geom.Rectangle{
 		Min: geom.Point{
-			X: math.Trunc(c.TileSizeX*cellX*100)/100 - x,
-			Y: math.Trunc(c.TileSizeX*cellY*100)/100 - y,
+			X: math.Trunc(c.tileSize*cellX*100)/100 - x,
+			Y: math.Trunc(c.tileSize*cellY*100)/100 - y,
 		},
 		Max: geom.Point{
-			X: math.Trunc(c.TileSizeX*(cellX+maxX)*100)/100 - x,
-			Y: math.Trunc(c.TileSizeX*(cellY+maxY)*100)/100 - y,
+			X: math.Trunc(c.tileSize*(cellX+maxX)*100)/100 - x,
+			Y: math.Trunc(c.tileSize*(cellY+maxY)*100)/100 - y,
 		},
 	}
 	c.RelativePixels = geom.Rectangle{
@@ -172,11 +159,10 @@ func (c *Camera) Prepare() Camera {
 			Y: y,
 		},
 		Max: geom.Point{
-			X: x + c.TileSizeX*maxX,
-			Y: y + c.TileSizeX*maxY,
+			X: x + c.tileSize*maxX,
+			Y: y + c.tileSize*maxY,
 		},
 	}
-	return *c
 }
 
 func (c *Camera) GetCurrentPixels() geom.Rectangle {
@@ -186,15 +172,15 @@ func (c *Camera) GetCurrentPixels() geom.Rectangle {
 func (c *Camera) MiddleOfPointInRelativePixels(point geom.Point) geom.Point {
 	distX, distY := c.Coordinates.Min.Distance(point)
 	return geom.Point{
-		X: c.RelativePixels.Min.X + distX*c.TileSizeX + c.TileSizeX/2,
-		Y: c.RelativePixels.Min.Y + distY*c.TileSizeX + c.TileSizeX/2,
+		X: c.RelativePixels.Min.X + distX*c.tileSize + c.tileSize/2,
+		Y: c.RelativePixels.Min.Y + distY*c.tileSize + c.tileSize/2,
 	}
 }
 
 //func AbsoluteToRelative(point geom.Point) geom.Point {
 //	return geom.Point{
-//		X: math.Trunc(point.X / c.cfg.TileSize),
-//		Y: math.Trunc(point.Y / c.cfg.TileSize),
+//		X: math.Trunc(point.X / c.cfg.tileSize),
+//		Y: math.Trunc(point.Y / c.cfg.tileSize),
 //	}
 //}
 //
@@ -214,14 +200,14 @@ func (c *Camera) MiddleOfPointInRelativePixels(point geom.Point) geom.Point {
 
 func (c *Camera) PointToCameraPixel(point geom.Point) geom.Point {
 	return geom.Point{
-		X: point.X*c.TileSizeX - c.AbsolutePixels.Min.X,
-		Y: point.Y*c.TileSizeY - c.AbsolutePixels.Min.Y,
+		X: point.X*c.tileSize - c.AbsolutePixels.Min.X,
+		Y: point.Y*c.tileSize - c.AbsolutePixels.Min.Y,
 	}
 }
 
 //func (c *Camera) DrawPixelMinPoint() (float64, float64) {
-//	return c.AbsolutePixels.Min.X - c.TileSize*CountTile/2,
-//		c.AbsolutePixels.Min.Y - c.TileSize*CountTile/2
+//	return c.AbsolutePixels.Min.X - c.tileSize*CountTile/2,
+//		c.AbsolutePixels.Min.Y - c.tileSize*CountTile/2
 //}
 
 func New(tileSize float64, tileCount float64) *Camera {
@@ -233,7 +219,7 @@ func New(tileSize float64, tileCount float64) *Camera {
 		positionX:  0,
 		positionY:  0,
 		zoomFactor: 0,
-		TileSizeX:  0,
+		tileSize:   0,
 		Coordinates: geom.Rectangle{
 			Min: geom.Point{
 				X: 0,
@@ -264,8 +250,7 @@ func New(tileSize float64, tileCount float64) *Camera {
 				Y: 0,
 			},
 		},
-		ScaleFactorX: 0,
-		ScaleFactorY: 0,
+		scaleFactor: 0,
 	}
 }
 
@@ -307,12 +292,12 @@ func (c *Camera) Update() error {
 
 func (c *Camera) WorldMatrix() ebiten.GeoM {
 	c.geom.Reset()
-	c.geom.Translate(-c.RelativePixels.Min.X, -c.RelativePixels.Min.Y)
+	c.geom.Translate(c.RelativePixels.Min.X, c.RelativePixels.Min.Y)
 	// We want to scale and rotate around center of image / screen
 	c.geom.Translate(-c.W.GetWidth()/2, -c.W.GetHeight()/2)
 	c.geom.Scale(
-		c.GetScaleFactorX(),
-		c.GetScaleFactorX(),
+		c.scaleFactor,
+		c.scaleFactor,
 	)
 	c.geom.Translate(c.W.GetWidth()/2, c.W.GetHeight()/2)
 	return c.geom

@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"sync"
 
+	"github.com/brianvoe/gofakeit/v7"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/vector"
 
@@ -41,8 +42,9 @@ type Unit struct {
 }
 
 type WG struct {
-	WG *sync.WaitGroup
-	S  int
+	WG      *sync.WaitGroup
+	S       int
+	OnBoard bool
 }
 
 func (wg *WG) Done(sleeper int) {
@@ -53,7 +55,7 @@ func (wg *WG) Done(sleeper int) {
 func (u *Unit) New(id int, positionX float64, positionY float64, b *board.Board) Unit {
 	var unit Unit
 	unit.ID = id
-	unit.Name = u.Name
+	unit.Name = gofakeit.Name()
 	unit.Camera = u.Camera
 	//unit.Ticks = wg
 	unit.Position.X = positionX
@@ -99,13 +101,11 @@ func (u *Unit) Draw(screen *ebiten.Image, counter int) bool {
 	if u.Status == UnitStatusRunning {
 		//u.DrawPath(screen, camera)
 	}
-	if u.Camera.Coordinates.ContainsOR(geom.Pt(u.Position.X, u.Position.Y)) {
-		return false
-	}
+
 	defer u.DrawOptions.GeoM.Reset()
 	u.DrawOptions.GeoM.Scale(
-		u.Camera.GetScaleFactorX(),
-		u.Camera.GetScaleFactorX(),
+		u.Camera.ScaleFactor(),
+		u.Camera.ScaleFactor(),
 	)
 	drawPoint := u.GetDrawPoint(u.Camera)
 	u.DrawOptions.GeoM.Translate(drawPoint.X, drawPoint.Y)
@@ -116,34 +116,35 @@ func (u *Unit) Draw(screen *ebiten.Image, counter int) bool {
 	//	fmt.Sprintf(
 	//		`posX: %0.2f,
 	//posY: %0.2f,
-	//TileSize: %0.2f,
-	//cposX: %0.2f,
-	//cposY: %0.2f`,
+	//name: %s,
+	//uposX: %0.2f,
+	//uposY: %0.2f`,
 	//		u.DrawOptions.GeoM.Element(0, 2),
 	//		u.DrawOptions.GeoM.Element(1, 2),
-	//		camera.getTileSizeX(),
-	//		camera.GetPositionX(),
-	//		camera.GetPositionY(),
-	//	),
+	//		u.Name,
+	//		u.Position.X,
+	//		u.Position.Y,
+	//	),qqqq
 	//	100,
 	//	0,
 	//)
 	return true
 }
 
-func (u *Unit) Update() error {
+func (u *Unit) Update() (bool, error) {
 	switch u.Status {
 	case UnitStatusRunning:
 		u.Move()
+		return !u.Camera.Coordinates.ContainsOR(geom.Pt(u.Position.X, u.Position.Y)), nil
 	case UnitStatusIdle:
 		err := u.Pathing.BuildPath(u.Position.X, u.Position.Y, float64(rand.Intn(board.CountTile)), float64(rand.Intn(board.CountTile)))
 		if err != nil {
-			return err
+			return false, err
 		}
 		u.Status = UnitStatusRunning
 	}
 	//slog.Info("unit position: ", "X: ", u.Position.X, "Y: ", u.Position.Y)
-	return nil
+	return false, nil
 }
 
 func (u *Unit) GetDrawPoint(
@@ -213,12 +214,13 @@ func (u *Unit) run(wg chan *WG) {
 	u.Ticks = wg
 	for {
 		select {
-		case wg := <-u.Ticks:
-			err := u.Update()
+		case tick := <-u.Ticks:
+			onBoard, err := u.Update()
 			if err != nil {
 				return
 			}
-			wg.Done(0)
+			tick.OnBoard = onBoard
+			tick.Done(0)
 		}
 	}
 }

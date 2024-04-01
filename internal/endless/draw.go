@@ -18,23 +18,20 @@ var Counter int
 
 func (g *Game) Draw(screen *ebiten.Image) {
 	Counter++
-	camera := g.camera.Prepare()
+	g.camera.Prepare()
 	g.board.Draw(screen)
-	unitNumber := 0
-	for i := range g.Units {
-		if g.Units[i].unit.Draw(screen, Counter) {
-			unitNumber++
-		}
+	for i := range g.OnBoard {
+		g.OnBoard[i].Draw(screen, Counter)
 	}
 	a, b := ebiten.CursorPosition()
 	x, y := float64(a), float64(b)
-	posX, posY := GetLeftAngle(camera.GetPositionX(), camera.GetPositionY(), x, y, camera.TileSizeX, camera.TileSizeY)
+	posX, posY := GetLeftAngle(g.camera.GetPositionX(), g.camera.GetPositionY(), x, y, g.camera.TileSize(), g.camera.TileSize())
 	vector.DrawFilledRect(
 		screen,
 		float32(posX),
 		float32(posY),
-		float32(camera.TileSizeX),
-		float32(camera.TileSizeY),
+		float32(g.camera.TileSize()),
+		float32(g.camera.TileSize()),
 		color.White,
 		false,
 	)
@@ -55,7 +52,7 @@ CameraY: %0.2f
 Zoom: %0.2f
 CellNumber: %d
 UnitNumber: %d
-TileSizeX: %0.2f
+tileSize: %0.2f
 TileSizeY: %0.2f
 posX: %0.2f
 posY: %0.2f
@@ -72,15 +69,15 @@ CellY: %0.2f`,
 			g.camera.GetPositionY(),
 			g.camera.GetZoomFactor(),
 			g.board.GetCellNumber(),
-			unitNumber,
-			camera.TileSizeX,
-			camera.TileSizeY,
+			len(g.OnBoard),
+			g.camera.TileSize(),
+			g.camera.TileSize(),
 			posX,
 			posY,
 			x,
 			y,
-			GetCellNumber(x, camera.GetPositionX(), camera.TileSizeX),
-			GetCellNumber(y, camera.GetPositionY(), camera.TileSizeY),
+			GetCellNumber(x, g.camera.GetPositionX(), g.camera.TileSize()),
+			GetCellNumber(y, g.camera.GetPositionY(), g.camera.TileSize()),
 		),
 	)
 }

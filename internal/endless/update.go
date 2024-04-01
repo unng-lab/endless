@@ -1,6 +1,7 @@
 package endless
 
 func (g *Game) Update() error {
+	g.OnBoard = g.OnBoard[:0]
 	if err := g.camera.Update(); err != nil {
 		return err
 	}
@@ -8,6 +9,9 @@ func (g *Game) Update() error {
 		return err
 	}
 	for i := range g.Units {
+		if g.Units[i].wg.OnBoard {
+			g.OnBoard = append(g.OnBoard, g.Units[i].unit)
+		}
 		if g.Units[i].wg.S > 0 {
 			g.Units[i].wg.S--
 		} else {

@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	unitCount = 100
+	unitCount = 10000
 )
 
 var _ ebiten.Game = (*Game)(nil) // ensure Game implements ebiten.Game
@@ -33,11 +33,13 @@ type Game struct {
 	inventory *Inventory
 	board     *board.Board
 	Units     []u
+	OnBoard   []*unit.Unit
 }
 
 func NewGame() *Game {
 	var g Game
 	g.Units = make([]u, 0, unitCount)
+	g.OnBoard = make([]*unit.Unit, 0, unitCount)
 	g.camera = camera.New(board.TileSize, board.CountTile)
 	g.ui = ui.New(g.camera)
 	newBoard, err := board.NewBoard(g.camera)
@@ -45,6 +47,7 @@ func NewGame() *Game {
 		panic(err)
 	}
 	g.board = newBoard
+
 	g.inventory = NewInverntory(g.camera)
 	for i := range unitCount {
 		newUnit := g.inventory.Units["runner"].New(
