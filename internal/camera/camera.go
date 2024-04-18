@@ -5,6 +5,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 
+	"github.com/ebitenui/ebitenui/input"
 	"github/unng-lab/madfarmer/internal/geom"
 	"github/unng-lab/madfarmer/internal/window"
 )
@@ -35,6 +36,7 @@ type Camera struct {
 	Coordinates    geom.Rectangle
 	AbsolutePixels geom.Rectangle
 	RelativePixels geom.Rectangle
+	Cursor         geom.Point
 	scaleFactor    float64
 	W              window.Window
 	geom           ebiten.GeoM
@@ -163,6 +165,9 @@ func (c *Camera) Prepare() {
 			Y: y + c.tileSize*maxY,
 		},
 	}
+
+	a, b := input.CursorPosition()
+	c.Cursor = geom.Point{float64(a), float64(b)}
 }
 
 func (c *Camera) GetCurrentPixels() geom.Rectangle {

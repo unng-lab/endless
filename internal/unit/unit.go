@@ -2,6 +2,7 @@ package unit
 
 import (
 	"image/color"
+	"log/slog"
 	"math/rand"
 	"sync"
 
@@ -23,6 +24,8 @@ const (
 	UnitStatusIdle
 )
 
+var focusedUnit *Unit
+
 type Unit struct {
 	ID               int
 	Name             string
@@ -39,6 +42,7 @@ type Unit struct {
 	Status           int
 	Ticks            chan *WG
 	Camera           *camera.Camera
+	Focus            bool
 }
 
 type WG struct {
@@ -107,9 +111,14 @@ func (u *Unit) Draw(screen *ebiten.Image, counter int) bool {
 		u.Camera.ScaleFactor(),
 		u.Camera.ScaleFactor(),
 	)
-	drawPoint := u.GetDrawPoint(u.Camera)
+	drawPoint := u.GetDrawPoint()
 	u.DrawOptions.GeoM.Translate(drawPoint.X, drawPoint.Y)
-	screen.DrawImage(u.Animation[counter%len(u.Animation)], &u.DrawOptions)
+	if u.Focus {
+		//screen.DrawImage(u.Animation[counter%len(u.Animation)], &u.DrawOptions)
+		vector.DrawFilledRect(screen, float32(drawPoint.X), float32(drawPoint.Y), float32(u.SizeX), float32(u.SizeY), color.Black, true)
+	} else {
+		screen.DrawImage(u.Animation[counter%len(u.Animation)], &u.DrawOptions)
+	}
 
 	//ebitenutil.DebugPrintAt(
 	//	screen,
@@ -132,10 +141,20 @@ func (u *Unit) Draw(screen *ebiten.Image, counter int) bool {
 }
 
 func (u *Unit) Update() (bool, error) {
+	onBoard := !u.Camera.Coordinates.ContainsOR(geom.Pt(u.Position.X, u.Position.Y))
+	if onBoard {
+		if u.Focused(u.Camera.Cursor) {
+			if focusedUnit != nil {
+				focusedUnit = u
+				focusedUnit.Focus = true
+			} else {
+				slog.Info("unit not focused")
+			}
+		}
+	}
 	switch u.Status {
 	case UnitStatusRunning:
 		u.Move()
-		return !u.Camera.Coordinates.ContainsOR(geom.Pt(u.Position.X, u.Position.Y)), nil
 	case UnitStatusIdle:
 		err := u.Pathing.BuildPath(u.Position.X, u.Position.Y, float64(rand.Intn(board.CountTile)), float64(rand.Intn(board.CountTile)))
 		if err != nil {
@@ -144,13 +163,11 @@ func (u *Unit) Update() (bool, error) {
 		u.Status = UnitStatusRunning
 	}
 	//slog.Info("unit position: ", "X: ", u.Position.X, "Y: ", u.Position.Y)
-	return false, nil
+	return onBoard, nil
 }
 
-func (u *Unit) GetDrawPoint(
-	camera *camera.Camera,
-) geom.Point {
-	drawPoint := camera.PointToCameraPixel(geom.Point{
+func (u *Unit) GetDrawPoint() geom.Point {
+	drawPoint := u.Camera.PointToCameraPixel(geom.Point{
 		X: u.Position.X + u.PositionShiftX,
 		Y: u.Position.Y + u.PositionShiftY,
 	})
@@ -223,4 +240,18 @@ func (u *Unit) run(wg chan *WG) {
 			tick.Done(0)
 		}
 	}
+}
+
+func (u *Unit) Rect() geom.Rectangle {
+	drawPoint := u.GetDrawPoint()
+	Min := drawPoint.Sub(u.Camera.PointToCameraPixel(geom.Pt(u.SizeX/2, u.SizeY)))
+	Max := drawPoint.Add(u.Camera.PointToCameraPixel(geom.Pt(u.SizeX/2, 0)))
+	return geom.Rectangle{Min: Min, Max: Max}
+}
+
+func (u *Unit) Focused(p geom.Point) bool {
+	if p.In(u.Rect()) {
+		return true
+	}
+	return false
 }

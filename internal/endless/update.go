@@ -20,5 +20,6 @@ func (g *Game) Update() error {
 		}
 	}
 	g.wg.Wait()
+
 	return nil
 }

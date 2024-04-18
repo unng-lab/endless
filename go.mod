@@ -8,7 +8,7 @@ require (
 	github.com/go-text/typesetting v0.1.1
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0
 	github.com/hajimehoshi/bitmapfont/v3 v3.0.0
-	github.com/hajimehoshi/ebiten/v2 v2.6.7
+	github.com/hajimehoshi/ebiten/v2 v2.7.0
 	github.com/jakecoffman/cp v1.2.1
 	github.com/knadh/koanf/providers/confmap v0.1.0
 	github.com/knadh/koanf/providers/env v0.1.0
@@ -22,7 +22,9 @@ require (
 )
 
 require (
-	github.com/ebitengine/oto/v3 v3.1.1 // indirect
+	github.com/ebitengine/gomobile v0.0.0-20240329170434-1771503ff0a8 // indirect
+	github.com/ebitengine/hideconsole v1.0.0 // indirect
+	github.com/ebitengine/oto/v3 v3.2.0 // indirect
 	github.com/ebitengine/purego v0.8.0-alpha // indirect
 	github.com/go-viper/mapstructure/v2 v2.0.0-alpha.1 // indirect
 	github.com/hajimehoshi/go-mp3 v0.3.4 // indirect

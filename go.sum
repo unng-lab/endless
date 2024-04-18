@@ -2,8 +2,14 @@ github.com/brianvoe/gofakeit/v7 v7.0.2 h1:jzYT7Ge3RDHw7J1CM1kwu0OQywV9vbf2qSGxBS
 github.com/brianvoe/gofakeit/v7 v7.0.2/go.mod h1:QXuPeBw164PJCzCUZVmgpgHJ3Llj49jSLVkKPMtxtxA=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/ebitengine/gomobile v0.0.0-20240329170434-1771503ff0a8 h1:5e8X7WEdOWrjrKvgaWF6PRnDvJicfrkEnwAkWtMN74g=
+github.com/ebitengine/gomobile v0.0.0-20240329170434-1771503ff0a8/go.mod h1:tWboRRNagZwwwis4QIgEFG1ZNFwBJ3LAhSLAXAAxobQ=
+github.com/ebitengine/hideconsole v1.0.0 h1:5J4U0kXF+pv/DhiXt5/lTz0eO5ogJ1iXb8Yj1yReDqE=
+github.com/ebitengine/hideconsole v1.0.0/go.mod h1:hTTBTvVYWKBuxPr7peweneWdkUwEuHuB3C1R/ielR1A=
 github.com/ebitengine/oto/v3 v3.1.1 h1:utFNkSF4yXqA7VhMg7oHp3OSdz3vuzJQ42rCDnd8pc8=
 github.com/ebitengine/oto/v3 v3.1.1/go.mod h1:bQM4zk9glIVjTynn8X0Lp1zngTlZltFFfzJvx543vdA=
+github.com/ebitengine/oto/v3 v3.2.0 h1:FuggTJTSI3/3hEYwZEIN0CZVXYT29ZOdCu+z/f4QjTw=
+github.com/ebitengine/oto/v3 v3.2.0/go.mod h1:dOKXShvy1EQbIXhXPFcKLargdnFqH0RjptecvyAxhyw=
 github.com/ebitengine/purego v0.8.0-alpha h1:xWsUo8xQZLH8f9TzXXSvs/qjc2s6rhNGYxEo5Qd10so=
 github.com/ebitengine/purego v0.8.0-alpha/go.mod h1:ah1In8AOtksoNK6yk5z1HTJeUkC1Ez4Wk2idgGslMwQ=
 github.com/go-text/typesetting v0.1.1 h1:bGAesCuo85nXnEN5LmFMVGAGpGkCPtHrZLi//qD7EJo=
@@ -18,6 +24,8 @@ github.com/hajimehoshi/bitmapfont/v3 v3.0.0 h1:r2+6gYK38nfztS/et50gHAswb9hXgxXEC
 github.com/hajimehoshi/bitmapfont/v3 v3.0.0/go.mod h1:+CxxG+uMmgU4mI2poq944i3uZ6UYFfAkj9V6WqmuvZA=
 github.com/hajimehoshi/ebiten/v2 v2.6.7 h1:rxlMxu487wZN/JteykmuGdO1qotOolL8vJDU85lPh7A=
 github.com/hajimehoshi/ebiten/v2 v2.6.7/go.mod h1:gKgQI26zfoSb6j5QbrEz2L6nuHMbAYwrsXa5qsGrQKo=
+github.com/hajimehoshi/ebiten/v2 v2.7.0 h1:qY9lQmiw2mF9vuElKajDR2tT2SwzmnPPS2W6/8WQv5o=
+github.com/hajimehoshi/ebiten/v2 v2.7.0/go.mod h1:1vjyPw+h3n30rfTOpIsbWRXSxZ0Oz1cYc6Tq/2DKoQg=
 github.com/hajimehoshi/go-mp3 v0.3.4 h1:NUP7pBYH8OguP4diaTZ9wJbUbk3tC0KlfzsEpWmYj68=
 github.com/hajimehoshi/go-mp3 v0.3.4/go.mod h1:fRtZraRFcWb0pu7ok0LqyFhCUrPeMsGRSVop0eemFmo=
 github.com/hajimehoshi/oto/v2 v2.3.1/go.mod h1:seWLbgHH7AyUMYKfKYT9pg7PhUu9/SisyJvNTT+ASQo=

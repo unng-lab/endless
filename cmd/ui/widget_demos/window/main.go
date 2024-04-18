@@ -5,14 +5,16 @@ import (
 	"image"
 	"image/color"
 	"log"
+	"log/slog"
 
-	"github.com/ebitenui/ebitenui"
-	e_image "github.com/ebitenui/ebitenui/image"
-	"github.com/ebitenui/ebitenui/widget"
 	"github.com/golang/freetype/truetype"
 	"github.com/hajimehoshi/ebiten/v2"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/gofont/goregular"
+
+	"github.com/ebitenui/ebitenui"
+	e_image "github.com/ebitenui/ebitenui/image"
+	"github.com/ebitenui/ebitenui/widget"
 )
 
 // Game object used by ebiten
@@ -133,12 +135,14 @@ func main() {
 			//Create a rect with the preferred size of the content
 			r := image.Rect(0, 0, x, y)
 			//Use the Add method to move the window to the specified point
-			r = r.Add(image.Point{100, 50})
+			r = r.Add(image.Point{100, 100})
 			//Set the windows location to the rect.
 			window.SetLocation(r)
 			//Add the window to the UI.
 			//Note: If the window is already added, this will just move the window and not add a duplicate.
 			ui.AddWindow(window)
+
+			slog.Info("Window Opened")
 		}),
 	)
 
