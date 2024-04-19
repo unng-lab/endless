@@ -9,7 +9,7 @@ func (g *Game) Update() error {
 		return err
 	}
 	for i := range g.Units {
-		if g.Units[i].wg.OnBoard {
+		if g.Units[i].unit.OnBoard {
 			g.OnBoard = append(g.OnBoard, g.Units[i].unit)
 		}
 		if g.Units[i].wg.S > 0 {

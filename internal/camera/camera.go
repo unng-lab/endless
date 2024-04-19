@@ -5,7 +5,6 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 
-	"github.com/ebitenui/ebitenui/input"
 	"github/unng-lab/madfarmer/internal/geom"
 	"github/unng-lab/madfarmer/internal/window"
 )
@@ -166,7 +165,7 @@ func (c *Camera) Prepare() {
 		},
 	}
 
-	a, b := input.CursorPosition()
+	a, b := ebiten.CursorPosition()
 	c.Cursor = geom.Point{float64(a), float64(b)}
 }
 

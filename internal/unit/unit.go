@@ -2,7 +2,6 @@ package unit
 
 import (
 	"image/color"
-	"log/slog"
 	"math/rand"
 	"sync"
 
@@ -24,12 +23,11 @@ const (
 	UnitStatusIdle
 )
 
-var focusedUnit *Unit
-
 type Unit struct {
 	ID               int
 	Name             string
 	Animation        []*ebiten.Image
+	FocusedAnimation []*ebiten.Image
 	Position         geom.Point
 	SizeX            float64
 	SizeY            float64
@@ -42,13 +40,14 @@ type Unit struct {
 	Status           int
 	Ticks            chan *WG
 	Camera           *camera.Camera
-	Focus            bool
+	OnBoard          bool
+	// Можно немного пооптимизировать и сделать через глобальную переменную
+	Focused bool
 }
 
 type WG struct {
-	WG      *sync.WaitGroup
-	S       int
-	OnBoard bool
+	WG *sync.WaitGroup
+	S  int
 }
 
 func (wg *WG) Done(sleeper int) {
@@ -66,7 +65,7 @@ func (u *Unit) New(id int, positionX float64, positionY float64, b *board.Board)
 	unit.Position.Y = positionY
 	unit.SizeX = u.SizeX
 	unit.SizeY = u.SizeY
-	unit.Speed = 10 / float64(ebiten.DefaultTPS)
+	unit.Speed = 1 / float64(ebiten.DefaultTPS)
 	unit.Pathing = astar.NewAstar(b)
 	if unit.Position.X == 2058 {
 		unit.Status = UnitStatusRunning
@@ -95,6 +94,11 @@ func (u *Unit) New(id int, positionX float64, positionY float64, b *board.Board)
 	for i := range u.Animation {
 		unit.Animation = append(unit.Animation, u.Animation[i])
 	}
+
+	for i := range u.FocusedAnimation {
+		unit.FocusedAnimation = append(unit.FocusedAnimation, u.FocusedAnimation[i])
+	}
+
 	unit.PositionShiftX = 0.5 - u.SizeX/2
 	unit.PositionShiftY = 0.75 - u.SizeY
 
@@ -113,9 +117,8 @@ func (u *Unit) Draw(screen *ebiten.Image, counter int) bool {
 	)
 	drawPoint := u.GetDrawPoint()
 	u.DrawOptions.GeoM.Translate(drawPoint.X, drawPoint.Y)
-	if u.Focus {
-		//screen.DrawImage(u.Animation[counter%len(u.Animation)], &u.DrawOptions)
-		vector.DrawFilledRect(screen, float32(drawPoint.X), float32(drawPoint.Y), float32(u.SizeX), float32(u.SizeY), color.Black, true)
+	if u.Focused {
+		screen.DrawImage(u.FocusedAnimation[counter%len(u.FocusedAnimation)], &u.DrawOptions)
 	} else {
 		screen.DrawImage(u.Animation[counter%len(u.Animation)], &u.DrawOptions)
 	}
@@ -138,32 +141,6 @@ func (u *Unit) Draw(screen *ebiten.Image, counter int) bool {
 	//	0,
 	//)
 	return true
-}
-
-func (u *Unit) Update() (bool, error) {
-	onBoard := !u.Camera.Coordinates.ContainsOR(geom.Pt(u.Position.X, u.Position.Y))
-	if onBoard {
-		if u.Focused(u.Camera.Cursor) {
-			if focusedUnit != nil {
-				focusedUnit = u
-				focusedUnit.Focus = true
-			} else {
-				slog.Info("unit not focused")
-			}
-		}
-	}
-	switch u.Status {
-	case UnitStatusRunning:
-		u.Move()
-	case UnitStatusIdle:
-		err := u.Pathing.BuildPath(u.Position.X, u.Position.Y, float64(rand.Intn(board.CountTile)), float64(rand.Intn(board.CountTile)))
-		if err != nil {
-			return false, err
-		}
-		u.Status = UnitStatusRunning
-	}
-	//slog.Info("unit position: ", "X: ", u.Position.X, "Y: ", u.Position.Y)
-	return onBoard, nil
 }
 
 func (u *Unit) GetDrawPoint() geom.Point {
@@ -232,11 +209,10 @@ func (u *Unit) run(wg chan *WG) {
 	for {
 		select {
 		case tick := <-u.Ticks:
-			onBoard, err := u.Update()
+			err := u.Update()
 			if err != nil {
 				return
 			}
-			tick.OnBoard = onBoard
 			tick.Done(0)
 		}
 	}
@@ -244,12 +220,12 @@ func (u *Unit) run(wg chan *WG) {
 
 func (u *Unit) Rect() geom.Rectangle {
 	drawPoint := u.GetDrawPoint()
-	Min := drawPoint.Sub(u.Camera.PointToCameraPixel(geom.Pt(u.SizeX/2, u.SizeY)))
-	Max := drawPoint.Add(u.Camera.PointToCameraPixel(geom.Pt(u.SizeX/2, 0)))
+	Min := drawPoint.Sub(geom.Pt(u.SizeX/2*u.Camera.TileSize(), u.SizeY*u.Camera.TileSize()))
+	Max := drawPoint.Add(geom.Pt(u.SizeX/2*u.Camera.TileSize(), 0))
 	return geom.Rectangle{Min: Min, Max: Max}
 }
 
-func (u *Unit) Focused(p geom.Point) bool {
+func (u *Unit) isFocused(p geom.Point) bool {
 	if p.In(u.Rect()) {
 		return true
 	}

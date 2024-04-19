@@ -46,7 +46,6 @@ func main() {
 			window.New,
 			slogfx.New,
 			game.New,
-			runner.New,
 		),
 		fx.Invoke(
 			ebiten.RunGame,

@@ -1,13 +1,11 @@
 package endless
 
 import (
-	"bytes"
 	"image"
-	"log/slog"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/examples/resources/images"
 
+	"github/unng-lab/madfarmer/assets/img"
 	"github/unng-lab/madfarmer/internal/board"
 	"github/unng-lab/madfarmer/internal/camera"
 	"github/unng-lab/madfarmer/internal/unit"
@@ -39,20 +37,31 @@ func NewRunner(camera *camera.Camera) *unit.Unit {
 	newUnit.Camera = camera
 	newUnit.SizeX = frameWidth / board.TileSize
 	newUnit.SizeY = frameHeight / board.TileSize
-	img, _, err := image.Decode(bytes.NewReader(images.Runner_png))
+	spriteRunner, err := img.Img("runner.png", 256, 96)
 	if err != nil {
-		slog.Error("image.Decode", err)
+		panic(err)
 	}
-	sprite := ebiten.NewImageFromImage(img)
+	spriteFocused, err := img.Img("runnerfocused.png", 256, 96)
+	if err != nil {
+		panic(err)
+	}
 	for i := range frameCount {
 		sx, sy := frameOX+i*frameWidth, frameOY
-		frame := sprite.SubImage(image.Rect(
+		frame := spriteRunner.SubImage(image.Rect(
 			sx,
 			sy,
 			sx+frameWidth,
 			sy+frameHeight,
 		)).(*ebiten.Image)
 		newUnit.Animation = append(newUnit.Animation, frame)
+
+		frameFocused := spriteFocused.SubImage(image.Rect(
+			sx,
+			sy,
+			sx+frameWidth,
+			sy+frameHeight,
+		)).(*ebiten.Image)
+		newUnit.FocusedAnimation = append(newUnit.FocusedAnimation, frameFocused)
 	}
 
 	return &newUnit

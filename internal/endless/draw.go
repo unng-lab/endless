@@ -23,9 +23,8 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	for i := range g.OnBoard {
 		g.OnBoard[i].Draw(screen, Counter)
 	}
-	a, b := ebiten.CursorPosition()
-	x, y := float64(a), float64(b)
-	posX, posY := GetLeftAngle(g.camera.GetPositionX(), g.camera.GetPositionY(), x, y, g.camera.TileSize(), g.camera.TileSize())
+	cursor := g.camera.Cursor
+	posX, posY := GetLeftAngle(g.camera.GetPositionX(), g.camera.GetPositionY(), cursor.X, cursor.Y, g.camera.TileSize(), g.camera.TileSize())
 	vector.DrawFilledRect(
 		screen,
 		float32(posX),
@@ -74,10 +73,10 @@ CellY: %0.2f`,
 			g.camera.TileSize(),
 			posX,
 			posY,
-			x,
-			y,
-			GetCellNumber(x, g.camera.GetPositionX(), g.camera.TileSize()),
-			GetCellNumber(y, g.camera.GetPositionY(), g.camera.TileSize()),
+			cursor.X,
+			cursor.Y,
+			GetCellNumber(cursor.X, g.camera.GetPositionX(), g.camera.TileSize()),
+			GetCellNumber(cursor.Y, g.camera.GetPositionY(), g.camera.TileSize()),
 		),
 	)
 }

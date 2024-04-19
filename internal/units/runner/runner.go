@@ -57,18 +57,13 @@ func New(log *slog.Logger, cfg Config) *Default {
 func (d *Default) Draw(
 	screen *ebiten.Image,
 	counter int64,
-	div image.Point,
-	min, max image.Point,
 ) {
-	if d.Position().In(image.Rectangle{Min: min, Max: max}) {
-		op := &ebiten.DrawImageOptions{}
-		op.GeoM.Translate(-float64(frameWidth)/2, -float64(frameHeight)/2)
-		//op.GeoM.Translate(float64(d.Position().X+div.X), float64(d.Position().Y+div.Y))
-		op.GeoM.Translate(float64(d.Position().X), float64(d.Position().Y))
-		op.GeoM.Scale(float64(10), float64(10))
-		i := (counter / 5) % frameCount
-		sx, sy := frameOX+i*frameWidth, frameOY
-		screen.DrawImage(d.sprite.SubImage(image.Rect(int(sx), sy, int(sx+frameWidth), sy+frameHeight)).(*ebiten.Image), op)
-	}
-
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM.Translate(-float64(frameWidth)/2, -float64(frameHeight)/2)
+	//op.GeoM.Translate(float64(d.Position().X+div.X), float64(d.Position().Y+div.Y))
+	op.GeoM.Translate(float64(d.Position().X), float64(d.Position().Y))
+	op.GeoM.Scale(float64(10), float64(10))
+	i := (counter / 5) % frameCount
+	sx, sy := frameOX+i*frameWidth, frameOY
+	screen.DrawImage(d.sprite.SubImage(image.Rect(int(sx), sy, int(sx+frameWidth), sy+frameHeight)).(*ebiten.Image), op)
 }
