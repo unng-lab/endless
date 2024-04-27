@@ -122,7 +122,6 @@ func (u *Unit) Draw(screen *ebiten.Image, counter int) bool {
 	} else {
 		screen.DrawImage(u.Animation[counter%len(u.Animation)], &u.DrawOptions)
 	}
-
 	//ebitenutil.DebugPrintAt(
 	//	screen,
 	//	fmt.Sprintf(
