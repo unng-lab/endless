@@ -1,16 +1,28 @@
 package main
 
-import "fmt"
+import (
+	"image/color"
 
-func countUniqueElements(arr []int) int {
-	uniqueElements := make(map[int]bool)
-	for _, num := range arr {
-		uniqueElements[num] = true
+	"github.com/hajimehoshi/ebiten"
+	"github.com/hajimehoshi/ebiten/ebitenutil"
+)
+
+const (
+	screenWidth  = 320
+	screenHeight = 240
+)
+
+func update(screen *ebiten.Image) error {
+	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+		x, y := ebiten.CursorPosition()
+		ebitenutil.DrawLine(screen, float64(x)-10, float64(y)-10, float64(x)+10, float64(y)-10, color.White)
+		ebitenutil.DrawLine(screen, float64(x)+10, float64(y)-10, float64(x)+10, float64(y)+10, color.White)
+		ebitenutil.DrawLine(screen, float64(x)+10, float64(y)+10, float64(x)-10, float64(y)+10, color.White)
+		ebitenutil.DrawLine(screen, float64(x)-10, float64(y)+10, float64(x)-10, float64(y)-10, color.White)
 	}
-	return len(uniqueElements)
+	return nil
 }
 
 func main() {
-	numbers := []int{1, 2, 3, 4, 2, 3, 1, 5}
-	fmt.Printf("Количество уникальных элементов: %d\n", countUniqueElements(numbers))
+	ebiten.Run(update, screenWidth, screenHeight, 2, "Draw Unfilled Square Example")
 }

@@ -24,16 +24,63 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		g.OnBoard[i].Draw(screen, Counter)
 	}
 	cursor := g.camera.Cursor
-	posX, posY := GetLeftAngle(g.camera.GetPositionX(), g.camera.GetPositionY(), cursor.X, cursor.Y, g.camera.TileSize(), g.camera.TileSize())
-	vector.DrawFilledRect(
+	posX, posY := GetLeftAngle(
+		g.camera.GetPositionX(),
+		g.camera.GetPositionY(),
+		cursor.X,
+		cursor.Y,
+		g.camera.TileSize(),
+		g.camera.TileSize(),
+	)
+	vector.StrokeLine(
 		screen,
 		float32(posX),
 		float32(posY),
-		float32(g.camera.TileSize()),
-		float32(g.camera.TileSize()),
+		float32(posX+g.camera.TileSize()),
+		float32(posY),
+		1,
 		color.White,
 		false,
 	)
+	vector.StrokeLine(
+		screen,
+		float32(posX+g.camera.TileSize()),
+		float32(posY),
+		float32(posX+g.camera.TileSize()),
+		float32(posY+g.camera.TileSize()),
+		1,
+		color.White,
+		false,
+	)
+	vector.StrokeLine(
+		screen,
+		float32(posX),
+		float32(posY),
+		float32(posX),
+		float32(posY+g.camera.TileSize()),
+		1,
+		color.White,
+		false,
+	)
+	vector.StrokeLine(
+		screen,
+		float32(posX),
+		float32(posY+g.camera.TileSize()),
+		float32(posX+g.camera.TileSize()),
+		float32(posY+g.camera.TileSize()),
+		1,
+		color.White,
+		false,
+	)
+	//vector.DrawFilledRect(
+	//	screen,
+	//	float32(posX),
+	//	float32(posY),
+	//	float32(g.camera.TileSize()),
+	//	float32(g.camera.TileSize()),
+	//	color.White,
+	//	false,
+	//)
 	m := &runtime.MemStats{}
 	runtime.ReadMemStats(m)
 

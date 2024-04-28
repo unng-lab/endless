@@ -23,6 +23,10 @@ const (
 	UnitStatusIdle
 )
 
+const (
+	drawRect = true
+)
+
 type Unit struct {
 	ID               int
 	Name             string
@@ -122,6 +126,11 @@ func (u *Unit) Draw(screen *ebiten.Image, counter int) bool {
 	} else {
 		screen.DrawImage(u.Animation[counter%len(u.Animation)], &u.DrawOptions)
 	}
+
+	if drawRect {
+		u.drawRect(screen)
+	}
+
 	//ebitenutil.DebugPrintAt(
 	//	screen,
 	//	fmt.Sprintf(
@@ -142,16 +151,58 @@ func (u *Unit) Draw(screen *ebiten.Image, counter int) bool {
 	return true
 }
 
+func (u *Unit) drawRect(screen *ebiten.Image) {
+	leftAngle := u.GetDrawPoint()
+	posX, posY := leftAngle.X, leftAngle.Y
+
+	vector.StrokeLine(
+		screen,
+		float32(posX),
+		float32(posY),
+		float32(posX+u.Camera.TileSize()*u.SizeX),
+		float32(posY),
+		1,
+		color.White,
+		false,
+	)
+	vector.StrokeLine(
+		screen,
+		float32(posX+u.Camera.TileSize()*u.SizeX),
+		float32(posY),
+		float32(posX+u.Camera.TileSize()*u.SizeX),
+		float32(posY+u.Camera.TileSize()*u.SizeY),
+		1,
+		color.White,
+		false,
+	)
+	vector.StrokeLine(
+		screen,
+		float32(posX),
+		float32(posY),
+		float32(posX),
+		float32(posY+u.Camera.TileSize()*u.SizeY),
+		1,
+		color.White,
+		false,
+	)
+	vector.StrokeLine(
+		screen,
+		float32(posX),
+		float32(posY+u.Camera.TileSize()*u.SizeY),
+		float32(posX+u.Camera.TileSize()*u.SizeX),
+		float32(posY+u.Camera.TileSize()*u.SizeY),
+		1,
+		color.White,
+		false,
+	)
+}
+
 func (u *Unit) GetDrawPoint() geom.Point {
 	drawPoint := u.Camera.PointToCameraPixel(geom.Point{
 		X: u.Position.X + u.PositionShiftX,
 		Y: u.Position.Y + u.PositionShiftY,
 	})
 	return drawPoint
-}
-
-func (u *Unit) Drawable(cameraX, cameraY, tileSize, scale float64) bool {
-	return true
 }
 
 func (u *Unit) DrawPath(screen *ebiten.Image, camera camera.Camera) {
@@ -218,9 +269,8 @@ func (u *Unit) run(wg chan *WG) {
 }
 
 func (u *Unit) Rect() geom.Rectangle {
-	drawPoint := u.GetDrawPoint()
-	Min := drawPoint.Sub(geom.Pt(u.SizeX/2*u.Camera.TileSize(), u.SizeY*u.Camera.TileSize()))
-	Max := drawPoint.Add(geom.Pt(u.SizeX/2*u.Camera.TileSize(), 0))
+	Min := u.GetDrawPoint()
+	Max := Min.Add(geom.Pt(u.SizeX*u.Camera.TileSize(), u.SizeY*u.Camera.TileSize()))
 	return geom.Rectangle{Min: Min, Max: Max}
 }
 
