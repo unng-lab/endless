@@ -20,7 +20,14 @@ func (u *Unit) Update() error {
 	case UnitStatusRunning:
 		u.Move()
 	case UnitStatusIdle:
-		err := u.Pathing.BuildPath(u.Position.X, u.Position.Y, float64(rand.Intn(board.CountTile)), float64(rand.Intn(board.CountTile)))
+		u.CurTarget.X = float64(rand.Intn(board.CountTile))
+		u.CurTarget.Y = float64(rand.Intn(board.CountTile))
+		err := u.Pathing.BuildPath(
+			u.Position.X,
+			u.Position.Y,
+			u.CurTarget.X,
+			u.CurTarget.Y,
+		)
 		if err != nil {
 			return err
 		}

@@ -9,12 +9,13 @@ import (
 
 	"github/unng-lab/madfarmer/internal/board"
 	"github/unng-lab/madfarmer/internal/camera"
+	"github/unng-lab/madfarmer/internal/ch"
 	"github/unng-lab/madfarmer/internal/ui"
 	"github/unng-lab/madfarmer/internal/unit"
 )
 
 const (
-	unitCount = 1
+	unitCount = 100
 )
 
 var _ ebiten.Game = (*Game)(nil) // ensure Game implements ebiten.Game
@@ -36,7 +37,7 @@ type Game struct {
 	OnBoard   []*unit.Unit
 }
 
-func NewGame() *Game {
+func NewGame(analyticsDB *ch.AnaliticsDB) *Game {
 	var g Game
 	g.Units = make([]u, 0, unitCount)
 	g.OnBoard = make([]*unit.Unit, 0, unitCount)
@@ -55,6 +56,7 @@ func NewGame() *Game {
 			float64(rand.Intn(board.CountTile)),
 			float64(rand.Intn(board.CountTile)),
 			g.board,
+			analyticsDB,
 		)
 		newU := u{
 			unit: &newUnit,
