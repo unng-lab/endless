@@ -9,22 +9,22 @@ func (g *Game) Update() error {
 		return err
 	}
 	for i := range g.Units {
-		if g.Units[i].unit.OnBoard {
+		if g.Units[i].OnBoard {
 			// сигнализируем о том, что мы находимся на карте и нужно работать с анимацией
 			select {
-			case g.Units[i].unit.CameraTicks <- struct{}{}:
+			case g.Units[i].CameraTicks <- struct{}{}:
 			default:
 				//максимально не блокируем
 
 			}
 
-			g.OnBoard = append(g.OnBoard, g.Units[i].unit)
+			g.OnBoard = append(g.OnBoard, g.Units[i])
 		}
-		if g.Units[i].wg.S > 0 {
-			g.Units[i].wg.S--
+		if g.Units[i].SleepTicks > 0 {
+			g.Units[i].SleepTicks--
 		} else {
 			g.wg.Add(1)
-			g.Units[i].gameTick <- &g.Units[i].wg
+			g.Units[i].Ticks <- &g.wg
 		}
 	}
 	g.wg.Wait()

@@ -4,6 +4,7 @@ import (
 	"image/color"
 	"math"
 	"math/rand"
+	"sync"
 
 	"github.com/brianvoe/gofakeit/v7"
 	"github.com/hajimehoshi/ebiten/v2"
@@ -52,7 +53,7 @@ type Unit struct {
 	Pathing     astar.Astar
 	Status      int
 	//Ticks экономные тики для отработки игровых событий
-	Ticks chan *WG
+	Ticks chan *sync.WaitGroup
 	//CameraTicks тики для отработки анимации и тд
 	CameraTicks chan struct{}
 	Camera      *camera.Camera
@@ -64,6 +65,9 @@ type Unit struct {
 	AnaliticsDB *ch.AnaliticsDB
 	// куда пиздует сейчас
 	CurTarget geom.Point
+
+	//сколько тиков юнит спит до след изменения
+	SleepTicks int
 
 	// пометка что движение началось
 	MoveStarted bool
@@ -81,6 +85,7 @@ func (u *Unit) New(
 	unit.Name = gofakeit.Name()
 	unit.Camera = u.Camera
 	unit.CameraTicks = make(chan struct{}, 1)
+	unit.Ticks = make(chan *sync.WaitGroup, 1)
 	unit.Position.X = positionX
 	unit.Position.Y = positionY
 	unit.SizeX = u.SizeX
@@ -276,20 +281,21 @@ func (u *Unit) Move() {
 	//})
 }
 
-func (u *Unit) Run(wg chan *WG) {
+func (u *Unit) Run(wg chan *sync.WaitGroup) {
 	go u.run(wg)
 }
 
-func (u *Unit) run(wg chan *WG) {
+func (u *Unit) run(wg chan *sync.WaitGroup) {
 	u.Ticks = wg
 	for {
 		select {
 		case tick := <-u.Ticks:
-			_, err := u.Update()
+			n, err := u.Update()
 			if err != nil {
 				return
 			}
-			tick.Done(0)
+			u.SleepTicks = n
+			tick.Done()
 		}
 	}
 }
