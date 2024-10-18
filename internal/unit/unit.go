@@ -64,7 +64,6 @@ type Unit struct {
 	AnaliticsDB *ch.AnaliticsDB
 	// куда пиздует сейчас
 	CurTarget geom.Point
-}
 
 	// пометка что движение началось
 	MoveStarted bool
