@@ -37,6 +37,7 @@ func NewRunner(camera *camera.Camera) *unit.Unit {
 	newUnit.Camera = camera
 	newUnit.SizeX = frameWidth / board.TileSize
 	newUnit.SizeY = frameHeight / board.TileSize
+	newUnit.Speed = 1 / float64(ebiten.DefaultTPS)
 	spriteRunner, err := img.Img("runner.png", 256, 96)
 	if err != nil {
 		panic(err)

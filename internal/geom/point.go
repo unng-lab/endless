@@ -4,8 +4,10 @@ import (
 	"math"
 )
 
+type Direction byte
+
 const (
-	DirUp byte = iota
+	DirUp Direction = iota
 	DirUpRight
 	DirRight
 	DirDownRight
@@ -35,7 +37,7 @@ func (p Point) Length(to Point) float64 {
 	return math.Sqrt(dx*dx + dy*dy)
 }
 
-func (p Point) To(to Point) byte {
+func (p Point) To(to Point) Direction {
 	switch x, y := to.X-p.X, to.Y-p.Y; {
 	case x == 0 && y < 0:
 		return DirUp

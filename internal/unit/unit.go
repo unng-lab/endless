@@ -3,7 +3,6 @@ package unit
 import (
 	"image/color"
 	"math/rand"
-	"sync"
 
 	"github.com/brianvoe/gofakeit/v7"
 	"github.com/hajimehoshi/ebiten/v2"
@@ -28,35 +27,37 @@ const (
 )
 
 type Unit struct {
-	ID               int
-	Name             string
-	Animation        []*ebiten.Image
+	ID   int
+	Name string
+	// обычная анимация
+	Animation []*ebiten.Image
+	// анимация с фокусом
 	FocusedAnimation []*ebiten.Image
-	Position         geom.Point
-	SizeX            float64
-	SizeY            float64
-	Speed            float64 // tiles per update tick
-	PositionShiftX   float64 // in tiles
-	PositionShiftY   float64 // in tiles
-	AbsolutePosition geom.Point
-	DrawOptions      ebiten.DrawImageOptions
-	Pathing          astar.Astar
-	Status           int
-	Ticks            chan *WG
-	Camera           *camera.Camera
-	OnBoard          bool
+	// Целочисленные координаты
+	Position geom.Point
+	// Размеры иконки
+	SizeX float64
+	SizeY float64
+	// сдвиг иконки относительно позиции
+	PositionShiftX float64 // in tiles
+	PositionShiftY float64 // in tiles
+	// скорость движения
+	Speed float64 // tiles per update tick
+
+	DrawOptions ebiten.DrawImageOptions
+	Pathing     astar.Astar
+	Status      int
+	//Ticks экономные тики для отработки игровых событий
+	Ticks chan *WG
+	//CameraTicks тики для отработки анимации и тд
+	CameraTicks chan struct{}
+	Camera      *camera.Camera
+	OnBoard     bool
 	// Можно немного пооптимизировать и сделать через глобальную переменную
 	Focused bool
-}
 
-type WG struct {
-	WG *sync.WaitGroup
-	S  int
-}
-
-func (wg *WG) Done(sleeper int) {
-	wg.S = sleeper
-	wg.WG.Done()
+	// пометка что движение началось
+	MoveStarted bool
 }
 
 func (u *Unit) New(id int, positionX float64, positionY float64, b *board.Board) Unit {
@@ -64,35 +65,24 @@ func (u *Unit) New(id int, positionX float64, positionY float64, b *board.Board)
 	unit.ID = id
 	unit.Name = gofakeit.Name()
 	unit.Camera = u.Camera
-	//unit.Ticks = wg
+	unit.CameraTicks = make(chan struct{}, 1)
 	unit.Position.X = positionX
 	unit.Position.Y = positionY
 	unit.SizeX = u.SizeX
 	unit.SizeY = u.SizeY
-	unit.Speed = 1 / float64(ebiten.DefaultTPS)
+	unit.Speed = u.Speed
 	unit.Pathing = astar.NewAstar(b)
-	if unit.Position.X == 2058 {
-		unit.Status = UnitStatusRunning
-		err := unit.Pathing.BuildPath(
-			unit.Position.X,
-			unit.Position.Y,
-			board.CountTile/2+40,
-			board.CountTile/2+20,
-		)
-		if err != nil {
-			panic(err)
-		}
-	} else {
-		unit.Status = UnitStatusRunning
-		err := unit.Pathing.BuildPath(
-			unit.Position.X,
-			unit.Position.Y,
-			float64(rand.Intn(board.CountTile)),
-			float64(rand.Intn(board.CountTile)),
-		)
-		if err != nil {
-			panic(err)
-		}
+
+	//TODO удалить это
+	unit.Status = UnitStatusRunning
+	err := unit.Pathing.BuildPath(
+		unit.Position.X,
+		unit.Position.Y,
+		float64(rand.Intn(board.CountTile)),
+		float64(rand.Intn(board.CountTile)),
+	)
+	if err != nil {
+		panic(err)
 	}
 
 	for i := range u.Animation {
@@ -250,6 +240,7 @@ func (u *Unit) Move() {
 		u.Position.Y = u.Position.Y + part*(u.Pathing.Path[len(u.Pathing.Path)-2].Y-u.Position.Y)
 	}
 }
+
 func (u *Unit) Run(wg chan *WG) {
 	go u.run(wg)
 }
@@ -259,7 +250,7 @@ func (u *Unit) run(wg chan *WG) {
 	for {
 		select {
 		case tick := <-u.Ticks:
-			err := u.Update()
+			_, err := u.Update()
 			if err != nil {
 				return
 			}
@@ -279,4 +270,13 @@ func (u *Unit) isFocused(p geom.Point) bool {
 		return true
 	}
 	return false
+}
+
+func (u *Unit) Relocate(p geom.Point) {
+	u.Position.X = p.X
+	u.Position.Y = p.Y
+}
+
+func (u *Unit) MoveToNeighbor(direction geom.Direction) {
+
 }

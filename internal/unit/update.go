@@ -7,9 +7,8 @@ import (
 	"github/unng-lab/madfarmer/internal/geom"
 )
 
-// Update returns true if the unit are on the board
-func (u *Unit) Update() error {
-	u.OnBoard = !u.Camera.Coordinates.ContainsOR(geom.Pt(u.Position.X, u.Position.Y))
+// Update возвращает время до следующего вызова Update или ошибку
+func (u *Unit) Update() (int, error) {
 	u.Focused = false
 	if u.OnBoard {
 		if u.isFocused(u.Camera.Cursor) {
@@ -17,15 +16,21 @@ func (u *Unit) Update() error {
 		}
 	}
 	switch u.Status {
+
 	case UnitStatusRunning:
 		u.Move()
 	case UnitStatusIdle:
 		err := u.Pathing.BuildPath(u.Position.X, u.Position.Y, float64(rand.Intn(board.CountTile)), float64(rand.Intn(board.CountTile)))
 		if err != nil {
-			return err
+			return 0, err
 		}
 		u.Status = UnitStatusRunning
+	default:
+		panic("unknown unit status")
 	}
 	//slog.Info("unit position: ", "X: ", u.Position.X, "Y: ", u.Position.Y)
-	return nil
+
+	u.OnBoard = !u.Camera.Coordinates.ContainsOR(geom.Pt(u.Position.X, u.Position.Y))
+
+	return 0, nil
 }

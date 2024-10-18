@@ -20,9 +20,9 @@ const (
 var _ ebiten.Game = (*Game)(nil) // ensure Game implements ebiten.Game
 
 type u struct {
-	unit *unit.Unit
-	wg   unit.WG
-	c    chan *unit.WG
+	unit     *unit.Unit
+	wg       unit.WG
+	gameTick chan *unit.WG
 }
 
 type Game struct {
@@ -61,10 +61,10 @@ func NewGame() *Game {
 			wg: unit.WG{
 				WG: &g.wg,
 			},
-			c: make(chan *unit.WG, 1),
+			gameTick: make(chan *unit.WG, 1),
 		}
 		g.Units = append(g.Units, newU)
-		g.Units[i].unit.Run(newU.c)
+		g.Units[i].unit.Run(newU.gameTick)
 	}
 
 	return &g
