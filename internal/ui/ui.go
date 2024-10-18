@@ -1,12 +1,13 @@
 package ui
 
 import (
+	"bytes"
 	"image/color"
 	"log/slog"
 
-	"github.com/golang/freetype/truetype"
-	"golang.org/x/image/font"
+	"github.com/hajimehoshi/ebiten/v2/text/v2"
 	"golang.org/x/image/font/gofont/goregular"
+	"golang.org/x/text/language"
 
 	"github.com/ebitenui/ebitenui"
 	e_image "github.com/ebitenui/ebitenui/image"
@@ -49,17 +50,18 @@ func New(camera *camera.Camera) *UIEngine {
 	return &ui
 }
 
-func loadFont(size float64) (font.Face, error) {
-	ttfFont, err := truetype.Parse(goregular.TTF)
+func loadFont(size float64) (text.Face, error) {
+	ttfFont, err := text.NewGoTextFaceSource(bytes.NewReader(goregular.TTF))
 	if err != nil {
 		return nil, err
 	}
 
-	return truetype.NewFace(ttfFont, &truetype.Options{
-		Size:    size,
-		DPI:     72,
-		Hinting: font.HintingFull,
-	}), nil
+	return &text.GoTextFace{
+		Size:      size,
+		Source:    ttfFont,
+		Language:  language.English,
+		Direction: text.DirectionLeftToRight,
+	}, nil
 }
 
 func loadButtonImage() (*widget.ButtonImage, error) {

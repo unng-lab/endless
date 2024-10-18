@@ -9,7 +9,6 @@ import (
 
 	"github/unng-lab/madfarmer/internal/board"
 	"github/unng-lab/madfarmer/internal/camera"
-	"github/unng-lab/madfarmer/internal/ch"
 	"github/unng-lab/madfarmer/internal/ui"
 	"github/unng-lab/madfarmer/internal/unit"
 )
@@ -37,7 +36,9 @@ type Game struct {
 	OnBoard   []*unit.Unit
 }
 
-func NewGame(analyticsDB *ch.AnaliticsDB) *Game {
+func NewGame(
+// analyticsDB *ch.AnaliticsDB,
+) *Game {
 	var g Game
 	g.Units = make([]u, 0, unitCount)
 	g.OnBoard = make([]*unit.Unit, 0, unitCount)
@@ -56,7 +57,7 @@ func NewGame(analyticsDB *ch.AnaliticsDB) *Game {
 			float64(rand.Intn(board.CountTile)),
 			float64(rand.Intn(board.CountTile)),
 			g.board,
-			analyticsDB,
+			//analyticsDB,
 		)
 		newU := u{
 			unit: &newUnit,

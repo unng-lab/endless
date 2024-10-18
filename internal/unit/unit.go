@@ -74,7 +74,7 @@ func (u *Unit) New(
 	positionX float64,
 	positionY float64,
 	b *board.Board,
-	db *ch.AnaliticsDB,
+	// db *ch.AnaliticsDB,
 ) Unit {
 	var unit Unit
 	unit.ID = id
@@ -113,7 +113,7 @@ func (u *Unit) New(
 	unit.PositionShiftX = 0.5 - u.SizeX/2
 	unit.PositionShiftY = 0.75 - u.SizeY
 
-	unit.AnaliticsDB = db
+	//unit.AnaliticsDB = db
 	return unit
 }
 
@@ -266,14 +266,14 @@ func (u *Unit) Move() {
 		u.Position.X = u.Position.X + part*(u.Pathing.Path[len(u.Pathing.Path)-2].X-u.Position.X)
 		u.Position.Y = u.Position.Y + part*(u.Pathing.Path[len(u.Pathing.Path)-2].Y-u.Position.Y)
 	}
-	u.AnaliticsDB.AddPath(&ch.Path{
-		UnitID: u.ID,
-		X:      u.Position.X,
-		Y:      u.Position.Y,
-		Cost:   heuristic(u.Position, u.CurTarget),
-		GoalX:  u.CurTarget.X,
-		GoalY:  u.CurTarget.Y,
-	})
+	//u.AnaliticsDB.AddPath(&ch.Path{
+	//	UnitID: u.ID,
+	//	X:      u.Position.X,
+	//	Y:      u.Position.Y,
+	//	Cost:   heuristic(u.Position, u.CurTarget),
+	//	GoalX:  u.CurTarget.X,
+	//	GoalY:  u.CurTarget.Y,
+	//})
 }
 
 func (u *Unit) Run(wg chan *WG) {

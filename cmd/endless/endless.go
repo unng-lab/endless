@@ -7,12 +7,9 @@ import (
 	"runtime"
 	"time"
 
-	_ "github.com/silbinarywolf/preferdiscretegpu"
-	"go.uber.org/zap"
-
 	"github.com/hajimehoshi/ebiten/v2"
+	_ "github.com/silbinarywolf/preferdiscretegpu"
 
-	"github/unng-lab/madfarmer/internal/ch"
 	"github/unng-lab/madfarmer/internal/endless"
 )
 
@@ -37,15 +34,19 @@ func main() {
 		}
 	}()
 
-	lg, err := zap.NewDevelopment()
-	if err != nil {
-		panic(err)
-	}
-	aDB, err := ch.Start(lg)
-	if err != nil {
-		panic(err)
-	}
-	if err := ebiten.RunGame(endless.NewGame(aDB)); err != nil {
+	//lg, err := zap.NewDevelopment()
+	//if err != nil {
+	//	panic(err)
+	//}
+	//aDB, err := ch.Start(lg)
+	//if err != nil {
+	//	panic(err)
+	//}
+	if err := ebiten.RunGame(
+		endless.NewGame(
+		//aDB,
+		),
+	); err != nil {
 		panic(err)
 	}
 }
