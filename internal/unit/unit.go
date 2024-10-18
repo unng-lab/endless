@@ -2,15 +2,19 @@ package unit
 
 import (
 	"image/color"
+	"math"
 	"math/rand"
 
 	"github.com/brianvoe/gofakeit/v7"
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/text"
 	"github.com/hajimehoshi/ebiten/v2/vector"
+	"golang.org/x/image/font/basicfont"
 
 	"github/unng-lab/madfarmer/internal/astar"
 	"github/unng-lab/madfarmer/internal/board"
 	"github/unng-lab/madfarmer/internal/camera"
+	"github/unng-lab/madfarmer/internal/ch"
 	"github/unng-lab/madfarmer/internal/geom"
 )
 
@@ -56,11 +60,23 @@ type Unit struct {
 	// Можно немного пооптимизировать и сделать через глобальную переменную
 	Focused bool
 
+	//Analitics
+	AnaliticsDB *ch.AnaliticsDB
+	// куда пиздует сейчас
+	CurTarget geom.Point
+}
+
 	// пометка что движение началось
 	MoveStarted bool
 }
 
-func (u *Unit) New(id int, positionX float64, positionY float64, b *board.Board) Unit {
+func (u *Unit) New(
+	id int,
+	positionX float64,
+	positionY float64,
+	b *board.Board,
+	db *ch.AnaliticsDB,
+) Unit {
 	var unit Unit
 	unit.ID = id
 	unit.Name = gofakeit.Name()
@@ -74,12 +90,14 @@ func (u *Unit) New(id int, positionX float64, positionY float64, b *board.Board)
 	unit.Pathing = astar.NewAstar(b)
 
 	//TODO удалить это
+	unit.CurTarget.X = float64(rand.Intn(board.CountTile))
+	unit.CurTarget.Y = float64(rand.Intn(board.CountTile))
 	unit.Status = UnitStatusRunning
 	err := unit.Pathing.BuildPath(
 		unit.Position.X,
 		unit.Position.Y,
-		float64(rand.Intn(board.CountTile)),
-		float64(rand.Intn(board.CountTile)),
+		unit.CurTarget.X,
+		unit.CurTarget.Y,
 	)
 	if err != nil {
 		panic(err)
@@ -96,6 +114,7 @@ func (u *Unit) New(id int, positionX float64, positionY float64, b *board.Board)
 	unit.PositionShiftX = 0.5 - u.SizeX/2
 	unit.PositionShiftY = 0.75 - u.SizeY
 
+	unit.AnaliticsDB = db
 	return unit
 }
 
@@ -113,6 +132,7 @@ func (u *Unit) Draw(screen *ebiten.Image, counter int) bool {
 	u.DrawOptions.GeoM.Translate(drawPoint.X, drawPoint.Y)
 	if u.Focused {
 		screen.DrawImage(u.FocusedAnimation[counter%len(u.FocusedAnimation)], &u.DrawOptions)
+		u.DrawTitle(screen)
 	} else {
 		screen.DrawImage(u.Animation[counter%len(u.Animation)], &u.DrawOptions)
 	}
@@ -139,6 +159,14 @@ func (u *Unit) Draw(screen *ebiten.Image, counter int) bool {
 	//	0,
 	//)
 	return true
+}
+
+func (u *Unit) DrawTitle(screen *ebiten.Image) {
+	// Создаем шрифт
+	fontFace := basicfont.Face7x13
+
+	// Рисуем текст на экране
+	text.DrawWithOptions(screen, u.Name, fontFace, &u.DrawOptions)
 }
 
 func (u *Unit) drawRect(screen *ebiten.Image) {
@@ -239,6 +267,14 @@ func (u *Unit) Move() {
 		u.Position.X = u.Position.X + part*(u.Pathing.Path[len(u.Pathing.Path)-2].X-u.Position.X)
 		u.Position.Y = u.Position.Y + part*(u.Pathing.Path[len(u.Pathing.Path)-2].Y-u.Position.Y)
 	}
+	u.AnaliticsDB.AddPath(&ch.Path{
+		UnitID: u.ID,
+		X:      u.Position.X,
+		Y:      u.Position.Y,
+		Cost:   heuristic(u.Position, u.CurTarget),
+		GoalX:  u.CurTarget.X,
+		GoalY:  u.CurTarget.Y,
+	})
 }
 
 func (u *Unit) Run(wg chan *WG) {
@@ -270,6 +306,19 @@ func (u *Unit) isFocused(p geom.Point) bool {
 		return true
 	}
 	return false
+}
+
+func heuristic(current geom.Point, goal geom.Point) float64 {
+	return math.Sqrt((current.X-goal.X)*(current.X-goal.X) +
+		(current.Y-goal.Y)*(current.Y-goal.Y))
+
+}
+
+func abs(x float64) float64 {
+	if x < 0 {
+		return -x
+	}
+	return x
 }
 
 func (u *Unit) Relocate(p geom.Point) {
