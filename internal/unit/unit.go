@@ -68,9 +68,6 @@ type Unit struct {
 
 	//сколько тиков юнит спит до след изменения
 	SleepTicks int
-
-	// пометка что движение началось
-	MoveStarted bool
 }
 
 func (u *Unit) New(
@@ -331,6 +328,8 @@ func (u *Unit) Relocate(p geom.Point) {
 	u.Position.Y = p.Y
 }
 
-func (u *Unit) MoveToNeighbor(direction geom.Direction) {
-
-}
+//func (u *Unit) MoveToNeighbor(direction geom.Direction) {
+//	if u.MoveStarted {
+//
+//	}
+//}

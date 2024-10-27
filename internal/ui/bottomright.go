@@ -12,7 +12,7 @@ func (ui *UIEngine) rightBottomContainer() *widget.Container {
 		//widget.ContainerOpts.BackgroundImage(e_image.NewNineSliceColor(color.NRGBA{0, 255, 255, 255})),
 		// the container will use an anchor layout to layout its single child widget
 		widget.ContainerOpts.Layout(widget.NewRowLayout(
-			widget.RowLayoutOpts.Inverted(true),
+			//widget.RowLayoutOpts.Inverted(true),
 			widget.RowLayoutOpts.Spacing(5),
 		)),
 		widget.ContainerOpts.WidgetOpts(
