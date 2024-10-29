@@ -4,13 +4,6 @@ import (
 	"fmt"
 )
 
-type Task interface {
-	Next() error
-	GetName() string
-	GetDescription() string
-	// Other common methods
-}
-
 type Action interface {
 	Execute() error
 }
@@ -30,8 +23,8 @@ type ActionList struct {
 }
 
 // Создание нового списка
-func NewActionList() *ActionList {
-	return &ActionList{}
+func NewActionList() ActionList {
+	return ActionList{}
 }
 
 // Вставка элемента в список в отсортированном порядке по sleepTicks (убывание)

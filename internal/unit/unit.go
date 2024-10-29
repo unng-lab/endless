@@ -50,8 +50,10 @@ type Unit struct {
 	Speed float64 // tiles per update tick
 
 	DrawOptions ebiten.DrawImageOptions
-	Pathing     astar.Astar
-	Status      int
+	//deprecated
+	Pathing astar.Astar
+	//deprecated
+	Status int
 	//Ticks экономные тики для отработки игровых событий
 	Ticks chan *sync.WaitGroup
 	//CameraTicks тики для отработки анимации и тд
@@ -63,11 +65,18 @@ type Unit struct {
 
 	//Analitics
 	AnaliticsDB *ch.AnaliticsDB
-	// куда пиздует сейчас
+
+	//deprecated
 	CurTarget geom.Point
 
 	//сколько тиков юнит спит до след изменения
 	SleepTicks int
+
+	Actions ActionList
+
+	Tasks TaskList
+
+	Walk
 }
 
 func (u *Unit) New(
@@ -116,14 +125,16 @@ func (u *Unit) New(
 	unit.PositionShiftY = 0.75 - u.SizeY
 
 	//unit.AnaliticsDB = db
+
+	unit.Tasks = NewTaskList()
+	unit.Actions = NewActionList()
+
+	unit.Tasks.Add()
+
 	return unit
 }
 
 func (u *Unit) Draw(screen *ebiten.Image, counter int) bool {
-	if u.Status == UnitStatusRunning {
-		//u.DrawPath(screen, camera)
-	}
-
 	defer u.DrawOptions.GeoM.Reset()
 	u.DrawOptions.GeoM.Scale(
 		u.Camera.ScaleFactor(),
@@ -322,14 +333,3 @@ func abs(x float64) float64 {
 	}
 	return x
 }
-
-func (u *Unit) Relocate(p geom.Point) {
-	u.Position.X = p.X
-	u.Position.Y = p.Y
-}
-
-//func (u *Unit) MoveToNeighbor(direction geom.Direction) {
-//	if u.MoveStarted {
-//
-//	}
-//}

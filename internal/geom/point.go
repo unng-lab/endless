@@ -85,3 +85,27 @@ func (p Point) In(r Rectangle) bool {
 	return r.Min.X <= p.X && p.X < r.Max.X &&
 		r.Min.Y <= p.Y && p.Y < r.Max.Y
 }
+
+// GetNeighbor возвращает соседний Point в заданном направлении
+func (p Point) GetNeighbor(dir Direction) Point {
+	switch dir {
+	case DirUp:
+		return Point{X: p.X, Y: p.Y - 1}
+	case DirUpRight:
+		return Point{X: p.X + 1, Y: p.Y - 1}
+	case DirRight:
+		return Point{X: p.X + 1, Y: p.Y}
+	case DirDownRight:
+		return Point{X: p.X + 1, Y: p.Y + 1}
+	case DirDown:
+		return Point{X: p.X, Y: p.Y + 1}
+	case DirDownLeft:
+		return Point{X: p.X - 1, Y: p.Y + 1}
+	case DirLeft:
+		return Point{X: p.X - 1, Y: p.Y}
+	case DirUpLeft:
+		return Point{X: p.X - 1, Y: p.Y - 1}
+	default:
+		return p // если направление некорректно, возвращаем исходную точку
+	}
+}
