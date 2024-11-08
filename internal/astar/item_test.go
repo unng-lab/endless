@@ -4,8 +4,8 @@ import "testing"
 
 func TestItem_to(t *testing.T) {
 	type fields struct {
-		x        int
-		y        int
+		x        float64
+		y        float64
 		priority float64
 	}
 	type args struct {

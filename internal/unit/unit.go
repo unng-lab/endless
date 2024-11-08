@@ -72,11 +72,9 @@ type Unit struct {
 	//сколько тиков юнит спит до след изменения
 	SleepTicks int
 
-	Actions ActionList
-
 	Tasks TaskList
 
-	Walk
+	RoadTask Road
 }
 
 func (u *Unit) New(
@@ -127,9 +125,18 @@ func (u *Unit) New(
 	//unit.AnaliticsDB = db
 
 	unit.Tasks = NewTaskList()
-	unit.Actions = NewActionList()
 
-	unit.Tasks.Add()
+	// временное для добавление сходу задания на попиздовать куда то
+	unit.RoadTask = NewRoad(b, &unit)
+	if err = unit.RoadTask.Path(
+		geom.Pt(
+			float64(rand.Intn(board.CountTile)),
+			float64(rand.Intn(board.CountTile)),
+		)); err != nil {
+		panic(err)
+	}
+
+	unit.Tasks.Add(&unit.RoadTask)
 
 	return unit
 }

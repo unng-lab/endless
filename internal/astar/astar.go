@@ -153,17 +153,36 @@ func (a *Astar) BuildPath(fromX, fromY, toX, toY float64) error {
 	a.Push(from)
 
 	var newPoint geom.Point
+	var dir geom.Direction
 	for a.Len() > 0 {
 		current := a.Pop()
 		if current.x == toX && current.y == toY {
 			for !(current.x == fromX && current.y == fromY) {
 				newPoint = geom.Pt(current.x, current.y)
-				if len(a.Path) <= 2 || a.Path[len(a.Path)-2].To(a.Path[len(a.Path)-1]) == a.Path[len(a.Path)-1].To(newPoint) {
+				// всегда добавляем первый элемент
+				if len(a.Path) == 0 {
 					a.Path = append(a.Path, newPoint)
+					current = a.froms[current]
+					continue
 				}
+
+				newDir := a.Path[len(a.Path)-1].To(newPoint)
+				if newDir != dir {
+					a.Path = append(a.Path, newPoint)
+					dir = newDir
+				} else {
+					a.Path[len(a.Path)-1] = newPoint
+				}
+
 				current = a.froms[current]
 			}
-			a.Path = append(a.Path, geom.Pt(fromX, fromY))
+			lastPoint := geom.Pt(fromX, fromY)
+			if a.Path[len(a.Path)-1].To(lastPoint) != dir {
+				a.Path = append(a.Path, lastPoint)
+			} else {
+				a.Path[len(a.Path)-1] = lastPoint
+			}
+
 			return nil
 		}
 

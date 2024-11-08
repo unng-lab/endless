@@ -7,7 +7,8 @@ import (
 type Direction byte
 
 const (
-	DirUp Direction = iota
+	DirNone Direction = iota
+	DirUp
 	DirUpRight
 	DirRight
 	DirDownRight
@@ -39,24 +40,24 @@ func (p Point) Length(to Point) float64 {
 
 func (p Point) To(to Point) Direction {
 	switch x, y := to.X-p.X, to.Y-p.Y; {
-	case x == 0 && y < 0:
+	case x == 0 && y == 1:
 		return DirUp
-	case x == 0 && y > 0:
+	case x == 0 && y == -1:
 		return DirDown
-	case x < 0 && y == 0:
+	case x == -1 && y == 0:
 		return DirLeft
-	case x > 0 && y == 0:
+	case x == 1 && y == 0:
 		return DirRight
-	case x < 0 && y < 0:
-		return DirUpLeft
-	case x < 0 && y > 0:
+	case x < 0 && y < 0 && x/y == 1:
 		return DirDownLeft
-	case x > 0 && y < 0:
-		return DirUpRight
-	case x > 0 && y > 0:
+	case x < 0 && y > 0 && x/y == -1:
+		return DirUpLeft
+	case x > 0 && y < 0 && x/y == -1:
 		return DirDownRight
+	case x > 0 && y > 0 && x/y == 1:
+		return DirUpRight
 	default:
-		panic("unreachable")
+		return DirNone
 	}
 }
 

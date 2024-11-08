@@ -2,11 +2,11 @@ package astar
 
 import (
 	"fmt"
-	"image"
 	"reflect"
 	"testing"
 
 	"github/unng-lab/madfarmer/internal/board"
+	"github/unng-lab/madfarmer/internal/geom"
 )
 
 func TestAstar_BuildPath(t *testing.T) {
@@ -15,17 +15,17 @@ func TestAstar_BuildPath(t *testing.T) {
 		items []Item
 		costs map[Item]float64
 		froms map[Item]Item
-		path  []byte
+		path  []geom.Point
 	}
 	type args struct {
-		from image.Point
-		to   image.Point
+		from geom.Point
+		to   geom.Point
 	}
 	tests := []struct {
 		name    string
 		fields  fields
 		args    args
-		want    []byte
+		want    []geom.Point
 		wantErr bool
 	}{
 		{
@@ -37,19 +37,28 @@ func TestAstar_BuildPath(t *testing.T) {
 				costs: make(map[Item]float64, costsCapacity),
 				froms: make(map[Item]Item, fromsCapacity),
 				items: make([]Item, 0, queueCapacity),
-				path:  make([]byte, 0, pathCapacity),
+				path:  make([]geom.Point, 0, pathCapacity),
 			},
 			args: args{
-				from: image.Point{
+				from: geom.Point{
 					X: 3,
 					Y: 1,
 				},
-				to: image.Point{
+				to: geom.Point{
 					X: 7,
 					Y: 1,
 				},
 			},
-			want:    []byte{DirRight, DirRight, DirRight, DirRight},
+			want: []geom.Point{
+				{
+					X: 7,
+					Y: 1,
+				},
+				{
+					X: 3,
+					Y: 1,
+				},
+			},
 			wantErr: false,
 		},
 		{
@@ -61,19 +70,89 @@ func TestAstar_BuildPath(t *testing.T) {
 				costs: make(map[Item]float64, costsCapacity),
 				froms: make(map[Item]Item, fromsCapacity),
 				items: make([]Item, 0, queueCapacity),
-				path:  make([]byte, 0, pathCapacity),
+				path:  make([]geom.Point, 0, pathCapacity),
 			},
 			args: args{
-				from: image.Point{
+				from: geom.Point{
 					X: 1,
 					Y: 0,
 				},
-				to: image.Point{
+				to: geom.Point{
 					X: 7,
 					Y: 1,
 				},
 			},
-			want:    []byte{DirRight, DirRight, DirRight, DirRight},
+			want: []geom.Point{
+				{
+					X: 7,
+					Y: 1,
+				},
+				{
+					X: 2,
+					Y: 1,
+				},
+				{
+					X: 1,
+					Y: 0,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "3",
+			fields: fields{
+				b: &board.Board{
+					Cells: StringSliceToCells(astarTests[0].path),
+				},
+				costs: make(map[Item]float64, costsCapacity),
+				froms: make(map[Item]Item, fromsCapacity),
+				items: make([]Item, 0, queueCapacity),
+				path:  make([]geom.Point, 0, pathCapacity),
+			},
+			args: args{
+				from: geom.Point{
+					X: 1,
+					Y: 0,
+				},
+				to: geom.Point{
+					X: 1,
+					Y: 0,
+				},
+			},
+			want:    []geom.Point{},
+			wantErr: false,
+		},
+		{
+			name: "4",
+			fields: fields{
+				b: &board.Board{
+					Cells: StringSliceToCells(astarTests[0].path),
+				},
+				costs: make(map[Item]float64, costsCapacity),
+				froms: make(map[Item]Item, fromsCapacity),
+				items: make([]Item, 0, queueCapacity),
+				path:  make([]geom.Point, 0, pathCapacity),
+			},
+			args: args{
+				from: geom.Point{
+					X: 1,
+					Y: 0,
+				},
+				to: geom.Point{
+					X: 1,
+					Y: 1,
+				},
+			},
+			want: []geom.Point{
+				{
+					X: 1,
+					Y: 1,
+				},
+				{
+					X: 1,
+					Y: 0,
+				},
+			},
 			wantErr: false,
 		},
 	}
@@ -86,21 +165,22 @@ func TestAstar_BuildPath(t *testing.T) {
 				froms: tt.fields.froms,
 				Path:  tt.fields.path,
 			}
-			got, err := a.BuildPath(tt.args.from, tt.args.to)
+			err := a.BuildPath(tt.args.from.X, tt.args.from.Y, tt.args.to.X, tt.args.to.Y)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("BuildPath() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("BuildPath() got = %v, want %v", got, tt.want)
+			if !reflect.DeepEqual(a.Path, tt.want) {
+				t.Errorf("BuildPath() got = %v, want %v", a.Path, tt.want)
 			}
 		})
 	}
 }
 
-func StringSliceToCells(ss []string) [board.CountTile][board.CountTile]board.Cell {
-	var cells [board.CountTile][board.CountTile]board.Cell
+func StringSliceToCells(ss []string) [][]board.Cell {
+	cells := make([][]board.Cell, len(ss))
 	for i, s := range ss {
+		cells[i] = make([]board.Cell, len(s))
 		for j := range s {
 			cells[i][j].Cost = letterToCost(rune(s[j]))
 		}
