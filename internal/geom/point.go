@@ -1,6 +1,7 @@
 package geom
 
 import (
+	"errors"
 	"math"
 )
 
@@ -40,13 +41,13 @@ func (p Point) Length(to Point) float64 {
 
 func (p Point) To(to Point) Direction {
 	switch x, y := to.X-p.X, to.Y-p.Y; {
-	case x == 0 && y == 1:
+	case x == 0 && y > 1:
 		return DirUp
-	case x == 0 && y == -1:
+	case x == 0 && y < -1:
 		return DirDown
-	case x == -1 && y == 0:
+	case x < -1 && y == 0:
 		return DirLeft
-	case x == 1 && y == 0:
+	case x > 1 && y == 0:
 		return DirRight
 	case x < 0 && y < 0 && x/y == 1:
 		return DirDownLeft
@@ -88,25 +89,25 @@ func (p Point) In(r Rectangle) bool {
 }
 
 // GetNeighbor возвращает соседний Point в заданном направлении
-func (p Point) GetNeighbor(dir Direction) Point {
+func (p Point) GetNeighbor(dir Direction) (Point, error) {
 	switch dir {
 	case DirUp:
-		return Point{X: p.X, Y: p.Y - 1}
+		return Point{X: p.X, Y: p.Y + 1}, nil
 	case DirUpRight:
-		return Point{X: p.X + 1, Y: p.Y - 1}
+		return Point{X: p.X + 1, Y: p.Y + 1}, nil
 	case DirRight:
-		return Point{X: p.X + 1, Y: p.Y}
+		return Point{X: p.X + 1, Y: p.Y}, nil
 	case DirDownRight:
-		return Point{X: p.X + 1, Y: p.Y + 1}
+		return Point{X: p.X + 1, Y: p.Y - 1}, nil
 	case DirDown:
-		return Point{X: p.X, Y: p.Y + 1}
+		return Point{X: p.X, Y: p.Y - 1}, nil
 	case DirDownLeft:
-		return Point{X: p.X - 1, Y: p.Y + 1}
+		return Point{X: p.X - 1, Y: p.Y - 1}, nil
 	case DirLeft:
-		return Point{X: p.X - 1, Y: p.Y}
+		return Point{X: p.X - 1, Y: p.Y}, nil
 	case DirUpLeft:
-		return Point{X: p.X - 1, Y: p.Y - 1}
+		return Point{X: p.X - 1, Y: p.Y + 1}, nil
 	default:
-		return p // если направление некорректно, возвращаем исходную точку
+		return p, errors.New("invalid direction") // если направление некорректно, возвращаем исходную точку
 	}
 }

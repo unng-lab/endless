@@ -1,5 +1,9 @@
 package unit
 
+import (
+	"errors"
+)
+
 type Task interface {
 	Next() (int, error)
 	GetName() string
@@ -22,7 +26,12 @@ func (tl *TaskList) Add(task Task) {
 func (tl *TaskList) Run() int {
 	sleepTicks, err := tl.Tasks[0].Next()
 	if err != nil {
-		tl.Tasks = tl.Tasks[1:]
+		if len(tl.Tasks) > 1 {
+			tl.Tasks = tl.Tasks[1:]
+			tl.Run()
+		}
 	}
 	return sleepTicks
 }
+
+var ErrTaskFinished = errors.New("Task finished")

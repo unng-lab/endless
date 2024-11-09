@@ -9,7 +9,7 @@ func (u *Unit) Relocate(p geom.Point) {
 	u.Position.Y = p.Y
 }
 
-func (u *Unit) MoveToNeighbor(direction geom.Direction) {
-	p := u.Position.GetNeighbor(direction)
-	u.Relocate(p)
-}
+//func (u *Unit) MoveToNeighbor(direction geom.Direction) {
+//	p := u.Position.GetNeighbor(direction)
+//	u.Relocate(p)
+//}

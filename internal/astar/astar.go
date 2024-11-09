@@ -183,6 +183,8 @@ func (a *Astar) BuildPath(fromX, fromY, toX, toY float64) error {
 				a.Path[len(a.Path)-1] = lastPoint
 			}
 
+			a.Path = a.Path[:len(a.Path)-1]
+
 			return nil
 		}
 

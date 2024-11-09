@@ -95,21 +95,6 @@ func (u *Unit) New(
 	unit.SizeX = u.SizeX
 	unit.SizeY = u.SizeY
 	unit.Speed = u.Speed
-	unit.Pathing = astar.NewAstar(b)
-
-	//TODO удалить это
-	unit.CurTarget.X = float64(rand.Intn(board.CountTile))
-	unit.CurTarget.Y = float64(rand.Intn(board.CountTile))
-	unit.Status = UnitStatusRunning
-	err := unit.Pathing.BuildPath(
-		unit.Position.X,
-		unit.Position.Y,
-		unit.CurTarget.X,
-		unit.CurTarget.Y,
-	)
-	if err != nil {
-		panic(err)
-	}
 
 	for i := range u.Animation {
 		unit.Animation = append(unit.Animation, u.Animation[i])
@@ -128,7 +113,7 @@ func (u *Unit) New(
 
 	// временное для добавление сходу задания на попиздовать куда то
 	unit.RoadTask = NewRoad(b, &unit)
-	if err = unit.RoadTask.Path(
+	if err := unit.RoadTask.Path(
 		geom.Pt(
 			float64(rand.Intn(board.CountTile)),
 			float64(rand.Intn(board.CountTile)),

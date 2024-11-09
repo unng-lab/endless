@@ -171,3 +171,30 @@ func TestPoint_To(t *testing.T) {
 		})
 	}
 }
+
+func TestGetNeighbor(t *testing.T) {
+	tests := []struct {
+		point    Point
+		dir      Direction
+		expected Point
+	}{
+		{Point{0, 0}, DirUp, Point{0, 1}},
+		{Point{0, 0}, DirUpRight, Point{1, 1}},
+		{Point{0, 0}, DirRight, Point{1, 0}},
+		{Point{0, 0}, DirDownRight, Point{1, -1}},
+		{Point{0, 0}, DirDown, Point{0, -1}},
+		{Point{0, 0}, DirDownLeft, Point{-1, -1}},
+		{Point{0, 0}, DirLeft, Point{-1, 0}},
+		{Point{0, 0}, DirUpLeft, Point{-1, 1}},
+	}
+
+	for _, test := range tests {
+		result, err := test.point.GetNeighbor(test.dir)
+		if err != nil {
+			t.Errorf("unexpected error for direction %v: %v", test.dir, err)
+		}
+		if result != test.expected {
+			t.Errorf("for direction %v: expected %v, got %v", test.dir, test.expected, result)
+		}
+	}
+}

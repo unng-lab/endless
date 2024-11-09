@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	unitCount = 100
+	unitCount = 1
 )
 
 var _ ebiten.Game = (*Game)(nil) // ensure Game implements ebiten.Game

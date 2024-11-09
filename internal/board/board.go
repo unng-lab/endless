@@ -15,7 +15,7 @@ const (
 	hd = -50
 )
 
-const CountTile = 256
+const CountTile = 32
 
 type Board struct {
 	Cells        [][]Cell
