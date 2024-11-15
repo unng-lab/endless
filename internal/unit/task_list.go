@@ -24,12 +24,18 @@ func (tl *TaskList) Add(task Task) {
 }
 
 func (tl *TaskList) Run() int {
+	if len(tl.Tasks) == 0 {
+		return 0
+	}
 	sleepTicks, err := tl.Tasks[0].Next()
 	if err != nil {
-		if len(tl.Tasks) > 1 {
-			tl.Tasks = tl.Tasks[1:]
-			tl.Run()
+		if errors.Is(err, ErrTaskFinished) {
+			tl.Tasks = nil
 		}
+		//if len(tl.Tasks) > 1 {
+		//	tl.Tasks = tl.Tasks[1:]
+		//	tl.Run()
+		//}
 	}
 	return sleepTicks
 }

@@ -9,7 +9,7 @@ func (g *Game) Update() error {
 		return err
 	}
 	for i := range g.Units {
-		if g.Units[i].OnBoard {
+		if g.Units[i].OnBoard.Load() {
 			// сигнализируем о том, что мы находимся на карте и нужно работать с анимацией
 			select {
 			case g.Units[i].CameraTicks <- struct{}{}:

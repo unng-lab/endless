@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	unitCount = 1
+	unitCount = 1000
 )
 
 var _ ebiten.Game = (*Game)(nil) // ensure Game implements ebiten.Game
@@ -54,7 +54,7 @@ func NewGame(
 			//analyticsDB,
 		)
 		wg := make(chan *sync.WaitGroup, 1)
-		g.Units = append(g.Units, &newUnit)
+		g.Units = append(g.Units, newUnit)
 		g.Units[i].Run(wg)
 	}
 

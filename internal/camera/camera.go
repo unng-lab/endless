@@ -31,7 +31,8 @@ type Camera struct {
 	positionY  float64
 	zoomFactor float64
 	// TODO вынести в отдельную структуру например screen
-	tileSize       float64
+	tileSize float64
+	// Координаты камеры
 	Coordinates    geom.Rectangle
 	AbsolutePixels geom.Rectangle
 	RelativePixels geom.Rectangle

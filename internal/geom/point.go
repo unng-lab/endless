@@ -41,13 +41,13 @@ func (p Point) Length(to Point) float64 {
 
 func (p Point) To(to Point) Direction {
 	switch x, y := to.X-p.X, to.Y-p.Y; {
-	case x == 0 && y > 1:
+	case x == 0 && y > 0:
 		return DirUp
-	case x == 0 && y < -1:
+	case x == 0 && y < 0:
 		return DirDown
-	case x < -1 && y == 0:
+	case x < 0 && y == 0:
 		return DirLeft
-	case x > 1 && y == 0:
+	case x > 0 && y == 0:
 		return DirRight
 	case x < 0 && y < 0 && x/y == 1:
 		return DirDownLeft

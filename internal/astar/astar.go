@@ -113,20 +113,15 @@ func (a *Astar) BuildPath(fromX, fromY, toX, toY float64) error {
 			smallPool.Put(a.items[:0])
 		}
 
-		//if len(a.costs) < 8*costsCapacity {
-		//	clear(a.costs)
-		//	costsPool.Put(a.costs)
-		//}
-		//
-		//if len(a.froms) < 8*fromsCapacity {
-		//	clear(a.froms)
-		//	fromsPool.Put(a.froms)
-		//}
+		if len(a.costs) < 8*costsCapacity {
+			clear(a.costs)
+			costsPool.Put(a.costs)
+		}
 
-		clear(a.costs)
-		costsPool.Put(a.costs)
-		clear(a.froms)
-		fromsPool.Put(a.froms)
+		if len(a.froms) < 8*fromsCapacity {
+			clear(a.froms)
+			fromsPool.Put(a.froms)
+		}
 
 		a.items = nil
 		a.costs = nil

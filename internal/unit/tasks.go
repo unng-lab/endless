@@ -27,23 +27,19 @@ func NewRoad(b *board.Board, unit *Unit) Road {
 func (r *Road) Next() (int, error) {
 	defer func() {
 		if r := recover(); r != nil {
-			slog.Error("error", r)
+			slog.Error("error recover", r)
 		}
 	}()
-
-	//if len(r.Astar.Path) > 0 && r.unit.Position == r.Astar.Path[len(r.Astar.Path)-1] {
-	//	r.Astar.Path = r.Astar.Path[:len(r.Astar.Path)-1]
-	//}
 
 	if r.nextMove != nil {
 		if r.position == r.unit.Position {
 			if err := r.nextMove(); err == nil {
-				slog.Error("error", err)
 				if len(r.Astar.Path) == 0 {
 					slog.Info("task finished")
 					return 0, ErrTaskFinished
 				}
-				return 0, err
+			} else {
+				slog.Error("nextMove", err)
 			}
 		} else {
 			// если передвинулся то надо логику обработать
@@ -57,7 +53,7 @@ func (r *Road) Next() (int, error) {
 	nextPoint, err := r.unit.Position.GetNeighbor(dir)
 
 	if err != nil {
-		slog.Error("error", err)
+		slog.Error("error GetNeighbor", err)
 		return 0, err
 	}
 

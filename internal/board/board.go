@@ -12,10 +12,12 @@ import (
 )
 
 const (
-	hd = -50
+	hd              = -50
+	pointBufferSize = 1000
+	gridMultiplier  = 16
 )
 
-const CountTile = 32
+const CountTile = 1024
 
 type Board struct {
 	Cells        [][]Cell
@@ -67,14 +69,6 @@ func (b *Board) Draw(screen *ebiten.Image) {
 		for i := b.Camera.Coordinates.Min.X; i <= b.Camera.Coordinates.Max.X; i++ {
 			if i < 0 || i > CountTile-1 || j < 0 || j > CountTile-1 {
 				screen.DrawImage(b.ClearTile, &b.DrawOp)
-			} else if int(j) == 2050 && int(i) == 2050 {
-				screen.DrawImage(b.EmptyCell, &b.DrawOp)
-			} else if int(j) == 2052 && int(i) == 2052 {
-				screen.DrawImage(b.EmptyCell, &b.DrawOp)
-			} else if int(j) == 2054 && int(i) == 2054 {
-				screen.DrawImage(b.EmptyCell, &b.DrawOp)
-			} else if int(j) == 2054 && int(i) == 2054 {
-				screen.DrawImage(b.EmptyCell, &b.DrawOp)
 			} else {
 				if b.Camera.GetZoomFactor() > hd {
 					screen.DrawImage(b.Cells[int(j)][int(i)].TileImage, &b.DrawOp)
