@@ -72,6 +72,8 @@ type Unit struct {
 	Tasks TaskList
 
 	RoadTask Road
+
+	MoveChan chan MoveMessage
 }
 
 func (u *Unit) New(
@@ -79,16 +81,17 @@ func (u *Unit) New(
 	positionX float64,
 	positionY float64,
 	b *board.Board,
+	moveChan chan MoveMessage,
 	// db *ch.AnaliticsDB,
 ) *Unit {
 	var unit Unit
 	unit.ID = id
 	unit.Name = gofakeit.Name()
 	unit.Camera = u.Camera
+	unit.MoveChan = moveChan
 	unit.CameraTicks = make(chan struct{}, 1)
 	unit.Ticks = make(chan *sync.WaitGroup, 1)
-	unit.Position.X = positionX
-	unit.Position.Y = positionY
+
 	unit.SizeX = u.SizeX
 	unit.SizeY = u.SizeY
 	unit.Speed = u.Speed
@@ -103,10 +106,11 @@ func (u *Unit) New(
 
 	unit.PositionShiftX = 0.5 - u.SizeX/2
 	unit.PositionShiftY = 0.75 - u.SizeY
-
 	//unit.AnaliticsDB = db
 
 	unit.Tasks = NewTaskList()
+
+	unit.Relocate(geom.Pt(0, 0), geom.Pt(positionX, positionY))
 
 	// временное для добавление сходу задания на попиздовать куда то
 	unit.RoadTask = NewRoad(b, &unit)
@@ -200,4 +204,9 @@ func abs(x float64) float64 {
 		return -x
 	}
 	return x
+}
+
+type MoveMessage struct {
+	U        *Unit
+	From, To geom.Point
 }

@@ -63,7 +63,7 @@ func (r *Road) Next() (int, error) {
 
 	timeToWalkOnePoint := timeToWalkOnePoint(r.unit, r.B, nextPoint)
 	r.nextMove = func() error {
-		r.unit.Relocate(nextPoint)
+		r.unit.Relocate(r.unit.Position, nextPoint)
 		return nil
 	}
 	r.position = r.unit.Position

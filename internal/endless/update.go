@@ -8,6 +8,12 @@ func (g *Game) Update() error {
 	if err := g.ui.Update(); err != nil {
 		return err
 	}
+
+	select {
+	case g.MapGrid.Ticks <- struct{}{}:
+	default:
+
+	}
 	for i := range g.Units {
 		if g.Units[i].OnBoard.Load() {
 			// сигнализируем о том, что мы находимся на карте и нужно работать с анимацией
