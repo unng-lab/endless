@@ -17,6 +17,11 @@ type Road struct {
 	astar.Astar
 }
 
+func (r *Road) Update(unit *Unit) error {
+
+	return nil
+}
+
 func NewRoad(b *board.Board, unit *Unit) Road {
 	return Road{
 		unit:  unit,

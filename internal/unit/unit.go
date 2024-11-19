@@ -43,6 +43,9 @@ type Unit struct {
 	// сдвиг иконки относительно позиции
 	PositionShiftX float64 // in tiles
 	PositionShiftY float64 // in tiles
+	// сдвиг иконки относительно задания
+	PositionShiftModX float64 // in tiles
+	PositionShiftModY float64 // in tiles
 	// скорость движения
 	Speed float64 // tiles per update tick
 
@@ -82,7 +85,7 @@ func (u *Unit) New(
 	positionY float64,
 	b *board.Board,
 	moveChan chan MoveMessage,
-	// db *ch.AnaliticsDB,
+// db *ch.AnaliticsDB,
 ) *Unit {
 	var unit Unit
 	unit.ID = id
@@ -131,6 +134,7 @@ func (u *Unit) SetOnBoard(b bool) {
 	u.OnBoard.Store(b)
 }
 
+// deprecated
 func (u *Unit) Move() {
 	distance := u.Speed * u.Pathing.B.Cells[int(u.Position.X)][int(u.Position.Y)].MoveCost()
 	part := distance / u.Position.Length(u.Pathing.Path[len(u.Pathing.Path)-2])
@@ -176,8 +180,24 @@ func (u *Unit) run(wg chan *sync.WaitGroup) {
 			}
 			u.SleepTicks = n
 			tick.Done()
+		case <-u.CameraTicks:
+			u.OnBoardUpdate()
 		}
 	}
+}
+
+func (u *Unit) OnBoardUpdate() {
+	var curTask Task
+	if curTask = u.Tasks.Current(); curTask == nil {
+		return
+	}
+
+	err := curTask.Update(u)
+	if err != nil {
+
+		return
+	}
+
 }
 
 func (u *Unit) Rect() geom.Rectangle {
