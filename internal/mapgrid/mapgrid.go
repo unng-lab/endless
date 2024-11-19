@@ -36,7 +36,7 @@ func NewMapGrid(b *board.Board, camera *camera.Camera, moves chan unit.MoveMessa
 	m.Ticks = make(chan struct{}, 1)
 	m.Moves = moves
 
-	m.minX, m.minY, m.maxX, m.maxY = 0, 0, board.CountTile/gridSize, board.CountTile/gridSize
+	m.minX, m.minY, m.maxX, m.maxY = 0, 0, board.CountTile/gridSize-1, board.CountTile/gridSize-1
 
 	go m.run()
 

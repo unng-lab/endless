@@ -188,6 +188,12 @@ func (u *Unit) run(wg chan *sync.WaitGroup) {
 
 func (u *Unit) OnBoardUpdate() {
 	var curTask Task
+
+	u.Focused = false
+	if u.isFocused(u.Camera.Cursor) {
+		u.Focused = true
+	}
+
 	if curTask = u.Tasks.Current(); curTask == nil {
 		return
 	}

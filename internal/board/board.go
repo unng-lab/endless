@@ -17,7 +17,7 @@ const (
 	gridMultiplier  = 16
 )
 
-const CountTile = 1024
+const CountTile = 32
 
 type Board struct {
 	Cells        [][]Cell

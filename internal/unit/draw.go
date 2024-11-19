@@ -107,8 +107,8 @@ func (u *Unit) drawRect(screen *ebiten.Image) {
 
 func (u *Unit) GetDrawPoint() geom.Point {
 	drawPoint := u.Camera.PointToCameraPixel(geom.Point{
-		X: u.Position.X + u.PositionShiftX,
-		Y: u.Position.Y + u.PositionShiftY,
+		X: u.Position.X + u.PositionShiftX + u.PositionShiftModX,
+		Y: u.Position.Y + u.PositionShiftY + u.PositionShiftModY,
 	})
 	return drawPoint
 }

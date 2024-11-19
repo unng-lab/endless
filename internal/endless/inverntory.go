@@ -11,6 +11,10 @@ import (
 	"github/unng-lab/madfarmer/internal/unit"
 )
 
+const (
+	slowness = 10
+)
+
 type Inventory struct {
 	Units map[string]*unit.Unit
 }
@@ -37,7 +41,7 @@ func NewRunner(camera *camera.Camera) *unit.Unit {
 	newUnit.Camera = camera
 	newUnit.SizeX = frameWidth / board.TileSize
 	newUnit.SizeY = frameHeight / board.TileSize
-	newUnit.Speed = 1 / float64(ebiten.DefaultTPS)
+	newUnit.Speed = 1 / float64(ebiten.DefaultTPS) / slowness
 	spriteRunner, err := img.Img("runner.png", 256, 96)
 	if err != nil {
 		panic(err)

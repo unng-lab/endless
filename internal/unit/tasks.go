@@ -11,14 +11,20 @@ import (
 var _ Task = new(Road)
 
 type Road struct {
-	unit     *Unit
-	nextMove func() error
-	position geom.Point
 	astar.Astar
+
+	unit               *Unit
+	nextMove           func() error
+	position           geom.Point
+	timeToWalkOnePoint int
+	nextPoint          geom.Point
 }
 
 func (r *Road) Update(unit *Unit) error {
-
+	part := float64(r.timeToWalkOnePoint-unit.SleepTicks) / float64(r.timeToWalkOnePoint)
+	unit.PositionShiftModX = (r.nextPoint.X - r.position.X) * part
+	unit.PositionShiftModY = (r.nextPoint.Y - r.position.Y) * part
+	slog.Info("shift mod", "x", unit.PositionShiftModX, "y", unit.PositionShiftModY)
 	return nil
 }
 
@@ -48,7 +54,7 @@ func (r *Road) Next() (int, error) {
 			}
 		} else {
 			// если передвинулся то надо логику обработать
-			panic("error")
+			slog.Error("юнит переместился в другую точку", r.unit)
 		}
 
 	}
@@ -66,14 +72,16 @@ func (r *Road) Next() (int, error) {
 		r.Astar.Path = r.Astar.Path[:len(r.Astar.Path)-1]
 	}
 
-	timeToWalkOnePoint := timeToWalkOnePoint(r.unit, r.B, nextPoint)
+	walkOnePoint := timeToWalkOnePoint(r.unit, r.B, nextPoint)
 	r.nextMove = func() error {
 		r.unit.Relocate(r.unit.Position, nextPoint)
 		return nil
 	}
 	r.position = r.unit.Position
+	r.timeToWalkOnePoint = walkOnePoint
+	r.nextPoint = nextPoint
 
-	return timeToWalkOnePoint, nil
+	return walkOnePoint, nil
 }
 
 func timeToWalkOnePoint(unit *Unit, b *board.Board, nextPoint geom.Point) int {

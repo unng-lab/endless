@@ -6,12 +6,9 @@ import (
 
 // Update возвращает время до следующего вызова Update или ошибку
 func (u *Unit) Update() (int, error) {
-	// Изменить логику тк апдейт теперь прокает после сна
-	u.Focused = false
-	if u.OnBoard.Load() {
-		if u.isFocused(u.Camera.Cursor) {
-			u.Focused = true
-		}
+	// Как только юнит уходит с доски то он никогда не будет в фокусе
+	if !u.OnBoard.Load() && u.Focused {
+		u.Focused = false
 	}
 	//slog.Info("unit position: ", "X: ", u.Position.X, "Y: ", u.Position.Y)
 
