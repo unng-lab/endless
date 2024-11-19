@@ -85,7 +85,7 @@ func (u *Unit) New(
 	positionY float64,
 	b *board.Board,
 	moveChan chan MoveMessage,
-// db *ch.AnaliticsDB,
+	// db *ch.AnaliticsDB,
 ) *Unit {
 	var unit Unit
 	unit.ID = id
