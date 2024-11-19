@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	slowness = 10
+	slowness = 1
 )
 
 type Inventory struct {
