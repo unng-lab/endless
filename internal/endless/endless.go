@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	unitCount      = 1
+	unitCount      = 1000
 	moveChanBuffer = 1000
 )
 

@@ -24,7 +24,7 @@ func (u *Unit) Relocate(from, to geom.Point) {
 	u.PositionShiftModX = 0
 	u.PositionShiftModY = 0
 
-	slog.Info("Unit.Relocate", "from", from, "to", to)
+	//slog.Info("Unit.Relocate", "from", from, "to", to)
 }
 
 //func (u *Unit) MoveToNeighbor(direction geom.Direction) {

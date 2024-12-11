@@ -24,7 +24,7 @@ func (r *Road) Update(unit *Unit) error {
 	part := float64(r.timeToWalkOnePoint-unit.SleepTicks) / float64(r.timeToWalkOnePoint)
 	unit.PositionShiftModX = (r.nextPoint.X - r.position.X) * part
 	unit.PositionShiftModY = (r.nextPoint.Y - r.position.Y) * part
-	slog.Info("shift mod", "x", unit.PositionShiftModX, "y", unit.PositionShiftModY)
+	//slog.Info("shift mod", "x", unit.PositionShiftModX, "y", unit.PositionShiftModY)
 	return nil
 }
 
