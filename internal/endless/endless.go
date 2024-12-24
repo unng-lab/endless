@@ -1,6 +1,7 @@
 package endless
 
 import (
+	"github/unng-lab/madfarmer/internal/mapgrid"
 	"log/slog"
 	"math/rand"
 	"sync"
@@ -9,14 +10,16 @@ import (
 
 	"github/unng-lab/madfarmer/internal/board"
 	"github/unng-lab/madfarmer/internal/camera"
-	"github/unng-lab/madfarmer/internal/mapgrid"
 	"github/unng-lab/madfarmer/internal/ui"
 	"github/unng-lab/madfarmer/internal/unit"
 )
 
 const (
-	unitCount      = 1000
-	moveChanBuffer = 1000
+	unitCount = 1000
+	rockCount = 100000
+	// TODO пересмотреть решение
+	// пока нужно держать больше чем сумма всех юнитов
+	moveChanBuffer = 1000000 // 1 миллион
 )
 
 var _ ebiten.Game = (*Game)(nil) // ensure Game implements ebiten.Game
@@ -64,9 +67,24 @@ func NewGame(
 		)
 		wg := make(chan *sync.WaitGroup, 1)
 		g.Units = append(g.Units, newUnit)
-		g.Units[i].Run(wg)
+		newUnit.Run(wg)
 	}
 	slog.Info("units created")
+
+	for i := range rockCount {
+		newUnit := g.inventory.Units["rock"].New(
+			i,
+			float64(rand.Intn(board.CountTile)),
+			float64(rand.Intn(board.CountTile)),
+			g.board,
+			moveChan,
+			//analyticsDB,
+		)
+		wg := make(chan *sync.WaitGroup, 1)
+		g.Units = append(g.Units, newUnit)
+		newUnit.Run(wg)
+	}
+	slog.Info("rocks created")
 
 	g.MapGrid = mapgrid.NewMapGrid(g.board, g.camera, moveChan)
 	slog.Info("mapgrid created")

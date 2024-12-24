@@ -2,7 +2,6 @@ package unit
 
 import (
 	"math"
-	"math/rand"
 	"sync"
 	"sync/atomic"
 
@@ -29,7 +28,10 @@ const (
 )
 
 type Unit struct {
-	ID   int
+	ID int
+	// тип юнита
+	Type string
+	// Имя юнита
 	Name string
 	// обычная анимация
 	Animation []*ebiten.Image
@@ -59,7 +61,10 @@ type Unit struct {
 	//CameraTicks тики для отработки анимации и тд
 	CameraTicks chan struct{}
 	Camera      *camera.Camera
-	OnBoard     atomic.Bool
+	// Карта игры
+	Board *board.Board
+	// Статус что находится на экране игры
+	OnBoard atomic.Bool
 	// Можно немного пооптимизировать и сделать через глобальную переменную
 	Focused bool
 
@@ -89,8 +94,10 @@ func (u *Unit) New(
 ) *Unit {
 	var unit Unit
 	unit.ID = id
+	unit.Type = u.Type
 	unit.Name = gofakeit.Name()
 	unit.Camera = u.Camera
+	unit.Board = b
 	unit.MoveChan = moveChan
 	unit.CameraTicks = make(chan struct{}, 1)
 	unit.Ticks = make(chan *sync.WaitGroup, 1)
@@ -98,71 +105,31 @@ func (u *Unit) New(
 	unit.SizeX = u.SizeX
 	unit.SizeY = u.SizeY
 	unit.Speed = u.Speed
-
+	// TODO заменить на copy
 	for i := range u.Animation {
 		unit.Animation = append(unit.Animation, u.Animation[i])
 	}
 
+	// TODO заменить на copy
 	for i := range u.FocusedAnimation {
 		unit.FocusedAnimation = append(unit.FocusedAnimation, u.FocusedAnimation[i])
 	}
+	unit.PositionShiftX = u.PositionShiftX
+	unit.PositionShiftY = u.PositionShiftY
 
-	unit.PositionShiftX = 0.5 - u.SizeX/2
-	unit.PositionShiftY = 0.75 - u.SizeY
 	//unit.AnaliticsDB = db
 
 	unit.Tasks = NewTaskList()
 
 	unit.Relocate(geom.Pt(0, 0), geom.Pt(positionX, positionY))
 
-	// временное для добавление сходу задания на попиздовать куда то
-	unit.RoadTask = NewRoad(b, &unit)
-	if err := unit.RoadTask.Path(
-		geom.Pt(
-			float64(rand.Intn(board.CountTile)),
-			float64(rand.Intn(board.CountTile)),
-		)); err != nil {
-		panic(err)
-	}
-
-	unit.Tasks.Add(&unit.RoadTask)
+	unit.SetTask()
 
 	return &unit
 }
 
 func (u *Unit) SetOnBoard(b bool) {
 	u.OnBoard.Store(b)
-}
-
-// deprecated
-func (u *Unit) Move() {
-	distance := u.Speed * u.Pathing.B.Cells[int(u.Position.X)][int(u.Position.Y)].MoveCost()
-	part := distance / u.Position.Length(u.Pathing.Path[len(u.Pathing.Path)-2])
-	if part > 1 {
-		if len(u.Pathing.Path) > 2 {
-			u.Pathing.Path = u.Pathing.Path[:len(u.Pathing.Path)-1]
-			u.Move()
-		} else {
-			u.Status = UnitStatusIdle
-			u.Position.X = u.Pathing.Path[len(u.Pathing.Path)-2].X
-			u.Position.Y = u.Pathing.Path[len(u.Pathing.Path)-2].Y
-		}
-	} else if part == 1 {
-		u.Pathing.Path = u.Pathing.Path[:len(u.Pathing.Path)-1]
-		u.Position.X = u.Pathing.Path[len(u.Pathing.Path)-2].X
-		u.Position.Y = u.Pathing.Path[len(u.Pathing.Path)-2].Y
-	} else {
-		u.Position.X = u.Position.X + part*(u.Pathing.Path[len(u.Pathing.Path)-2].X-u.Position.X)
-		u.Position.Y = u.Position.Y + part*(u.Pathing.Path[len(u.Pathing.Path)-2].Y-u.Position.Y)
-	}
-	//u.AnaliticsDB.AddPath(&ch.Path{
-	//	UnitID: u.ID,
-	//	X:      u.Position.X,
-	//	Y:      u.Position.Y,
-	//	Cost:   heuristic(u.Position, u.CurTarget),
-	//	GoalX:  u.CurTarget.X,
-	//	GoalY:  u.CurTarget.Y,
-	//})
 }
 
 func (u *Unit) Run(wg chan *sync.WaitGroup) {

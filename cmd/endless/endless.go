@@ -28,6 +28,7 @@ func main() {
 			runtime.ReadMemStats(m)
 			slog.Info("current",
 				"goroutines", runtime.NumGoroutine(),
+				"memory in mb sys", m.Sys/1024/1024,
 				"memory in mb", m.Alloc/1024/1024,
 				"last gc was", time.Now().Sub(time.Unix(0, int64(m.LastGC))),
 			)

@@ -23,7 +23,9 @@ func NewInverntory(camera *camera.Camera) *Inventory {
 	var i Inventory
 	i.Units = make(map[string]*unit.Unit)
 	runner := NewRunner(camera)
-	i.Units[runner.Name] = runner
+	i.Units[runner.Type] = runner
+	rock := NewRock(camera)
+	i.Units[rock.Type] = rock
 	return &i
 }
 
@@ -37,10 +39,12 @@ const (
 
 func NewRunner(camera *camera.Camera) *unit.Unit {
 	var newUnit unit.Unit
-	newUnit.Name = "runner"
+	newUnit.Type = "runner"
 	newUnit.Camera = camera
 	newUnit.SizeX = frameWidth / board.TileSize
 	newUnit.SizeY = frameHeight / board.TileSize
+	newUnit.PositionShiftX = 0.5 - newUnit.SizeX/2
+	newUnit.PositionShiftY = 0.75 - newUnit.SizeY
 	newUnit.Speed = 1 / float64(ebiten.DefaultTPS) / slowness
 	spriteRunner, err := img.Img("runner.png", 256, 96)
 	if err != nil {
@@ -68,6 +72,29 @@ func NewRunner(camera *camera.Camera) *unit.Unit {
 		)).(*ebiten.Image)
 		newUnit.FocusedAnimation = append(newUnit.FocusedAnimation, frameFocused)
 	}
+
+	return &newUnit
+}
+
+func NewRock(camera *camera.Camera) *unit.Unit {
+	var newUnit unit.Unit
+	newUnit.Type = "rock"
+	newUnit.Camera = camera
+	newUnit.SizeX, newUnit.SizeY = 1, 1
+	spriteRocks, err := img.Img("rocks.png", 32, 32)
+	if err != nil {
+		panic(err)
+	}
+
+	frame := spriteRocks.SubImage(image.Rect(
+		0,
+		0,
+		16,
+		16,
+	)).(*ebiten.Image)
+
+	newUnit.Animation = append(newUnit.Animation, frame)
+	newUnit.FocusedAnimation = append(newUnit.FocusedAnimation, frame)
 
 	return &newUnit
 }

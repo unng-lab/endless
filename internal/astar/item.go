@@ -2,6 +2,7 @@ package astar
 
 import (
 	"github/unng-lab/madfarmer/internal/geom"
+	"math"
 )
 
 var neighbors = [8]geom.Point{
@@ -21,13 +22,7 @@ type Item struct {
 }
 
 func (i Item) heuristic(goalX, goalY float64) float64 {
-	return abs(i.x-goalX) + abs(i.y-goalY)
-}
-func abs(x float64) float64 {
-	if x < 0 {
-		return -x
-	}
-	return x
+	return math.Abs(i.x-goalX) + math.Abs(i.y-goalY)
 }
 
 func (i Item) to(targer Item) byte {

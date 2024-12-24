@@ -15,7 +15,7 @@ func (u *Unit) Relocate(from, to geom.Point) {
 		To:   to,
 	}:
 	default:
-		slog.Warn("Unit.Relocate: channel is full")
+		slog.Warn("Unit.Relocate: channel is full", "unitType", u.Type, "unit", u)
 
 	}
 

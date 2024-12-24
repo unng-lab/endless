@@ -1,6 +1,9 @@
 package endless
 
+var gameTickCounter int64
+
 func (g *Game) Update() error {
+	gameTickCounter++
 	g.OnBoard = g.OnBoard[:0]
 	if err := g.camera.Update(); err != nil {
 		return err
@@ -10,7 +13,7 @@ func (g *Game) Update() error {
 	}
 
 	select {
-	case g.MapGrid.Ticks <- struct{}{}:
+	case g.MapGrid.Ticks <- gameTickCounter:
 	default:
 
 	}
@@ -29,8 +32,10 @@ func (g *Game) Update() error {
 		if g.Units[i].SleepTicks > 0 {
 			g.Units[i].SleepTicks--
 		} else {
-			g.wg.Add(1)
-			g.Units[i].Ticks <- &g.wg
+			if g.Units[i].Tasks.Current() != nil {
+				g.wg.Add(1)
+				g.Units[i].Ticks <- &g.wg
+			}
 		}
 	}
 	g.wg.Wait()

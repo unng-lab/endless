@@ -21,7 +21,9 @@ type MapGrid struct {
 	minX, minY, maxX, maxY int
 	Grid                   [][]map[*unit.Unit]struct{}
 	Moves                  chan unit.MoveMessage
-	Ticks                  chan struct{}
+	Ticks                  chan int64
+	updated                bool
+	lastUpdateTick         int64
 }
 
 func NewMapGrid(b *board.Board, camera *camera.Camera, moves chan unit.MoveMessage) *MapGrid {
@@ -33,7 +35,7 @@ func NewMapGrid(b *board.Board, camera *camera.Camera, moves chan unit.MoveMessa
 	for i := range m.Grid {
 		m.Grid[i] = make([]map[*unit.Unit]struct{}, squareSize)
 	}
-	m.Ticks = make(chan struct{}, 1)
+	m.Ticks = make(chan int64, 1)
 	m.Moves = moves
 
 	m.minX, m.minY, m.maxX, m.maxY = 0, 0, board.CountTile/gridSize-1, board.CountTile/gridSize-1
@@ -65,13 +67,44 @@ func (m *MapGrid) hash(pos geom.Point) (int, int) {
 func (m *MapGrid) run() {
 	for {
 		select {
-		case <-m.Ticks:
+		case gtc := <-m.Ticks:
 			m.setUnitsOnboard()
+			m.SetUpdatedTick(gtc)
 		case msg := <-m.Moves:
-			m.DeleteUnit(msg.From, msg.U)
-			m.AddUnit(msg.To, msg.U)
+			m.process(msg)
+
 		}
 	}
+}
+
+func (m *MapGrid) process(msg unit.MoveMessage) {
+	hashFromX, hashFromY := m.hash(msg.From)
+	hashToX, hashToY := m.hash(msg.To)
+	if hashFromX != hashToX || hashFromY != hashToY {
+		if m.Grid[hashFromX][hashFromY] != nil {
+			delete(m.Grid[hashFromX][hashFromY], msg.U)
+			if len(m.Grid[hashFromX][hashFromY]) == 0 {
+				m.Grid[hashFromX][hashFromY] = nil
+			}
+		}
+		if m.Grid[hashToX][hashToY] == nil {
+			m.Grid[hashToX][hashToY] = make(map[*unit.Unit]struct{}, unitCapacity)
+		}
+		m.Grid[hashToX][hashToY][msg.U] = struct{}{}
+		m.updated = true
+	}
+}
+
+func (m *MapGrid) SetUpdatedTick(tick int64) {
+	if m.updated {
+		m.lastUpdateTick = tick
+		m.updated = false
+	}
+
+}
+
+func (m *MapGrid) UpdatedAt() int64 {
+	return m.lastUpdateTick
 }
 
 func (m *MapGrid) DeleteUnit(from geom.Point, u *unit.Unit) {
