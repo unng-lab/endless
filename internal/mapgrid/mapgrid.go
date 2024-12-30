@@ -30,6 +30,7 @@ func NewMapGrid(b *board.Board, camera *camera.Camera, moves chan unit.MoveMessa
 	var m MapGrid
 	m.b = b
 	m.camera = camera
+
 	squareSize := board.CountTile / gridSize
 	m.Grid = make([][]map[*unit.Unit]struct{}, squareSize)
 	for i := range m.Grid {
@@ -69,10 +70,10 @@ func (m *MapGrid) run() {
 		select {
 		case gtc := <-m.Ticks:
 			m.setUnitsOnboard()
-			m.SetUpdatedTick(gtc)
+			m.b.SetUpdatedTick(gtc)
 		case msg := <-m.Moves:
 			m.process(msg)
-
+			m.b.SetUpdated()
 		}
 	}
 }

@@ -12,17 +12,13 @@ func (g *Game) Update() error {
 		return err
 	}
 
-	select {
-	case g.MapGrid.Ticks <- gameTickCounter:
-	default:
-
-	}
 	for i := range g.Units {
 		if g.Units[i].OnBoard.Load() {
 			// сигнализируем о том, что мы находимся на карте и нужно работать с анимацией
 			select {
 			case g.Units[i].CameraTicks <- struct{}{}:
 			default:
+				g.log.Warn("Camera ticks channel is full")
 				//максимально не блокируем
 
 			}
@@ -38,7 +34,14 @@ func (g *Game) Update() error {
 			}
 		}
 	}
+
 	g.wg.Wait()
+
+	select {
+	case g.MapGrid.Ticks <- gameTickCounter:
+	default:
+		g.log.Warn("MapGrid ticks channel is full")
+	}
 
 	return nil
 }

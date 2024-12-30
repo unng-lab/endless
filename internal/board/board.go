@@ -1,11 +1,10 @@
 package board
 
 import (
+	"github.com/hajimehoshi/ebiten/v2"
 	"image/color"
 	"math/rand"
 	"sync/atomic"
-
-	"github.com/hajimehoshi/ebiten/v2"
 
 	"github/unng-lab/madfarmer/assets/img"
 	"github/unng-lab/madfarmer/internal/camera"
@@ -26,6 +25,8 @@ type Board struct {
 	ClearTile    *ebiten.Image
 	Camera       *camera.Camera
 	DrawOp       ebiten.DrawImageOptions
+	Updated      atomic.Bool
+	UpdatedTick  int64
 }
 
 func NewBoard(c *camera.Camera) (*Board, error) {
@@ -112,4 +113,16 @@ func (b *Board) GetCell(x, y int) Cell {
 		return Cell{}
 	}
 	return b.Cells[y][x]
+}
+
+func (b *Board) SetUpdated() {
+	b.Updated.Store(true)
+}
+
+// SetUpdatedTick - устанавливает тик обновления карты если за цикл обновления карты было обновление
+func (b *Board) SetUpdatedTick(tick int64) {
+	if b.Updated.Load() {
+		b.UpdatedTick = tick
+		b.Updated.Store(false)
+	}
 }
