@@ -68,12 +68,11 @@ func (m *MapGrid) hash(pos geom.Point) (int, int) {
 func (m *MapGrid) run() {
 	for {
 		select {
-		case gtc := <-m.Ticks:
+		case <-m.Ticks:
 			m.setUnitsOnboard()
-			m.b.SetUpdatedTick(gtc)
 		case msg := <-m.Moves:
 			m.process(msg)
-			m.b.SetUpdated()
+			m.b.AddUpdatedCells(msg.From, msg.To)
 		}
 	}
 }

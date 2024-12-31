@@ -11,7 +11,12 @@ func (g *Game) Update() error {
 	if err := g.ui.Update(); err != nil {
 		return err
 	}
-
+	g.board.ClearUpdatedCells()
+	select {
+	case g.MapGrid.Ticks <- gameTickCounter:
+	default:
+		g.log.Warn("MapGrid ticks channel is full")
+	}
 	for i := range g.Units {
 		if g.Units[i].OnBoard.Load() {
 			// сигнализируем о том, что мы находимся на карте и нужно работать с анимацией
@@ -34,14 +39,7 @@ func (g *Game) Update() error {
 			}
 		}
 	}
-
 	g.wg.Wait()
-
-	select {
-	case g.MapGrid.Ticks <- gameTickCounter:
-	default:
-		g.log.Warn("MapGrid ticks channel is full")
-	}
 
 	return nil
 }

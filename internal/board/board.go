@@ -2,8 +2,11 @@ package board
 
 import (
 	"github.com/hajimehoshi/ebiten/v2"
+	"github/unng-lab/madfarmer/internal/geom"
 	"image/color"
+	"log/slog"
 	"math/rand"
+	"sync"
 	"sync/atomic"
 
 	"github/unng-lab/madfarmer/assets/img"
@@ -11,22 +14,25 @@ import (
 )
 
 const (
-	hd              = -50
-	pointBufferSize = 1000
-	gridMultiplier  = 16
+	hd                 = -50
+	pointBufferSize    = 1000
+	gridMultiplier     = 16
+	updatedCellsBuffer = 64
 )
 
 const CountTile = 1024
 
 type Board struct {
-	Cells        [][]Cell
-	CellOnScreen atomic.Int64
-	EmptyCell    *ebiten.Image
-	ClearTile    *ebiten.Image
-	Camera       *camera.Camera
-	DrawOp       ebiten.DrawImageOptions
-	Updated      atomic.Bool
-	UpdatedTick  int64
+	Cells              [][]Cell
+	CellOnScreen       atomic.Int64
+	EmptyCell          *ebiten.Image
+	ClearTile          *ebiten.Image
+	Camera             *camera.Camera
+	DrawOp             ebiten.DrawImageOptions
+	UpdatedTick        int64
+	UpdatedCellsBefore []geom.Point
+	UpdatedCells       []geom.Point
+	UpdatedCellsMutex  sync.Mutex
 }
 
 func NewBoard(c *camera.Camera) (*Board, error) {
@@ -53,7 +59,8 @@ func NewBoard(c *camera.Camera) (*Board, error) {
 	b.ClearTile = ebiten.NewImage(TileSize, TileSize)
 	b.ClearTile.Fill(color.Black)
 	b.Camera = c
-
+	b.UpdatedCellsBefore = make([]geom.Point, 0, 16)
+	b.UpdatedCells = make([]geom.Point, 0, 16)
 	return &b, nil
 }
 
@@ -115,14 +122,18 @@ func (b *Board) GetCell(x, y int) Cell {
 	return b.Cells[y][x]
 }
 
-func (b *Board) SetUpdated() {
-	b.Updated.Store(true)
+func (b *Board) AddUpdatedCells(from, to geom.Point) {
+	b.UpdatedCellsMutex.Lock()
+	defer b.UpdatedCellsMutex.Unlock()
+	b.UpdatedCells = append(b.UpdatedCells, from, to)
 }
 
-// SetUpdatedTick - устанавливает тик обновления карты если за цикл обновления карты было обновление
-func (b *Board) SetUpdatedTick(tick int64) {
-	if b.Updated.Load() {
-		b.UpdatedTick = tick
-		b.Updated.Store(false)
+func (b *Board) ClearUpdatedCells() {
+	b.UpdatedCellsMutex.Lock()
+	defer b.UpdatedCellsMutex.Unlock()
+	b.UpdatedCellsBefore, b.UpdatedCells = b.UpdatedCells, b.UpdatedCellsBefore[:0]
+	if len(b.UpdatedCells) > updatedCellsBuffer {
+		slog.Warn("Board.ClearUpdatedCells", "len", len(b.UpdatedCells))
+		b.UpdatedCells = make([]geom.Point, 0, updatedCellsBuffer/4)
 	}
 }
