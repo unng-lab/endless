@@ -30,3 +30,56 @@ func (ds *Dstar) down(i0, n int) bool {
 	}
 	return i > i0
 }
+
+func (ds *Dstar) Len() int { return len(ds.nodes) }
+
+func (ds *Dstar) Less(i, j int) bool {
+	if ds.nodes[i].Key[0] == ds.nodes[j].Key[0] {
+		return ds.nodes[i].Key[1] < ds.nodes[j].Key[1]
+	}
+	return ds.nodes[i].Key[0] < ds.nodes[j].Key[0]
+}
+
+func (ds *Dstar) Swap(i, j int) {
+	ds.nodes[i], ds.nodes[j] = ds.nodes[j], ds.nodes[i]
+	ds.nodes[i].Index = i
+	ds.nodes[j].Index = j
+}
+
+func (ds *Dstar) Push(node *Node) {
+	n := len(ds.nodes)
+	node.Index = n
+	ds.nodes = append(ds.nodes, node)
+}
+
+func (ds *Dstar) Pop() *Node {
+	n := ds.Len() - 1
+	ds.Swap(0, n)
+	ds.down(0, n)
+	node := ds.nodes[len(ds.nodes)-1]
+	ds.nodes = ds.nodes[0 : len(ds.nodes)-1]
+	return node
+}
+
+// Fix re-establishes the heap ordering after the element at index i has changed its value.
+// Changing the value of the element at index i and then calling Fix is equivalent to,
+// but less expensive than, calling [Remove](h, i) followed by a Push of the new value.
+// The complexity is O(log n) where n = h.Len().
+func (ds *Dstar) Fix(i int) {
+	if !ds.down(i, ds.Len()) {
+		ds.up(i)
+	}
+}
+
+// Remove removes and returns the element at index i from the heap.
+// The complexity is O(log n) where n = h.Len().
+func (ds *Dstar) Remove(i int) any {
+	n := ds.Len() - 1
+	if n != i {
+		ds.Swap(i, n)
+		if !ds.down(i, n) {
+			ds.up(i)
+		}
+	}
+	return ds.Pop()
+}
