@@ -1,4 +1,4 @@
-package main
+package dstarlite
 
 import (
 	"container/heap"
@@ -6,308 +6,313 @@ import (
 	"math"
 )
 
-// Coordinate представляет собой позицию в сетке.
-type Coordinate struct {
+type Point struct {
 	X, Y int
 }
 
-// Node представляет каждую ячейку в сетке.
-type Node struct {
-	Coord      Coordinate
-	G          float64 // Фактическая стоимость достижения этого узла от начального узла.
-	RHS        float64 // Значение одношагового прогноза.
-	Key        [2]float64
-	IsObstacle bool // true, если узел является непреодолимым препятствием.
+type Cell struct {
+	Pos       Point
+	G, Rhs    float64
+	H         float64
+	Key       [2]float64
+	Obstacle  bool
+	Neighbors []*Cell
 }
 
-// NodeHeap реализует интерфейс heap.Interface и содержит узлы Node.
-type NodeHeap []*Node
-
-func (h NodeHeap) Len() int { return len(h) }
-
-func (h NodeHeap) Less(i, j int) bool {
-	// Узлы упорядочены по значению ключа.
-	if h[i].Key[0] == h[j].Key[0] {
-		return h[i].Key[1] < h[j].Key[1]
-	}
-	return h[i].Key[0] < h[j].Key[0]
+type Grid struct {
+	Cells       [][]*Cell
+	OpenList    PriorityQueue
+	Start, Goal *Cell
 }
 
-func (h NodeHeap) Swap(i, j int) {
-	h[i], h[j] = h[j], h[i]
-}
-
-func (h *NodeHeap) Push(x interface{}) {
-	*h = append(*h, x.(*Node))
-}
-
-func (h *NodeHeap) Pop() interface{} {
-	old := *h
-	n := len(old)
-	node := old[n-1]
-	*h = old[0 : n-1]
-	return node
-}
-
-// DLite представляет алгоритм D* Lite.
-type DLite struct {
-	Grid         [][]*Node
-	Start, Goal  *Node
-	U            NodeHeap
-	km           float64
-	visited      map[*Node]bool
-	Last         *Node
-	predecessors map[*Node][]*Node
-	successors   map[*Node][]*Node
-}
-
-// NewDLite инициализирует алгоритм D* Lite.
-func NewDLite(grid [][]*Node, startCoord, goalCoord Coordinate) *DLite {
-	dlite := &DLite{
-		Grid:         grid,
-		U:            make(NodeHeap, 0),
-		km:           0,
-		visited:      make(map[*Node]bool),
-		predecessors: make(map[*Node][]*Node),
-		successors:   make(map[*Node][]*Node),
-	}
-
-	heap.Init(&dlite.U)
-
-	// Инициализация стартовых и целевых узлов.
-	dlite.Start = dlite.Grid[startCoord.X][startCoord.Y]
-	dlite.Goal = dlite.Grid[goalCoord.X][goalCoord.Y]
-	dlite.Last = dlite.Start
-
-	// Инициализация значений RHS и G для всех узлов.
-	for i := range dlite.Grid {
-		for j := range dlite.Grid[0] {
-			node := dlite.Grid[i][j]
-			node.G = math.Inf(1)
-			node.RHS = math.Inf(1)
-			node.Key = [2]float64{math.Inf(1), math.Inf(1)}
+func NewGrid(width, height int, start, goal Point) *Grid {
+	cells := make([][]*Cell, height)
+	for y := 0; y < height; y++ {
+		cells[y] = make([]*Cell, width)
+		for x := 0; x < width; x++ {
+			cell := &Cell{
+				Pos: Point{X: x, Y: y},
+				G:   math.Inf(1),
+				Rhs: math.Inf(1),
+				H:   0,
+				Key: [2]float64{math.Inf(1), math.Inf(1)},
+			}
+			cells[y][x] = cell
 		}
 	}
-
-	dlite.Goal.RHS = 0
-	dlite.Goal.Key = dlite.CalculateKey(dlite.Goal)
-	heap.Push(&dlite.U, dlite.Goal)
-
-	return dlite
-}
-
-// CalculateKey вычисляет ключ для узла.
-func (dlite *DLite) CalculateKey(u *Node) [2]float64 {
-	minG_RHS := math.Min(u.G, u.RHS)
-	return [2]float64{
-		minG_RHS + dlite.Heuristic(dlite.Start, u) + dlite.km,
-		minG_RHS,
+	grid := &Grid{
+		Cells: cells,
+		Start: cells[start.Y][start.X],
+		Goal:  cells[goal.Y][goal.X],
 	}
+	grid.Initialize()
+	return grid
 }
 
-// Heuristic оценивает стоимость от узла a до узла b.
-func (dlite *DLite) Heuristic(a, b *Node) float64 {
-	// Используется манхэттенское расстояние в качестве эвристики.
-	return math.Abs(float64(a.Coord.X-b.Coord.X)) + math.Abs(float64(a.Coord.Y-b.Coord.Y))
+func (grid *Grid) Initialize() {
+	grid.Goal.Rhs = 0
+	grid.UpdateKey(grid.Goal)
+	heap.Init(&grid.OpenList)
+	heap.Push(&grid.OpenList, grid.Goal)
 }
 
-// UpdateVertex обновляет узел в приоритетной очереди.
-func (dlite *DLite) UpdateVertex(u *Node) {
-	if u != dlite.Goal {
-		u.RHS = dlite.MinSuccessor(u)
-	}
-	dlite.RemoveFromHeap(u)
-	if u.G != u.RHS {
-		u.Key = dlite.CalculateKey(u)
-		heap.Push(&dlite.U, u)
-	}
-}
-
-// MinSuccessor находит минимальное значение RHS среди преемников.
-func (dlite *DLite) MinSuccessor(u *Node) float64 {
-	min := math.Inf(1)
-	for _, s := range dlite.GetSuccessors(u) {
-		cost := dlite.Cost(u, s)
-		if cost+dlite.G(s) < min {
-			min = cost + dlite.G(s)
+func (grid *Grid) UpdateVertex(u *Cell) {
+	if u != grid.Goal {
+		minRhs := math.Inf(1)
+		for _, s := range u.Neighbors {
+			if cost := s.G + grid.Cost(u, s); cost < minRhs {
+				minRhs = cost
+			}
 		}
+		u.Rhs = minRhs
 	}
-	return min
-}
-
-// Cost возвращает стоимость перехода от u к v.
-func (dlite *DLite) Cost(u, v *Node) float64 {
-	if v.IsObstacle {
-		return math.Inf(1)
+	grid.RemoveFromOpenList(u)
+	if u.G != u.Rhs {
+		grid.UpdateKey(u)
+		heap.Push(&grid.OpenList, u)
 	}
-	return 1 // Предполагается равная стоимость перехода.
 }
 
-// G возвращает значение G для узла.
-func (dlite *DLite) G(u *Node) float64 {
-	return u.G
-}
-
-// ComputeShortestPath вычисляет кратчайший путь на основе текущей информации.
-
-func (dlite *DLite) ComputeShortestPath() {
-	for dlite.U.Len() > 0 && (dlite.CompareKeys(dlite.U[0].Key, dlite.CalculateKey(dlite.Start)) || dlite.Start.RHS != dlite.Start.G) {
-		u := heap.Pop(&dlite.U).(*Node)
-		if u.G > u.RHS {
-			u.G = u.RHS
-			for _, s := range dlite.GetPredecessors(u) {
-				dlite.UpdateVertex(s)
+func (grid *Grid) ComputeShortestPath() {
+	i := 0
+	for len(grid.OpenList) > 0 && (grid.OpenList[0].Key[0] < grid.CalculateKey(grid.Start)[0] ||
+		(grid.OpenList[0].Key[0] == grid.CalculateKey(grid.Start)[0] && grid.OpenList[0].Key[1] < grid.CalculateKey(grid.Start)[1]) ||
+		grid.Start.Rhs != grid.Start.G) {
+		i++
+		u := heap.Pop(&grid.OpenList).(*Cell)
+		if u.G > u.Rhs {
+			u.G = u.Rhs
+			for _, s := range u.Neighbors {
+				grid.UpdateVertex(s)
 			}
 		} else {
 			u.G = math.Inf(1)
-			dlite.UpdateVertex(u)
-			for _, s := range dlite.GetPredecessors(u) {
-				dlite.UpdateVertex(s)
+			grid.UpdateVertex(u)
+			for _, s := range u.Neighbors {
+				grid.UpdateVertex(s)
 			}
 		}
 	}
+	println("\nИтераций", i)
 }
 
-// CompareKeys сравнивает два ключа.
-func (dlite *DLite) CompareKeys(k1, k2 [2]float64) bool {
-	if k1[0] < k2[0] {
-		return true
+func (grid *Grid) Cost(u, v *Cell) float64 {
+	if u.Obstacle || v.Obstacle {
+		return math.Inf(1)
 	}
-	if k1[0] > k2[0] {
-		return false
-	}
-	return k1[1] < k2[1]
+	// Здесь может быть логика расчета стоимости, например, по-разному для соседей по диагонали и по прямой
+	return 1.0
 }
 
-// GetSuccessors возвращает преемников узла.
-func (dlite *DLite) GetSuccessors(u *Node) []*Node {
-	if succ, ok := dlite.successors[u]; ok {
-		return succ
+func (u *Cell) SetCostTo(v *Cell, cost float64) {
+	// Здесь нужно обновить структуру, хранящую стоимость перехода
+	// Предположим, что у нас есть карта стоимостей
+	if cost == math.Inf(1) {
+		v.Obstacle = true
+	} else {
+		v.Obstacle = false
 	}
-	succ := dlite.Neighbors(u)
-	dlite.successors[u] = succ
-	return succ
 }
 
-// GetPredecessors возвращает предшественников узла.
-func (dlite *DLite) GetPredecessors(u *Node) []*Node {
-	if pred, ok := dlite.predecessors[u]; ok {
-		return pred
-	}
-	pred := dlite.Neighbors(u)
-	dlite.predecessors[u] = pred
-	return pred
-}
-
-// Neighbors возвращает соседние узлы, которые можно пройти.
-func (dlite *DLite) Neighbors(u *Node) []*Node {
-	var neighbors []*Node
-	dx := []int{-1, 1, 0, 0}
-	dy := []int{0, 0, -1, 1}
-	for i := 0; i < 4; i++ {
-		x := u.Coord.X + dx[i]
-		y := u.Coord.Y + dy[i]
-		if x >= 0 && x < len(dlite.Grid) && y >= 0 && y < len(dlite.Grid[0]) {
-			v := dlite.Grid[x][y]
-			neighbors = append(neighbors, v)
+func (u *Cell) Successors() []*Cell {
+	var successors []*Cell
+	for _, v := range u.Neighbors {
+		if !v.Obstacle {
+			successors = append(successors, v)
 		}
 	}
-	return neighbors
+	return successors
 }
 
-// RemoveFromHeap удаляет узел из приоритетной очереди, если он там есть.
-func (dlite *DLite) RemoveFromHeap(u *Node) {
-	for i, node := range dlite.U {
-		if node == u {
-			heap.Remove(&dlite.U, i)
+func (grid *Grid) UpdateEdge(u, v *Cell, cost float64) {
+	oldCost := grid.Cost(u, v)
+	u.SetCostTo(v, cost)
+
+	// Если стоимость увеличилась
+	if oldCost < cost {
+		if u.Rhs == oldCost+v.G {
+			// Пересчитываем rhs(u)
+			if u != grid.Goal {
+				u.Rhs = math.Inf(1)
+				for _, s := range u.Successors() {
+					u.Rhs = math.Min(u.Rhs, grid.Cost(u, s)+s.G)
+				}
+			}
+			grid.UpdateVertex(u)
+		}
+	} else {
+		// Если стоимость уменьшилась
+		if u != grid.Goal {
+			u.Rhs = math.Min(u.Rhs, grid.Cost(u, v)+v.G)
+		}
+		grid.UpdateVertex(u)
+	}
+}
+
+func (grid *Grid) RemoveFromOpenList(u *Cell) {
+	for i, cell := range grid.OpenList {
+		if cell == u {
+			heap.Remove(&grid.OpenList, i)
 			break
 		}
 	}
 }
 
-// Replan обновляет план при изменении препятствий.
-func (dlite *DLite) Replan(changedEdges [][2]Coordinate) {
-	dlite.km += dlite.Heuristic(dlite.Last, dlite.Start)
-	dlite.Last = dlite.Start
-
-	for _, edge := range changedEdges {
-		uCoord, vCoord := edge[0], edge[1]
-		u := dlite.Grid[uCoord.X][uCoord.Y]
-		v := dlite.Grid[vCoord.X][vCoord.Y]
-		dlite.UpdateVertex(u)
-		dlite.UpdateVertex(v)
-	}
-
-	dlite.ComputeShortestPath()
+func (grid *Grid) UpdateKey(u *Cell) {
+	u.Key = grid.CalculateKey(u)
 }
 
-// FindPath возвращает путь от стартового узла к целевому узлу.
-func (dlite *DLite) FindPath() []Coordinate {
-	path := []Coordinate{dlite.Start.Coord}
-	current := dlite.Start
-	for current != dlite.Goal {
-		if current.RHS == math.Inf(1) {
-			return nil // Путь не найден.
-		}
-		minRHS := math.Inf(1)
-		var next *Node
-		for _, s := range dlite.GetSuccessors(current) {
-			if dlite.Cost(current, s)+s.G < minRHS {
-				minRHS = dlite.Cost(current, s) + s.G
+func (grid *Grid) CalculateKey(u *Cell) [2]float64 {
+	k := [2]float64{
+		math.Min(u.G, u.Rhs) + grid.Heuristic(grid.Start, u),
+		math.Min(u.G, u.Rhs),
+	}
+	return k
+}
+
+func (grid *Grid) Heuristic(a, b *Cell) float64 {
+	dx := math.Abs(float64(a.Pos.X - b.Pos.X))
+	dy := math.Abs(float64(a.Pos.Y - b.Pos.Y))
+	return dx + dy
+}
+
+type PriorityQueue []*Cell
+
+func (pq PriorityQueue) Len() int { return len(pq) }
+
+func (pq PriorityQueue) Less(i, j int) bool {
+	if pq[i].Key[0] == pq[j].Key[0] {
+		return pq[i].Key[1] < pq[j].Key[1]
+	}
+	return pq[i].Key[0] < pq[j].Key[0]
+}
+
+func (pq PriorityQueue) Swap(i, j int) {
+	pq[i], pq[j] = pq[j], pq[i]
+}
+
+func (pq *PriorityQueue) Push(x interface{}) {
+	item := x.(*Cell)
+	*pq = append(*pq, item)
+}
+
+func (pq *PriorityQueue) Pop() interface{} {
+	n := len(*pq)
+	item := (*pq)[n-1]
+	*pq = (*pq)[0 : n-1]
+	return item
+}
+
+func ExtractPath(grid *Grid) []*Cell {
+	path := []*Cell{}
+	current := grid.Start
+	for current != grid.Goal {
+		minCost := math.Inf(1)
+		var next *Cell
+		for _, s := range current.Neighbors {
+			cost := grid.Cost(current, s) + s.G
+			if cost < minCost {
+				minCost = cost
 				next = s
 			}
 		}
 		if next == nil {
-			return nil // Путь не найден.
+			break
 		}
-		path = append(path, next.Coord)
+		path = append(path, next)
 		current = next
 	}
 	return path
 }
 
-// Главная функция для демонстрации алгоритма D* Lite.
-func main() {
-	// Создаем сетку.
-	width, height := 10, 10
-	grid := make([][]*Node, width)
-	for i := range grid {
-		grid[i] = make([]*Node, height)
-		for j := range grid[i] {
-			grid[i][j] = &Node{
-				Coord:      Coordinate{X: i, Y: j},
-				IsObstacle: false,
+func PrintPath(path []*Cell) {
+	for _, cell := range path {
+		fmt.Printf("(%d, %d) ", cell.Pos.X, cell.Pos.Y)
+	}
+	fmt.Println()
+}
+
+func (grid *Grid) PrintGrid() {
+	for y := 0; y < len(grid.Cells); y++ {
+		for x := 0; x < len(grid.Cells[0]); x++ {
+			cell := grid.Cells[y][x]
+			switch {
+			case cell == grid.Start:
+				fmt.Print("S")
+			case cell == grid.Goal:
+				fmt.Print("G")
+			case cell.Obstacle:
+				fmt.Print("#")
+			default:
+				fmt.Print(".")
 			}
 		}
+		fmt.Println()
+	}
+}
+
+func (grid *Grid) PrintPathOnGrid(path []*Cell) {
+	pathMap := make(map[Point]bool)
+	for _, cell := range path {
+		pathMap[cell.Pos] = true
 	}
 
-	// Определяем стартовые и целевые координаты.
-	startCoord := Coordinate{X: 0, Y: 0}
-	goalCoord := Coordinate{X: 9, Y: 9}
-
-	// Добавляем некоторые препятствия.
-	grid[2][2].IsObstacle = true
-	grid[2][3].IsObstacle = true
-	grid[2][4].IsObstacle = true
-	grid[2][5].IsObstacle = true
-
-	// Инициализируем D* Lite.
-	dlite := NewDLite(grid, startCoord, goalCoord)
-
-	// Вычисляем кратчайший путь.
-	dlite.ComputeShortestPath()
-
-	// Находим путь.
-	path := dlite.FindPath()
-
-	// Выводим путь.
-	if path != nil {
-		fmt.Println("Найден путь:")
-		for _, coord := range path {
-			fmt.Printf("(%d, %d) ", coord.X, coord.Y)
+	for y := 0; y < len(grid.Cells); y++ {
+		for x := 0; x < len(grid.Cells[0]); x++ {
+			cell := grid.Cells[y][x]
+			pos := cell.Pos
+			switch {
+			case cell == grid.Start:
+				fmt.Print("S")
+			case cell == grid.Goal:
+				fmt.Print("G")
+			case pathMap[pos]:
+				fmt.Print("*")
+			case cell.Obstacle:
+				fmt.Print("#")
+			default:
+				fmt.Print(".")
+			}
 		}
 		fmt.Println()
-	} else {
-		fmt.Println("Путь не найден.")
 	}
+}
+
+type EdgeUpdate struct {
+	U, V *Cell
+	Cost float64
+}
+
+func (grid *Grid) UpdateEdges(updates ...EdgeUpdate) {
+	for _, update := range updates {
+		u := update.U
+		v := update.V
+		cost := update.Cost
+
+		grid.UpdateEdge(u, v, cost)
+	}
+	grid.ComputeShortestPath()
+}
+
+// Функция для получения соседей клетки в координатах (x, y)
+func getNeighbors(x, y int, grid [][]*Cell, width, height int) []*Cell {
+	neighbors := []*Cell{}
+
+	// Смещения для соседних клеток (по восьми направлениям)
+	directions := [][2]int{
+		{-1, -1}, {0, -1}, {1, -1},
+		{-1, 0}, {1, 0},
+		{-1, 1}, {0, 1}, {1, 1},
+	}
+
+	for _, dir := range directions {
+		nx, ny := x+dir[0], y+dir[1]
+		// Проверяем, что новые координаты внутри границ карты
+		if nx >= 0 && nx < width && ny >= 0 && ny < height {
+			neighbor := grid[ny][nx]
+			neighbors = append(neighbors, neighbor)
+		}
+	}
+
+	return neighbors
 }

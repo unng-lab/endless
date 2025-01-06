@@ -1,14 +1,34 @@
 package board
 
-import "github.com/hajimehoshi/ebiten/v2"
+import (
+	"math"
+
+	"github.com/hajimehoshi/ebiten/v2"
+)
 
 type Cell struct {
 	TileImage      *ebiten.Image
 	TileImageSmall *ebiten.Image
 	Type           int
-	Cost           float64
+	// Стоимость перемещения в зависимости от типа клетки
+	Cost float64
+	// Храним стоимость перемещения в зависимости от временного интервала
+	Costs IntervalTree
 }
 
-func (c Cell) MoveCost() float64 {
-	return c.Cost // TODO
+// MoveCost Функция расчета стоимости перемещения в зависимости от временного интервала
+func (c *Cell) MoveCost(t int64) float64 {
+	// Если клетка является препятствием (гора, яма и т.д.), то возвращаем максимальную стоимость
+	if c.Cost == math.Inf(1) {
+		return c.Cost
+	}
+	// Если клетка не является препятствием, то смотрим есть ли какой-либо объект на клетке в заданном временном интервале
+	tCost := c.Costs.Find(t).Cost
+	// Если объект на клетке в заданном временном интервале является препятствием, то возвращаем максимальную стоимость
+	if tCost != math.Inf(1) {
+		return tCost
+	}
+
+	// Итоговая стоимость перемещения равна сумме стоимости перемещения в зависимости от временного интервала и типа клетки
+	return tCost + c.Cost
 }
