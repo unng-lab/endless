@@ -1,6 +1,6 @@
 package dstar
 
-func (ds *Dstar) up(j int) {
+func (ds *DStar) up(j int) {
 	for {
 		i := (j - 1) / 2 // parent
 		if i == j || !ds.Less(j, i) {
@@ -11,7 +11,7 @@ func (ds *Dstar) up(j int) {
 	}
 }
 
-func (ds *Dstar) down(i0, n int) bool {
+func (ds *DStar) down(i0, n int) bool {
 	i := i0
 	for {
 		j1 := 2*i + 1
@@ -31,28 +31,28 @@ func (ds *Dstar) down(i0, n int) bool {
 	return i > i0
 }
 
-func (ds *Dstar) Len() int { return len(ds.nodes) }
+func (ds *DStar) Len() int { return len(ds.nodes) }
 
-func (ds *Dstar) Less(i, j int) bool {
+func (ds *DStar) Less(i, j int) bool {
 	if ds.nodes[i].Key[0] == ds.nodes[j].Key[0] {
 		return ds.nodes[i].Key[1] < ds.nodes[j].Key[1]
 	}
 	return ds.nodes[i].Key[0] < ds.nodes[j].Key[0]
 }
 
-func (ds *Dstar) Swap(i, j int) {
+func (ds *DStar) Swap(i, j int) {
 	ds.nodes[i], ds.nodes[j] = ds.nodes[j], ds.nodes[i]
 	//ds.nodes[i].Index = i
 	//ds.nodes[j].Index = j
 }
 
-func (ds *Dstar) Push(node *Node) {
+func (ds *DStar) Push(node *Node) {
 	//n := len(ds.nodes)
 	//node.Index = n
 	ds.nodes = append(ds.nodes, node)
 }
 
-func (ds *Dstar) Pop() *Node {
+func (ds *DStar) Pop() *Node {
 	n := ds.Len() - 1
 	ds.Swap(0, n)
 	ds.down(0, n)
@@ -65,7 +65,7 @@ func (ds *Dstar) Pop() *Node {
 // Changing the value of the element at index i and then calling Fix is equivalent to,
 // but less expensive than, calling [Remove](h, i) followed by a Push of the new value.
 // The complexity is O(log n) where n = h.Len().
-func (ds *Dstar) Fix(i int) {
+func (ds *DStar) Fix(i int) {
 	if !ds.down(i, ds.Len()) {
 		ds.up(i)
 	}
@@ -73,7 +73,7 @@ func (ds *Dstar) Fix(i int) {
 
 // Remove removes and returns the element at index i from the heap.
 // The complexity is O(log n) where n = h.Len().
-func (ds *Dstar) Remove(i int) any {
+func (ds *DStar) Remove(i int) any {
 	n := ds.Len() - 1
 	if n != i {
 		ds.Swap(i, n)

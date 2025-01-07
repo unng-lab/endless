@@ -48,8 +48,8 @@ func (n *Node) Cost(v *Node) float64 {
 	return 1.0
 }
 
-func (n Node) heuristic(goalX, goalY float64) float64 {
-	return math.Abs(n.Position.X-goalX) + math.Abs(n.Position.Y-goalY)
+func (n Node) heuristic(goal geom.Point) float64 {
+	return math.Abs(n.Position.X-goal.X) + math.Abs(n.Position.Y-goal.Y)
 }
 
 func (n Node) to(target Node) byte {

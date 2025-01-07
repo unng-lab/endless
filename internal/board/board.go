@@ -162,3 +162,8 @@ func (b *Board) GetNeighbours(target geom.Point) []geom.Point {
 	}
 	return neighbors
 }
+
+func (b *Board) GetCost(from, to geom.Point, tick int64) float64 {
+	// тут будет сложный расчет стоимости между двумя точками в заданный тик
+	return 1.0
+}
