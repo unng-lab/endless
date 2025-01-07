@@ -6,13 +6,13 @@ import (
 
 func TestIntervalTree_Add(t *testing.T) {
 	tree := &IntervalTree{}
-	if err := tree.Add(Interval{Start: 1, End: 5}); err != nil {
+	if _, err := tree.Add(Interval{Start: 1, End: 5}); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
-	if err := tree.Add(Interval{Start: 10, End: 15}); err != nil {
+	if _, err := tree.Add(Interval{Start: 10, End: 15}); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
-	if err := tree.Add(Interval{Start: 3, End: 7}); err == nil {
+	if _, err := tree.Add(Interval{Start: 3, End: 7}); err == nil {
 		t.Errorf("expected error due to overlap, got none")
 	}
 }
@@ -46,6 +46,29 @@ func TestIntervalTree_Remove(t *testing.T) {
 	tree := &IntervalTree{}
 	tree.Add(Interval{Start: 1, End: 5})
 	tree.Add(Interval{Start: 10, End: 15})
+
+	// Удаляем существующий интервал
+	err := tree.Remove(Interval{Start: 1, End: 5})
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+
+	// Проверяем, что интервал был удален
+	interval := tree.Find(3)
+	if interval != nil {
+		t.Errorf("expected no interval for point 3, got %v", interval)
+	}
+
+	// Пытаемся удалить несуществующий интервал
+	err = tree.Remove(Interval{Start: 1, End: 5})
+	if err == nil {
+		t.Errorf("expected error for deleting non-existing interval, got none")
+	}
+}
+
+func TestIntervalTree_RemoveOne(t *testing.T) {
+	tree := &IntervalTree{}
+	tree.Add(Interval{Start: 1, End: 5})
 
 	// Удаляем существующий интервал
 	err := tree.Remove(Interval{Start: 1, End: 5})

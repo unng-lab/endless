@@ -1,13 +1,15 @@
 package board
 
 import (
-	"github.com/hajimehoshi/ebiten/v2"
-	"github/unng-lab/madfarmer/internal/geom"
 	"image/color"
 	"log/slog"
 	"math/rand"
 	"sync"
 	"sync/atomic"
+
+	"github.com/hajimehoshi/ebiten/v2"
+
+	"github/unng-lab/madfarmer/internal/geom"
 
 	"github/unng-lab/madfarmer/assets/img"
 	"github/unng-lab/madfarmer/internal/camera"
@@ -115,11 +117,11 @@ func getCost(seed int) float64 {
 	return 1
 }
 
-func (b *Board) GetCell(x, y int) Cell {
+func (b *Board) GetCell(x, y int) *Cell {
 	if x < 0 || x > CountTile-1 || y < 0 || y > CountTile-1 {
-		return Cell{}
+		return &Cell{}
 	}
-	return b.Cells[y][x]
+	return &b.Cells[y][x]
 }
 
 func (b *Board) AddUpdatedCells(from, to geom.Point) {
@@ -136,4 +138,27 @@ func (b *Board) ClearUpdatedCells() {
 		slog.Warn("Board.ClearUpdatedCells", "len", len(b.UpdatedCells))
 		b.UpdatedCells = make([]geom.Point, 0, updatedCellsBuffer/4)
 	}
+}
+
+var directions = [8][]int{
+	{0, -1},
+	{0, 1},
+	{-1, 0},
+	{1, 0},
+	{-1, -1},
+	{-1, 1},
+	{1, -1},
+	{1, 1},
+}
+
+func (b *Board) GetNeighbours(target geom.Point) []geom.Point {
+	var neighbors []geom.Point
+	for _, dir := range directions {
+		nx, ny := int(target.X)+dir[0], int(target.Y)+dir[1]
+		// Проверяем, что новые координаты внутри границ карты
+		if nx >= 0 && nx < CountTile-1 && ny >= 0 && ny < CountTile-1 {
+			neighbors = append(neighbors, geom.Point{float64(nx), float64(ny)})
+		}
+	}
+	return neighbors
 }

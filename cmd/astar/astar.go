@@ -10,31 +10,29 @@ type Point struct {
 	X, Y int
 }
 
-type Cell struct {
+type Node struct {
 	Pos       Point
 	G, Rhs    float64
-	H         float64
 	Key       [2]float64
 	Obstacle  bool
-	Neighbors []*Cell
+	Neighbors []*Node
 }
 
 type Grid struct {
-	Cells       [][]*Cell
+	Cells       [][]*Node
 	OpenList    PriorityQueue
-	Start, Goal *Cell
+	Start, Goal *Node
 }
 
 func NewGrid(width, height int, start, goal Point) *Grid {
-	cells := make([][]*Cell, height)
+	cells := make([][]*Node, height)
 	for y := 0; y < height; y++ {
-		cells[y] = make([]*Cell, width)
+		cells[y] = make([]*Node, width)
 		for x := 0; x < width; x++ {
-			cell := &Cell{
+			cell := &Node{
 				Pos: Point{X: x, Y: y},
 				G:   math.Inf(1),
 				Rhs: math.Inf(1),
-				H:   0,
 				Key: [2]float64{math.Inf(1), math.Inf(1)},
 			}
 			cells[y][x] = cell
@@ -56,7 +54,7 @@ func (grid *Grid) Initialize() {
 	heap.Push(&grid.OpenList, grid.Goal)
 }
 
-func (grid *Grid) UpdateVertex(u *Cell) {
+func (grid *Grid) UpdateVertex(u *Node) {
 	if u != grid.Goal {
 		minRhs := math.Inf(1)
 		for _, s := range u.Neighbors {
@@ -79,7 +77,7 @@ func (grid *Grid) ComputeShortestPath() {
 		(grid.OpenList[0].Key[0] == grid.CalculateKey(grid.Start)[0] && grid.OpenList[0].Key[1] < grid.CalculateKey(grid.Start)[1]) ||
 		grid.Start.Rhs != grid.Start.G) {
 		i++
-		u := heap.Pop(&grid.OpenList).(*Cell)
+		u := heap.Pop(&grid.OpenList).(*Node)
 		if u.G > u.Rhs {
 			u.G = u.Rhs
 			for _, s := range u.Neighbors {
@@ -96,7 +94,7 @@ func (grid *Grid) ComputeShortestPath() {
 	println("\nИтераций", i)
 }
 
-func (grid *Grid) Cost(u, v *Cell) float64 {
+func (grid *Grid) Cost(u, v *Node) float64 {
 	if u.Obstacle || v.Obstacle {
 		return math.Inf(1)
 	}
@@ -104,7 +102,7 @@ func (grid *Grid) Cost(u, v *Cell) float64 {
 	return 1.0
 }
 
-func (u *Cell) SetCostTo(v *Cell, cost float64) {
+func (u *Node) SetCostTo(v *Node, cost float64) {
 	// Здесь нужно обновить структуру, хранящую стоимость перехода
 	// Предположим, что у нас есть карта стоимостей
 	if cost == math.Inf(1) {
@@ -114,8 +112,8 @@ func (u *Cell) SetCostTo(v *Cell, cost float64) {
 	}
 }
 
-func (u *Cell) Successors() []*Cell {
-	var successors []*Cell
+func (u *Node) Successors() []*Node {
+	var successors []*Node
 	for _, v := range u.Neighbors {
 		if !v.Obstacle {
 			successors = append(successors, v)
@@ -124,7 +122,7 @@ func (u *Cell) Successors() []*Cell {
 	return successors
 }
 
-func (grid *Grid) UpdateEdge(u, v *Cell, cost float64) {
+func (grid *Grid) UpdateEdge(u, v *Node, cost float64) {
 	oldCost := grid.Cost(u, v)
 	u.SetCostTo(v, cost)
 
@@ -149,7 +147,7 @@ func (grid *Grid) UpdateEdge(u, v *Cell, cost float64) {
 	}
 }
 
-func (grid *Grid) RemoveFromOpenList(u *Cell) {
+func (grid *Grid) RemoveFromOpenList(u *Node) {
 	for i, cell := range grid.OpenList {
 		if cell == u {
 			heap.Remove(&grid.OpenList, i)
@@ -158,11 +156,11 @@ func (grid *Grid) RemoveFromOpenList(u *Cell) {
 	}
 }
 
-func (grid *Grid) UpdateKey(u *Cell) {
+func (grid *Grid) UpdateKey(u *Node) {
 	u.Key = grid.CalculateKey(u)
 }
 
-func (grid *Grid) CalculateKey(u *Cell) [2]float64 {
+func (grid *Grid) CalculateKey(u *Node) [2]float64 {
 	k := [2]float64{
 		math.Min(u.G, u.Rhs) + grid.Heuristic(grid.Start, u),
 		math.Min(u.G, u.Rhs),
@@ -170,13 +168,13 @@ func (grid *Grid) CalculateKey(u *Cell) [2]float64 {
 	return k
 }
 
-func (grid *Grid) Heuristic(a, b *Cell) float64 {
+func (grid *Grid) Heuristic(a, b *Node) float64 {
 	dx := math.Abs(float64(a.Pos.X - b.Pos.X))
 	dy := math.Abs(float64(a.Pos.Y - b.Pos.Y))
 	return dx + dy
 }
 
-type PriorityQueue []*Cell
+type PriorityQueue []*Node
 
 func (pq PriorityQueue) Len() int { return len(pq) }
 
@@ -192,7 +190,7 @@ func (pq PriorityQueue) Swap(i, j int) {
 }
 
 func (pq *PriorityQueue) Push(x interface{}) {
-	item := x.(*Cell)
+	item := x.(*Node)
 	*pq = append(*pq, item)
 }
 
@@ -203,12 +201,12 @@ func (pq *PriorityQueue) Pop() interface{} {
 	return item
 }
 
-func ExtractPath(grid *Grid) []*Cell {
-	path := []*Cell{}
+func ExtractPath(grid *Grid) []*Node {
+	path := []*Node{}
 	current := grid.Start
 	for current != grid.Goal {
 		minCost := math.Inf(1)
-		var next *Cell
+		var next *Node
 		for _, s := range current.Neighbors {
 			cost := grid.Cost(current, s) + s.G
 			if cost < minCost {
@@ -225,7 +223,7 @@ func ExtractPath(grid *Grid) []*Cell {
 	return path
 }
 
-func PrintPath(path []*Cell) {
+func PrintPath(path []*Node) {
 	for _, cell := range path {
 		fmt.Printf("(%d, %d) ", cell.Pos.X, cell.Pos.Y)
 	}
@@ -251,7 +249,7 @@ func (grid *Grid) PrintGrid() {
 	}
 }
 
-func (grid *Grid) PrintPathOnGrid(path []*Cell) {
+func (grid *Grid) PrintPathOnGrid(path []*Node) {
 	pathMap := make(map[Point]bool)
 	for _, cell := range path {
 		pathMap[cell.Pos] = true
@@ -279,7 +277,7 @@ func (grid *Grid) PrintPathOnGrid(path []*Cell) {
 }
 
 type EdgeUpdate struct {
-	U, V *Cell
+	U, V *Node
 	Cost float64
 }
 
@@ -295,8 +293,8 @@ func (grid *Grid) UpdateEdges(updates ...EdgeUpdate) {
 }
 
 // Функция для получения соседей клетки в координатах (x, y)
-func getNeighbors(x, y int, grid [][]*Cell, width, height int) []*Cell {
-	neighbors := []*Cell{}
+func getNeighbors(x, y int, grid [][]*Node, width, height int) []*Node {
+	neighbors := []*Node{}
 
 	// Смещения для соседних клеток (по восьми направлениям)
 	directions := [][2]int{

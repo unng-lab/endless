@@ -16,7 +16,7 @@ func TestPathChangesWithEdgeUpdates(t *testing.T) {
 	for y := 0; y < 5; y++ {
 		for x := 0; x < 5; x++ {
 			cell := grid.Cells[y][x]
-			neighbors := []*Cell{}
+			neighbors := []*Node{}
 			if x > 0 {
 				neighbors = append(neighbors, grid.Cells[y][x-1])
 			}

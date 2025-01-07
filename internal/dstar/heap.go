@@ -42,13 +42,13 @@ func (ds *Dstar) Less(i, j int) bool {
 
 func (ds *Dstar) Swap(i, j int) {
 	ds.nodes[i], ds.nodes[j] = ds.nodes[j], ds.nodes[i]
-	ds.nodes[i].Index = i
-	ds.nodes[j].Index = j
+	//ds.nodes[i].Index = i
+	//ds.nodes[j].Index = j
 }
 
 func (ds *Dstar) Push(node *Node) {
-	n := len(ds.nodes)
-	node.Index = n
+	//n := len(ds.nodes)
+	//node.Index = n
 	ds.nodes = append(ds.nodes, node)
 }
 

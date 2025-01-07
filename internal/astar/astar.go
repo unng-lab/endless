@@ -190,7 +190,7 @@ func (a *Astar) BuildPath(fromX, fromY, toX, toY float64) error {
 				priority: 0,
 			}
 
-			score := a.B.GetCell(int(neighbor.x), int(neighbor.y)).MoveCost()
+			score := a.B.GetCell(int(neighbor.x), int(neighbor.y)).MoveCost(0)
 			if score <= 0 {
 				continue
 			}
