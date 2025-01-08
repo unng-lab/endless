@@ -1,8 +1,8 @@
 package unit
 
 import (
-	"github/unng-lab/madfarmer/internal/board"
-	"github/unng-lab/madfarmer/internal/geom"
+	"github.com/unng-lab/madfarmer/internal/board"
+	"github.com/unng-lab/madfarmer/internal/geom"
 	"math/rand"
 )
 

@@ -3,9 +3,9 @@ package unit
 import (
 	"log/slog"
 
-	"github/unng-lab/madfarmer/internal/astar"
-	"github/unng-lab/madfarmer/internal/board"
-	"github/unng-lab/madfarmer/internal/geom"
+	"github.com/unng-lab/madfarmer/internal/astar"
+	"github.com/unng-lab/madfarmer/internal/board"
+	"github.com/unng-lab/madfarmer/internal/geom"
 )
 
 var _ Task = new(Road)

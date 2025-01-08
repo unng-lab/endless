@@ -10,7 +10,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	_ "github.com/silbinarywolf/preferdiscretegpu"
 
-	"github/unng-lab/madfarmer/internal/endless"
+	"github.com/unng-lab/madfarmer/internal/endless"
 )
 
 func main() {

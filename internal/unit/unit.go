@@ -8,11 +8,11 @@ import (
 	"github.com/brianvoe/gofakeit/v7"
 	"github.com/hajimehoshi/ebiten/v2"
 
-	"github/unng-lab/madfarmer/internal/astar"
-	"github/unng-lab/madfarmer/internal/board"
-	"github/unng-lab/madfarmer/internal/camera"
-	"github/unng-lab/madfarmer/internal/ch"
-	"github/unng-lab/madfarmer/internal/geom"
+	"github.com/unng-lab/madfarmer/internal/astar"
+	"github.com/unng-lab/madfarmer/internal/board"
+	"github.com/unng-lab/madfarmer/internal/camera"
+	"github.com/unng-lab/madfarmer/internal/ch"
+	"github.com/unng-lab/madfarmer/internal/geom"
 )
 
 const (

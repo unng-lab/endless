@@ -3,7 +3,7 @@ package game
 import (
 	"log/slog"
 
-	"github/unng-lab/madfarmer/internal/scr"
+	"github.com/unng-lab/madfarmer/internal/scr"
 )
 
 type Config interface {

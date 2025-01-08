@@ -1,7 +1,7 @@
 package cfg
 
 import (
-	"github/unng-lab/madfarmer/internal/ebitenfx"
+	"github.com/unng-lab/madfarmer/internal/ebitenfx"
 )
 
 var _ ebitenfx.Config = (*Default)(nil)

@@ -10,10 +10,10 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 
-	"github/unng-lab/madfarmer/assets/img"
-	"github/unng-lab/madfarmer/internal/ebitenfx"
-	"github/unng-lab/madfarmer/internal/units/runner"
-	"github/unng-lab/madfarmer/internal/window"
+	"github.com/unng-lab/madfarmer/assets/img"
+	"github.com/unng-lab/madfarmer/internal/ebitenfx"
+	"github.com/unng-lab/madfarmer/internal/units/runner"
+	"github.com/unng-lab/madfarmer/internal/window"
 )
 
 var _ ebitenfx.Screen = (*Canvas)(nil)

@@ -11,7 +11,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/vector"
 
-	"github/unng-lab/madfarmer/internal/board"
+	"github.com/unng-lab/madfarmer/internal/board"
 )
 
 var Counter int

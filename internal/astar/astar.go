@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"sync"
 
-	"github/unng-lab/madfarmer/internal/board"
-	"github/unng-lab/madfarmer/internal/geom"
+	"github.com/unng-lab/madfarmer/internal/board"
+	"github.com/unng-lab/madfarmer/internal/geom"
 )
 
 const (
@@ -190,7 +190,7 @@ func (a *Astar) BuildPath(fromX, fromY, toX, toY float64) error {
 				priority: 0,
 			}
 
-			score := a.B.GetCell(int(neighbor.x), int(neighbor.y)).MoveCost(0)
+			score := a.B.GetCell(int64(neighbor.x), int64(neighbor.y)).MoveCost(0, 0)
 			if score <= 0 {
 				continue
 			}

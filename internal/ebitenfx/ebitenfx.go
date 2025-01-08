@@ -5,7 +5,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 
-	"github/unng-lab/madfarmer/internal/window"
+	"github.com/unng-lab/madfarmer/internal/window"
 )
 
 var _ ebiten.Game = (*Game)(nil)

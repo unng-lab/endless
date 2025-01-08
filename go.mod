@@ -1,4 +1,4 @@
-module github/unng-lab/madfarmer
+module github.com/unng-lab/madfarmer
 
 go 1.23.2
 

@@ -5,7 +5,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 
-	"github/unng-lab/madfarmer/assets/img"
+	"github.com/unng-lab/madfarmer/assets/img"
 )
 
 var Tiles [256]Tile

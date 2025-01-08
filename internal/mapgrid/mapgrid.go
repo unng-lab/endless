@@ -1,10 +1,10 @@
 package mapgrid
 
 import (
-	"github/unng-lab/madfarmer/internal/board"
-	"github/unng-lab/madfarmer/internal/camera"
-	"github/unng-lab/madfarmer/internal/geom"
-	"github/unng-lab/madfarmer/internal/unit"
+	"github.com/unng-lab/madfarmer/internal/board"
+	"github.com/unng-lab/madfarmer/internal/camera"
+	"github.com/unng-lab/madfarmer/internal/geom"
+	"github.com/unng-lab/madfarmer/internal/unit"
 )
 
 const (

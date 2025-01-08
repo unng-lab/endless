@@ -9,10 +9,10 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 
-	"github/unng-lab/madfarmer/internal/geom"
+	"github.com/unng-lab/madfarmer/internal/geom"
 
-	"github/unng-lab/madfarmer/assets/img"
-	"github/unng-lab/madfarmer/internal/camera"
+	"github.com/unng-lab/madfarmer/assets/img"
+	"github.com/unng-lab/madfarmer/internal/camera"
 )
 
 const (
@@ -26,6 +26,7 @@ const CountTile = 1024
 
 type Board struct {
 	Cells              [][]Cell
+	width, height      int64
 	CellOnScreen       atomic.Int64
 	EmptyCell          *ebiten.Image
 	ClearTile          *ebiten.Image
@@ -38,8 +39,10 @@ type Board struct {
 }
 
 func NewBoard(c *camera.Camera) (*Board, error) {
+	// TODO тут какой то лютый пздц и надо привести к нормальному виду
 	var b Board
 	NewTiles()
+	b.width, b.height = CountTile, CountTile
 	rnd := rand.New(rand.NewSource(0))
 	b.Cells = make([][]Cell, CountTile)
 	for i := range b.Cells {
@@ -77,7 +80,7 @@ func (b *Board) Draw(screen *ebiten.Image) {
 	cellNumber := int64(0)
 	for j := b.Camera.Coordinates.Min.Y; j <= b.Camera.Coordinates.Max.Y; j++ {
 		for i := b.Camera.Coordinates.Min.X; i <= b.Camera.Coordinates.Max.X; i++ {
-			if i < 0 || i > CountTile-1 || j < 0 || j > CountTile-1 {
+			if i < 0 || i > float64(b.width-1) || j < 0 || j > float64(b.height-1) {
 				screen.DrawImage(b.ClearTile, &b.DrawOp)
 			} else {
 				if b.Camera.GetZoomFactor() > hd {
@@ -117,8 +120,8 @@ func getCost(seed int) float64 {
 	return 1
 }
 
-func (b *Board) GetCell(x, y int) *Cell {
-	if x < 0 || x > CountTile-1 || y < 0 || y > CountTile-1 {
+func (b *Board) GetCell(x, y int64) *Cell {
+	if x < 0 || x > b.width-1 || y < 0 || y > b.height-1 {
 		return &Cell{}
 	}
 	return &b.Cells[y][x]
@@ -166,4 +169,15 @@ func (b *Board) GetNeighbours(target geom.Point) []geom.Point {
 func (b *Board) GetCost(from, to geom.Point, tick int64) float64 {
 	// тут будет сложный расчет стоимости между двумя точками в заданный тик
 	return 1.0
+}
+
+func (b *Board) IsObstacle(geom.Point) bool {
+	return false
+}
+
+func (b *Board) IsInside(p geom.Point) bool {
+	if p.X < 0 || p.X > CountTile-1 || p.Y < 0 || p.Y > CountTile-1 {
+		return false
+	}
+	return true
 }

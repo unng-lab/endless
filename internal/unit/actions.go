@@ -3,7 +3,7 @@ package unit
 import (
 	"log/slog"
 
-	"github/unng-lab/madfarmer/internal/geom"
+	"github.com/unng-lab/madfarmer/internal/geom"
 )
 
 func (u *Unit) Relocate(from, to geom.Point) {

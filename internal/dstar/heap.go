@@ -42,14 +42,14 @@ func (ds *DStar) Less(i, j int) bool {
 
 func (ds *DStar) Swap(i, j int) {
 	ds.nodes[i], ds.nodes[j] = ds.nodes[j], ds.nodes[i]
-	//ds.nodes[i].Index = i
-	//ds.nodes[j].Index = j
+	ds.nodes[i].Index = i
+	ds.nodes[j].Index = j
 }
 
 func (ds *DStar) Push(node *Node) {
-	//n := len(ds.nodes)
-	//node.Index = n
+	node.Index = len(ds.nodes)
 	ds.nodes = append(ds.nodes, node)
+	ds.up(node.Index)
 }
 
 func (ds *DStar) Pop() *Node {
@@ -58,6 +58,7 @@ func (ds *DStar) Pop() *Node {
 	ds.down(0, n)
 	node := ds.nodes[len(ds.nodes)-1]
 	ds.nodes = ds.nodes[0 : len(ds.nodes)-1]
+	node.Index = -1
 	return node
 }
 

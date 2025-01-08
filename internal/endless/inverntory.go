@@ -5,10 +5,10 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 
-	"github/unng-lab/madfarmer/assets/img"
-	"github/unng-lab/madfarmer/internal/board"
-	"github/unng-lab/madfarmer/internal/camera"
-	"github/unng-lab/madfarmer/internal/unit"
+	"github.com/unng-lab/madfarmer/assets/img"
+	"github.com/unng-lab/madfarmer/internal/board"
+	"github.com/unng-lab/madfarmer/internal/camera"
+	"github.com/unng-lab/madfarmer/internal/unit"
 )
 
 const (

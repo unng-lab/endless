@@ -13,7 +13,7 @@ import (
 	e_image "github.com/ebitenui/ebitenui/image"
 	"github.com/ebitenui/ebitenui/widget"
 
-	"github/unng-lab/madfarmer/internal/camera"
+	"github.com/unng-lab/madfarmer/internal/camera"
 )
 
 type UIEngine struct {

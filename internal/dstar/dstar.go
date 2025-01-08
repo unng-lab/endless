@@ -1,12 +1,11 @@
 package dstar
 
 import (
-	"container/heap"
 	"errors"
 	"math"
 
-	"github/unng-lab/madfarmer/internal/board"
-	"github/unng-lab/madfarmer/internal/geom"
+	"github.com/unng-lab/madfarmer/internal/board"
+	"github.com/unng-lab/madfarmer/internal/geom"
 )
 
 const (
@@ -19,10 +18,16 @@ const (
 
 var errNoPath = errors.New("no Path")
 
+type nodeCacheKey struct {
+	x, y int64
+}
 type DStar struct {
 	B           *board.Board
 	start, goal *Node
-	nodes       []*Node
+	nodes       []*Node // Очередь с приоритетом (куча)
+	km          float64 // Переменная для учета изменений в графе
+
+	nodeCache map[nodeCacheKey]*Node // Cache to store nodes by position
 }
 
 func NewDstar(b *board.Board) *DStar {
@@ -34,72 +39,149 @@ func NewDstar(b *board.Board) *DStar {
 	}
 }
 
-func (ds *DStar) Path(start, goal geom.Point) ([]geom.Point, error) {
-	if start == goal {
-		return nil, errNoPath
-	}
-	ds.start = NewNode(start, ds.B)
-	ds.goal = NewNode(goal, ds.B)
+// Инициализация алгоритма D* Lite.
+func (ds *DStar) Initialize(startPos, goalPos geom.Point) {
+	ds.km = 0
+	ds.nodes = []*Node{}
+	ds.nodeCache = make(map[nodeCacheKey]*Node)
+
+	ds.start = ds.getNode(startPos)
+	ds.goal = ds.getNode(goalPos)
+
+	ds.start.G = math.Inf(1)
+	ds.start.RHS = math.Inf(1)
+
+	ds.goal.G = math.Inf(1)
+	ds.goal.RHS = 0
+	ds.goal.Key = ds.calculateKey(ds.goal)
+
 	ds.Push(ds.goal)
-	return nil, nil
 }
 
-func (ds *DStar) CalculateKey(u *Node) [2]float64 {
-	k := [2]float64{
-		math.Min(u.G, u.RHS) + ds.start.heuristic(u.Position),
-		math.Min(u.G, u.RHS),
+// Получение узла по позиции, создание нового при необходимости.
+func (ds *DStar) getNode(pos geom.Point) *Node {
+	key := nodeCacheKey{int64(pos.X), int64(pos.Y)}
+	if node, exists := ds.nodeCache[key]; exists {
+		return node
 	}
-	return k
+	obstacle := ds.B.IsObstacle(pos)
+	node := NewNode(pos, obstacle)
+	ds.nodeCache[key] = node
+	return node
 }
 
+// Проверка корректности позиции (в пределах границ и не препятствие).
+func (ds *DStar) isValidPosition(pos geom.Point) bool {
+	return ds.B.IsInside(pos) && !ds.B.IsObstacle(pos)
+}
+
+// Получение соседей узла.
+func (ds *DStar) getNeighbors(u *Node) []*Node {
+	neighbors := []*Node{}
+	for _, offset := range neighborsOffsets {
+		pos := geom.Point{X: u.Position.X + offset.X, Y: u.Position.Y + offset.Y}
+		if ds.isValidPosition(pos) {
+			neighbors = append(neighbors, ds.getNode(pos))
+		}
+	}
+	u.Neighbors = neighbors
+	return neighbors
+}
+
+// Вычисление ключа для узла.
+func (ds *DStar) calculateKey(n *Node) [2]float64 {
+	minGorRHS := math.Min(n.G, n.RHS)
+	return [2]float64{
+		minGorRHS + n.heuristic(ds.start.Position) + ds.km,
+		minGorRHS,
+	}
+}
+
+// Сравнение ключей узлов.
+func compareKeys(a, b [2]float64) int {
+	if a[0] < b[0] {
+		return -1
+	}
+	if a[0] > b[0] {
+		return 1
+	}
+	if a[1] < b[1] {
+		return -1
+	}
+	if a[1] > b[1] {
+		return 1
+	}
+	return 0
+}
+
+// ComputeShortestPath выполняет вычисление кратчайшего пути.
 func (ds *DStar) ComputeShortestPath() {
-	i := 0
-	for len(ds.nodes) > 0 && (ds.nodes[0].Key[0] < ds.CalculateKey(ds.Start)[0] ||
-		(ds.nodes[0].Key[0] == ds.CalculateKey(ds.start)[0] && ds.nodes[0].Key[1] < ds.CalculateKey(ds.Start)[1]) ||
-		ds.start.RHS != ds.start.G) {
-		i++
+	for ds.Len() > 0 {
 		u := ds.Pop()
+
+		if compareKeys(u.Key, ds.calculateKey(ds.start)) > 0 && ds.start.RHS == ds.start.G {
+			break
+		}
+
 		if u.G > u.RHS {
 			u.G = u.RHS
-			for _, s := range u.Neighbors {
+			for _, s := range ds.getNeighbors(u) {
 				ds.UpdateVertex(s)
 			}
 		} else {
 			u.G = math.Inf(1)
 			ds.UpdateVertex(u)
-			for _, s := range u.Neighbors {
+			for _, s := range ds.getNeighbors(u) {
 				ds.UpdateVertex(s)
 			}
 		}
 	}
-	println("\nИтераций", i)
 }
 
+// Обновление узла в очереди с приоритетом.
 func (ds *DStar) UpdateVertex(u *Node) {
-	if u != ds.goal {
-		minRhs := math.Inf(1)
-		for _, s := range u.Neighbors {
-			if cost := s.G + ds.Cost(u, s, 0); cost < minRhs {
-				minRhs = cost
-			}
+	if u.Position != ds.goal.Position {
+		u.RHS = math.Inf(1)
+		neighbors := ds.getNeighbors(u)
+		for _, s := range neighbors {
+			u.RHS = min(u.RHS, s.G+s.Cost(u))
 		}
-		u.RHS = minRhs
 	}
-	ds.Remove(u)
+
+	// Если узел уже в открытом списке, удаляем его
+	if u.Index >= 0 {
+		ds.Remove(u.Index)
+	}
+
 	if u.G != u.RHS {
-		ds.UpdateKey(u)
+		u.Key = ds.calculateKey(u)
 		ds.Push(u)
 	}
 }
 
-func (ds *DStar) UpdateKey(u *Node) {
-	u.Key = ds.CalculateKey(u)
+// Метод для получения предшественников узла
+func (ds *DStar) predecessors(u *Node) []*Node {
+	return u.Neighbors
 }
 
-func (ds *DStar) Cost(u *Node, s *Node, tick int64) float64 {
-	if u.Obstacle || s.Obstacle {
+// Метод для получения G-стоимости узла (с проверкой Infinity)
+func (ds *DStar) getG(u *Node) float64 {
+	if u == nil {
 		return math.Inf(1)
 	}
-	// Здесь может быть логика расчета стоимости, например, по-разному для соседей по диагонали и по прямой
-	return ds.B.GetCost(u.Position, s.Position, 0)
+	return u.G
+}
+
+// Метод стоимости перехода между узлами
+func (ds *DStar) Cost(a, b *Node) float64 {
+	if a.Obstacle || b.Obstacle {
+		return math.Inf(1)
+	}
+	// If moving diagonally, cost is sqrt(2), else 1
+	dx := math.Abs(a.Position.X - b.Position.X)
+	dy := math.Abs(a.Position.Y - b.Position.Y)
+	if dx+dy > 1 {
+		return math.Sqrt(2)
+	}
+	return 1.0
 }

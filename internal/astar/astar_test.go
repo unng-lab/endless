@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github/unng-lab/madfarmer/internal/board"
-	"github/unng-lab/madfarmer/internal/geom"
+	"github.com/unng-lab/madfarmer/internal/board"
+	"github.com/unng-lab/madfarmer/internal/geom"
 )
 
 func TestAstar_BuildPath(t *testing.T) {

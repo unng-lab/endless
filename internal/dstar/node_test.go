@@ -3,7 +3,7 @@ package dstar
 import (
 	"testing"
 
-	"github/unng-lab/madfarmer/internal/geom"
+	"github.com/unng-lab/madfarmer/internal/geom"
 )
 
 func TestNode_to(t *testing.T) {

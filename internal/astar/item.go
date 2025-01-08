@@ -1,7 +1,7 @@
 package astar
 
 import (
-	"github/unng-lab/madfarmer/internal/geom"
+	"github.com/unng-lab/madfarmer/internal/geom"
 	"math"
 )
 

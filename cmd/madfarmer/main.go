@@ -9,13 +9,13 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
 
-	"github/unng-lab/madfarmer/internal/cfg"
-	"github/unng-lab/madfarmer/internal/ebitenfx"
-	"github/unng-lab/madfarmer/internal/game"
-	"github/unng-lab/madfarmer/internal/scr"
-	"github/unng-lab/madfarmer/internal/slogfx"
-	"github/unng-lab/madfarmer/internal/units/runner"
-	"github/unng-lab/madfarmer/internal/window"
+	"github.com/unng-lab/madfarmer/internal/cfg"
+	"github.com/unng-lab/madfarmer/internal/ebitenfx"
+	"github.com/unng-lab/madfarmer/internal/game"
+	"github.com/unng-lab/madfarmer/internal/scr"
+	"github.com/unng-lab/madfarmer/internal/slogfx"
+	"github.com/unng-lab/madfarmer/internal/units/runner"
+	"github.com/unng-lab/madfarmer/internal/window"
 )
 
 func main() {

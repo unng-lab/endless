@@ -7,7 +7,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"golang.org/x/image/math/f64"
 
-	"github/unng-lab/madfarmer/internal/window"
+	"github.com/unng-lab/madfarmer/internal/window"
 )
 
 type Camera struct {
