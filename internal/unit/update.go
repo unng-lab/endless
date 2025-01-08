@@ -1,9 +1,11 @@
 package unit
 
 import (
+	"log/slog"
+	"math/rand"
+
 	"github.com/unng-lab/madfarmer/internal/board"
 	"github.com/unng-lab/madfarmer/internal/geom"
-	"math/rand"
 )
 
 // Update возвращает время до следующего вызова Update или ошибку
@@ -25,15 +27,18 @@ func (u *Unit) SetTask() {
 	if u.Type == "runner" && u.Tasks.Current() == nil {
 		// временное для добавление сходу задания на попиздовать куда то
 		u.RoadTask = NewRoad(u.Board, u)
-		if err := u.RoadTask.Path(
+		err := u.RoadTask.Path(
 			geom.Pt(
 				float64(rand.Intn(board.CountTile)),
 				float64(rand.Intn(board.CountTile)),
-			)); err != nil {
-			panic(err)
+			))
+		if err != nil {
+			slog.Error("road task ", "error", err)
+
+		} else {
+			u.Tasks.Add(&u.RoadTask)
 		}
 
-		u.Tasks.Add(&u.RoadTask)
 	}
 
 	if u.Type == "rock" && u.Tasks.Current() == nil {

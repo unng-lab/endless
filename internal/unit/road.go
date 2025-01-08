@@ -38,7 +38,7 @@ func NewRoad(b *board.Board, unit *Unit) Road {
 func (r *Road) Next() (int, error) {
 	defer func() {
 		if r := recover(); r != nil {
-			slog.Error("error recover", r)
+			slog.Error("error recover", "panic", r)
 		}
 	}()
 
@@ -85,8 +85,8 @@ func (r *Road) Next() (int, error) {
 }
 
 func timeToWalkOnePoint(unit *Unit, b *board.Board, nextPoint geom.Point) int {
-	firstCellMoveCost := b.Cells[int(unit.Position.X)][int(unit.Position.Y)].MoveCost()
-	secondCellMoveCost := b.Cells[int(nextPoint.X)][int(nextPoint.Y)].MoveCost()
+	firstCellMoveCost := b.Cells[int(unit.Position.X)][int(unit.Position.Y)].MoveCost(0, 0)
+	secondCellMoveCost := b.Cells[int(nextPoint.X)][int(nextPoint.Y)].MoveCost(0, 0)
 	averageMoveCost := (firstCellMoveCost + secondCellMoveCost) / 2
 	return int(1 / (unit.Speed * averageMoveCost))
 }

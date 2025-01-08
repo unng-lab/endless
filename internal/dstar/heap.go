@@ -74,7 +74,7 @@ func (ds *DStar) Fix(i int) {
 
 // Remove removes and returns the element at index i from the heap.
 // The complexity is O(log n) where n = h.Len().
-func (ds *DStar) Remove(i int) any {
+func (ds *DStar) Remove(i int) *Node {
 	n := ds.Len() - 1
 	if n != i {
 		ds.Swap(i, n)

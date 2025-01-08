@@ -36,7 +36,7 @@ func (c *Cell) MoveCost(start, end int64) float64 {
 	}
 
 	// Если объект на клетке в заданном временном интервале является препятствием, то возвращаем максимальную стоимость
-	if tCost != math.Inf(1) {
+	if tCost == math.Inf(1) {
 		return tCost
 	}
 
