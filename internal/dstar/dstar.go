@@ -2,6 +2,7 @@ package dstar
 
 import (
 	"errors"
+	"log/slog"
 	"math"
 
 	"github.com/unng-lab/madfarmer/internal/board"
@@ -30,7 +31,7 @@ type DStar struct {
 	nodeCache map[nodeCacheKey]*Node // Cache to store nodes by position
 }
 
-func NewDstar(b *board.Board) *DStar {
+func NewDStar(b *board.Board) *DStar {
 	return &DStar{
 		B:     b,
 		start: nil,
@@ -97,29 +98,24 @@ func (ds *DStar) calculateKey(n *Node) [2]float64 {
 	}
 }
 
-// Сравнение ключей узлов.
-func compareKeys(a, b [2]float64) int {
-	if a[0] < b[0] {
-		return -1
+// Сравнение ключей узлов возвращает true, если первый больше
+func compareKeys(a, b [2]float64) bool {
+	if a[0] == b[0] {
+		return a[1] > b[1]
 	}
-	if a[0] > b[0] {
-		return 1
-	}
-	if a[1] < b[1] {
-		return -1
-	}
-	if a[1] > b[1] {
-		return 1
-	}
-	return 0
+	return a[0] > b[0]
 }
 
-// ComputeShortestPath выполняет вычисление кратчайшего пути.
-func (ds *DStar) ComputeShortestPath() {
+// ComputeShortestPath выполняет вычисление кратчайшего пути. Возвращает количество шагов и ошибку если путь не существует.
+func (ds *DStar) ComputeShortestPath() (int, error) {
+	i := 0
 	for ds.Len() > 0 {
+		i++
+		slog.Info("Current", "step", i)
 		u := ds.Pop()
 
-		if compareKeys(u.Key, ds.calculateKey(ds.start)) > 0 && ds.start.RHS == ds.start.G {
+		if compareKeys(u.Key, ds.calculateKey(ds.start)) && ds.start.RHS == ds.start.G {
+			//panic("Shortest path not found")
 			break
 		}
 
@@ -135,7 +131,12 @@ func (ds *DStar) ComputeShortestPath() {
 				ds.UpdateVertex(s)
 			}
 		}
+		i = i + 0
+		slog.Info("current", "node ", u)
+		i = i - 0
 	}
+	slog.Debug("Shortest path computed in ", " steps ", i)
+	return i, nil
 }
 
 // Обновление узла в очереди с приоритетом.

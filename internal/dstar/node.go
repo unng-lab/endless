@@ -83,16 +83,11 @@ func (n *Node) to(target Node) byte {
 // NewNode создаёт новый узел.
 func NewNode(position geom.Point, obstacle bool) *Node {
 	return &Node{
-		Position: position,
-		Index:    -1,
-		Obstacle: obstacle,
+		Position:  position,
+		G:         math.Inf(1),
+		RHS:       math.Inf(1),
+		Index:     -1,
+		Obstacle:  obstacle,
+		Neighbors: make([]*Node, 0, 8),
 	}
-}
-
-// Добавим метод для вычисления ключа узла
-func (n *Node) CalculateKey(s *Node, km float64) {
-	minValue := min(n.G, n.RHS)
-	h := n.heuristic(s.Position)
-	n.Key[0] = minValue + h + km
-	n.Key[1] = minValue
 }

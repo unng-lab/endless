@@ -1,7 +1,6 @@
 package unit
 
 import (
-	"math"
 	"sync"
 	"sync/atomic"
 
@@ -184,19 +183,6 @@ func (u *Unit) isFocused(p geom.Point) bool {
 		return true
 	}
 	return false
-}
-
-func heuristic(current geom.Point, goal geom.Point) float64 {
-	return math.Sqrt((current.X-goal.X)*(current.X-goal.X) +
-		(current.Y-goal.Y)*(current.Y-goal.Y))
-
-}
-
-func abs(x float64) float64 {
-	if x < 0 {
-		return -x
-	}
-	return x
 }
 
 type MoveMessage struct {

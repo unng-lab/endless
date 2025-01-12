@@ -35,6 +35,9 @@ const (
 	frameWidth  = 32
 	frameHeight = 32
 	frameCount  = 8
+
+	tileMiddleX = 0
+	tileMiddleY = 0.25
 )
 
 func NewRunner(camera *camera.Camera) *unit.Unit {
@@ -43,8 +46,8 @@ func NewRunner(camera *camera.Camera) *unit.Unit {
 	newUnit.Camera = camera
 	newUnit.SizeX = frameWidth / board.TileSize
 	newUnit.SizeY = frameHeight / board.TileSize
-	newUnit.PositionShiftX = 0.5 - newUnit.SizeX/2
-	newUnit.PositionShiftY = 0.75 - newUnit.SizeY
+	newUnit.PositionShiftX = tileMiddleX - newUnit.SizeX/2
+	newUnit.PositionShiftY = tileMiddleY - newUnit.SizeY
 	newUnit.Speed = 1 / float64(ebiten.DefaultTPS) / slowness
 	spriteRunner, err := img.Img("runner.png", 256, 96)
 	if err != nil {

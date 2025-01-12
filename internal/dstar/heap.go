@@ -1,5 +1,7 @@
 package dstar
 
+import "log/slog"
+
 func (ds *DStar) up(j int) {
 	for {
 		i := (j - 1) / 2 // parent
@@ -53,6 +55,10 @@ func (ds *DStar) Push(node *Node) {
 }
 
 func (ds *DStar) Pop() *Node {
+	if ds.Len() == 0 {
+		slog.Warn("ds.Pop: empty heap")
+		return nil
+	}
 	n := ds.Len() - 1
 	ds.Swap(0, n)
 	ds.down(0, n)
@@ -75,6 +81,10 @@ func (ds *DStar) Fix(i int) {
 // Remove removes and returns the element at index i from the heap.
 // The complexity is O(log n) where n = h.Len().
 func (ds *DStar) Remove(i int) *Node {
+	if i >= ds.Len() {
+		slog.Warn("ds.Remove: index out of range", "index", i)
+		return nil
+	}
 	n := ds.Len() - 1
 	if n != i {
 		ds.Swap(i, n)
@@ -82,5 +92,8 @@ func (ds *DStar) Remove(i int) *Node {
 			ds.up(i)
 		}
 	}
-	return ds.Pop()
+	node := ds.nodes[len(ds.nodes)-1]
+	ds.nodes = ds.nodes[0 : len(ds.nodes)-1]
+	node.Index = -1
+	return node
 }

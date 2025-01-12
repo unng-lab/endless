@@ -30,7 +30,7 @@ func TestDStarComputeShortestPath_NoObstacles(t *testing.T) {
 	}
 
 	// Ожидаемая длина пути для сетки 5x5 от (0,0) до (4,4)
-	expectedPathLength := 8 // При использовании диагональных переходов
+	expectedPathLength := 4 // При использовании диагональных переходов
 	if len(path)-1 != expectedPathLength {
 		t.Errorf("Ожидаемая длина пути %d, получено %d", expectedPathLength, len(path)-1)
 	}

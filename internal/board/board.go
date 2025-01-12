@@ -76,6 +76,9 @@ func (b *Board) Draw(screen *ebiten.Image) {
 		b.Camera.ScaleFactor(),
 	)
 	//b.DrawOp.GeoM.Translate(b.Camera.W.GetWidth()/2, b.Camera.W.GetHeight()/2)
+
+	b.DrawOp.GeoM.Translate(-b.Camera.TileSize()/2, -b.Camera.TileSize()/2)
+
 	b.DrawOp.GeoM.Translate(b.Camera.RelativePixels.Min.X, b.Camera.RelativePixels.Min.Y)
 	cellNumber := int64(0)
 	for j := b.Camera.Coordinates.Min.Y; j <= b.Camera.Coordinates.Max.Y; j++ {
