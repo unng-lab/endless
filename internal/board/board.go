@@ -3,6 +3,7 @@ package board
 import (
 	"image/color"
 	"log/slog"
+	"math"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -26,7 +27,7 @@ const CountTile = 1024
 
 type Board struct {
 	Cells              [][]Cell
-	width, height      int64
+	Width, Height      int64
 	CellOnScreen       atomic.Int64
 	EmptyCell          *ebiten.Image
 	ClearTile          *ebiten.Image
@@ -42,7 +43,7 @@ func NewBoard(c *camera.Camera) (*Board, error) {
 	// TODO тут какой то лютый пздц и надо привести к нормальному виду
 	var b Board
 	NewTiles()
-	b.width, b.height = CountTile, CountTile
+	b.Width, b.Height = CountTile, CountTile
 	rnd := rand.New(rand.NewSource(0))
 	b.Cells = make([][]Cell, CountTile)
 	for i := range b.Cells {
@@ -77,13 +78,11 @@ func (b *Board) Draw(screen *ebiten.Image) {
 	)
 	//b.DrawOp.GeoM.Translate(b.Camera.W.GetWidth()/2, b.Camera.W.GetHeight()/2)
 
-	b.DrawOp.GeoM.Translate(-b.Camera.TileSize()/2, -b.Camera.TileSize()/2)
-
 	b.DrawOp.GeoM.Translate(b.Camera.RelativePixels.Min.X, b.Camera.RelativePixels.Min.Y)
 	cellNumber := int64(0)
 	for j := b.Camera.Coordinates.Min.Y; j <= b.Camera.Coordinates.Max.Y; j++ {
 		for i := b.Camera.Coordinates.Min.X; i <= b.Camera.Coordinates.Max.X; i++ {
-			if i < 0 || i > float64(b.width-1) || j < 0 || j > float64(b.height-1) {
+			if i < 0 || i > float64(b.Width-1) || j < 0 || j > float64(b.Height-1) {
 				screen.DrawImage(b.ClearTile, &b.DrawOp)
 			} else {
 				if b.Camera.GetZoomFactor() > hd {
@@ -124,7 +123,7 @@ func getCost(seed int) float64 {
 }
 
 func (b *Board) GetCell(x, y int64) *Cell {
-	if x < 0 || x > b.width-1 || y < 0 || y > b.height-1 {
+	if x < 0 || x > b.Width-1 || y < 0 || y > b.Height-1 {
 		return &Cell{}
 	}
 	return &b.Cells[y][x]
@@ -174,12 +173,17 @@ func (b *Board) GetCost(from, to geom.Point, tick int64) float64 {
 	return 1.0
 }
 
-func (b *Board) IsObstacle(geom.Point) bool {
+func (b *Board) IsObstacle(p geom.Point) bool {
+	cell := b.GetCell(int64(p.X), int64(p.Y))
+	cost := cell.Cost
+	if cost == math.Inf(1) {
+		return true
+	}
 	return false
 }
 
 func (b *Board) IsInside(p geom.Point) bool {
-	if p.X < 0 || p.X > CountTile-1 || p.Y < 0 || p.Y > CountTile-1 {
+	if p.X < 0 || p.X > float64(b.Width)-1 || p.Y < 0 || p.Y > float64(b.Height)-1 {
 		return false
 	}
 	return true

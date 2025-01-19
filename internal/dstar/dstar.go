@@ -2,6 +2,7 @@ package dstar
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"math"
 
@@ -57,6 +58,14 @@ func (ds *DStar) Initialize(startPos, goalPos geom.Point) {
 	ds.goal.Key = ds.calculateKey(ds.goal)
 
 	ds.Push(ds.goal)
+}
+
+func (d *DStar) MoveStart(newStart *Node) {
+	oldStart := d.start
+	d.km += oldStart.heuristic(newStart.Position)
+	d.start = newStart
+	d.UpdateVertex(oldStart)
+	d.UpdateVertex(d.start)
 }
 
 // Получение узла по позиции, создание нового при необходимости.
@@ -185,4 +194,33 @@ func (ds *DStar) Cost(a, b *Node) float64 {
 		return math.Sqrt(2)
 	}
 	return 1.0
+}
+
+// Вспомогательная функция для восстановления пути.
+func reconstructPath(ds *DStar) ([]geom.Point, error) {
+	path := []geom.Point{}
+	current := ds.start
+	for {
+		path = append(path, current.Position)
+		if current.Position == ds.goal.Position {
+			break
+		}
+		if current.G == math.Inf(1) {
+			return nil, fmt.Errorf("путь не найден")
+		}
+		minCost := math.Inf(1)
+		var nextNode *Node
+		for _, neighbor := range ds.getNeighbors(current) {
+			cost := current.Cost(neighbor) + neighbor.G
+			if cost < minCost {
+				minCost = cost
+				nextNode = neighbor
+			}
+		}
+		if nextNode == nil {
+			return nil, fmt.Errorf("путь оборвался")
+		}
+		current = nextNode
+	}
+	return path, nil
 }

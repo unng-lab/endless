@@ -9,10 +9,43 @@ import (
 	"github.com/unng-lab/madfarmer/internal/geom"
 )
 
+const (
+	roadCost   = 100
+	groundCost = 300
+	woodCost   = 1000
+	swampCost  = 10000
+	//water      = math.Inf(1)
+)
+
+func letterToCost(marker rune) float64 {
+	switch marker {
+	case '.':
+		return groundCost
+	case 'r':
+		return roadCost
+	case '|':
+		return woodCost
+	case '%':
+		return swampCost
+	case '~':
+		return math.Inf(1)
+
+	default:
+		panic(fmt.Sprintf("unexpected %c marker", marker))
+	}
+}
+
 // Тест поиска пути без препятствий.
 func TestDStarComputeShortestPath_NoObstacles(t *testing.T) {
+	cells := []string{
+		"..........",
+		"..........",
+		"..........",
+		"..........",
+		"..........",
+	}
 	b := &board.Board{
-		Cells: StringSliceToCells(astarTests[0].path),
+		Cells: StringSliceToCells(cells),
 	}
 	ds := &DStar{B: b}
 
@@ -38,8 +71,19 @@ func TestDStarComputeShortestPath_NoObstacles(t *testing.T) {
 
 // Тест поиска пути с препятствиями.
 func TestDStarComputeShortestPath_WithObstacles(t *testing.T) {
+
+	cells := []string{
+		".....",
+		".~...",
+		".....",
+		".....",
+		".....",
+	}
+
 	b := &board.Board{
-		Cells: StringSliceToCells(astarTests[0].path),
+		Width:  5,
+		Height: 5,
+		Cells:  StringSliceToCells(cells),
 	}
 
 	ds := &DStar{B: b}
@@ -67,8 +111,18 @@ func TestDStarComputeShortestPath_WithObstacles(t *testing.T) {
 
 // Тест случая, когда цель недостижима.
 func TestDStarComputeShortestPath_UnreachableGoal(t *testing.T) {
+	cells := []string{
+		".~...",
+		".~...",
+		".~...",
+		".~...",
+		".~...",
+	}
+
 	b := &board.Board{
-		Cells: StringSliceToCells(astarTests[0].path),
+		Width:  5,
+		Height: 5,
+		Cells:  StringSliceToCells(cells),
 	}
 
 	ds := &DStar{B: b}
@@ -81,39 +135,10 @@ func TestDStarComputeShortestPath_UnreachableGoal(t *testing.T) {
 
 	// Восстанавливаем путь
 	path, err := reconstructPath(ds)
-	if err != nil {
+	if err == nil {
 		t.Error("Найден путь, хотя цель недостижима", err)
 	}
 	t.Log(path)
-}
-
-// Вспомогательная функция для восстановления пути.
-func reconstructPath(ds *DStar) ([]geom.Point, error) {
-	path := []geom.Point{}
-	current := ds.start
-	for {
-		path = append(path, current.Position)
-		if current.Position == ds.goal.Position {
-			break
-		}
-		if current.G == math.Inf(1) {
-			return nil, fmt.Errorf("путь не найден")
-		}
-		minCost := math.Inf(1)
-		var nextNode *Node
-		for _, neighbor := range ds.getNeighbors(current) {
-			cost := current.Cost(neighbor) + neighbor.G
-			if cost < minCost {
-				minCost = cost
-				nextNode = neighbor
-			}
-		}
-		if nextNode == nil {
-			return nil, fmt.Errorf("путь оборвался")
-		}
-		current = nextNode
-	}
-	return path, nil
 }
 
 func StringSliceToCells(ss []string) [][]board.Cell {
@@ -125,32 +150,6 @@ func StringSliceToCells(ss []string) [][]board.Cell {
 		}
 	}
 	return cells
-}
-
-const (
-	roadCost   = 0.5
-	groundCost = 1
-	woodCost   = 2.0
-	swampCost  = 10
-	water      = 4
-)
-
-func letterToCost(marker rune) float64 {
-	switch marker {
-	case '.':
-		return groundCost
-	case 'r':
-		return roadCost
-	case '|':
-		return woodCost
-	case '%':
-		return swampCost
-	case '~':
-		return water
-
-	default:
-		panic(fmt.Sprintf("unexpected %c marker", marker))
-	}
 }
 
 type pathfindTestCase struct {

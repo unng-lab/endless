@@ -36,8 +36,8 @@ const (
 	frameHeight = 32
 	frameCount  = 8
 
-	tileMiddleX = 0
-	tileMiddleY = 0.25
+	tileMiddleX = 0.5
+	tileMiddleY = 0.75
 )
 
 func NewRunner(camera *camera.Camera) *unit.Unit {

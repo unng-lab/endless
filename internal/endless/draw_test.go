@@ -2,6 +2,8 @@ package endless
 
 import (
 	"testing"
+
+	"github.com/unng-lab/madfarmer/internal/board"
 )
 
 func TestGetCellNumberX(t *testing.T) {
@@ -22,7 +24,7 @@ func TestGetCellNumberX(t *testing.T) {
 				camera:   0,
 				tileSize: 16,
 			},
-			want: 0,
+			want: board.CountTile/2 + 0,
 		},
 		{
 			name: "2",
@@ -31,7 +33,7 @@ func TestGetCellNumberX(t *testing.T) {
 				camera:   0,
 				tileSize: 16,
 			},
-			want: 0,
+			want: board.CountTile/2 + 0,
 		},
 		{
 			name: "3",
@@ -40,7 +42,7 @@ func TestGetCellNumberX(t *testing.T) {
 				camera:   0,
 				tileSize: 16,
 			},
-			want: 0,
+			want: board.CountTile/2 + 0,
 		},
 		{
 			name: "4",
@@ -49,7 +51,7 @@ func TestGetCellNumberX(t *testing.T) {
 				camera:   0,
 				tileSize: 16,
 			},
-			want: 1,
+			want: board.CountTile/2 + 1,
 		},
 		{
 			name: "5",
@@ -58,7 +60,7 @@ func TestGetCellNumberX(t *testing.T) {
 				camera:   0,
 				tileSize: 16,
 			},
-			want: 1,
+			want: board.CountTile/2 + 1,
 		},
 		{
 			name: "6",
@@ -67,7 +69,7 @@ func TestGetCellNumberX(t *testing.T) {
 				camera:   -1,
 				tileSize: 16,
 			},
-			want: -1,
+			want: board.CountTile/2 + -1,
 		},
 		{
 			name: "7",
@@ -76,7 +78,7 @@ func TestGetCellNumberX(t *testing.T) {
 				camera:   -1,
 				tileSize: 16,
 			},
-			want: 0,
+			want: board.CountTile/2 + 0,
 		},
 		{
 			name: "8",
@@ -85,7 +87,7 @@ func TestGetCellNumberX(t *testing.T) {
 				camera:   -1,
 				tileSize: 16,
 			},
-			want: 0,
+			want: board.CountTile/2 + 0,
 		},
 		{
 			name: "9",
@@ -94,7 +96,7 @@ func TestGetCellNumberX(t *testing.T) {
 				camera:   -1,
 				tileSize: 16,
 			},
-			want: 0,
+			want: board.CountTile/2 + 0,
 		},
 		{
 			name: "10",
@@ -103,7 +105,7 @@ func TestGetCellNumberX(t *testing.T) {
 				camera:   -1,
 				tileSize: 16,
 			},
-			want: 1,
+			want: board.CountTile/2 + 1,
 		},
 		{
 			name: "11",
@@ -112,7 +114,7 @@ func TestGetCellNumberX(t *testing.T) {
 				camera:   -1,
 				tileSize: 16,
 			},
-			want: 1,
+			want: board.CountTile/2 + 1,
 		},
 		{
 			name: "12",
@@ -121,7 +123,7 @@ func TestGetCellNumberX(t *testing.T) {
 				camera:   -257,
 				tileSize: 16,
 			},
-			want: -17,
+			want: board.CountTile/2 + -17,
 		},
 		{
 			name: "13",
@@ -130,7 +132,7 @@ func TestGetCellNumberX(t *testing.T) {
 				camera:   -257,
 				tileSize: 16,
 			},
-			want: -16,
+			want: board.CountTile/2 + -16,
 		},
 		{
 			name: "14",
@@ -139,7 +141,7 @@ func TestGetCellNumberX(t *testing.T) {
 				camera:   -257,
 				tileSize: 16,
 			},
-			want: -16,
+			want: board.CountTile/2 + -16,
 		},
 		{
 			name: "15",
@@ -148,7 +150,7 @@ func TestGetCellNumberX(t *testing.T) {
 				camera:   -257,
 				tileSize: 16,
 			},
-			want: -16,
+			want: board.CountTile/2 + -16,
 		},
 		{
 			name: "16",
@@ -157,7 +159,7 @@ func TestGetCellNumberX(t *testing.T) {
 				camera:   -257,
 				tileSize: 16,
 			},
-			want: -15,
+			want: board.CountTile/2 - 15,
 		},
 		{
 			name: "17",
@@ -166,7 +168,7 @@ func TestGetCellNumberX(t *testing.T) {
 				camera:   -257,
 				tileSize: 16,
 			},
-			want: -15,
+			want: board.CountTile/2 - 15,
 		},
 		{
 			name: "18",
@@ -175,7 +177,7 @@ func TestGetCellNumberX(t *testing.T) {
 				camera:   -450,
 				tileSize: 35.47,
 			},
-			want: 0,
+			want: board.CountTile/2 + 0,
 		},
 		{
 			name: "18",
@@ -184,7 +186,7 @@ func TestGetCellNumberX(t *testing.T) {
 				camera:   -450,
 				tileSize: 35.47,
 			},
-			want: 1,
+			want: board.CountTile/2 + 1,
 		},
 		{
 			name: "19",
@@ -193,7 +195,7 @@ func TestGetCellNumberX(t *testing.T) {
 				camera:   -300,
 				tileSize: 16,
 			},
-			want: 1,
+			want: board.CountTile/2 + 1,
 		},
 	}
 	for _, tt := range tests {

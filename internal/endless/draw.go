@@ -129,7 +129,7 @@ CellY: %0.2f`,
 }
 
 func GetCellNumber(cursor float64, camera float64, tileSize float64) float64 {
-	return math.Trunc((cursor+camera)/tileSize) + board.CountTile/2
+	return math.Trunc((cursor+camera-tileSize/2)/tileSize) + board.CountTile/2
 }
 
 func GetLeftAngle(cameraX, cameraY, cursorX, cursorY, tileSizeX, tileSizeY float64) (float64, float64) {
