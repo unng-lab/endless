@@ -9,43 +9,20 @@ import (
 	"github.com/unng-lab/madfarmer/internal/geom"
 )
 
-const (
-	roadCost   = 100
-	groundCost = 300
-	woodCost   = 1000
-	swampCost  = 10000
-	//water      = math.Inf(1)
-)
-
-func letterToCost(marker rune) float64 {
-	switch marker {
-	case '.':
-		return groundCost
-	case 'r':
-		return roadCost
-	case '|':
-		return woodCost
-	case '%':
-		return swampCost
-	case '~':
-		return math.Inf(1)
-
-	default:
-		panic(fmt.Sprintf("unexpected %c marker", marker))
-	}
-}
-
 // Тест поиска пути без препятствий.
 func TestDStarComputeShortestPath_NoObstacles(t *testing.T) {
 	cells := []string{
-		"..........",
-		"..........",
-		"..........",
-		"..........",
-		"..........",
+		".....",
+		".....",
+		".....",
+		".....",
+		".....",
 	}
+
 	b := &board.Board{
-		Cells: StringSliceToCells(cells),
+		Width:  5,
+		Height: 5,
+		Cells:  StringSliceToCells(cells),
 	}
 	ds := &DStar{B: b}
 
@@ -53,15 +30,20 @@ func TestDStarComputeShortestPath_NoObstacles(t *testing.T) {
 	goalPos := geom.Point{X: 4, Y: 4}
 
 	ds.Initialize(startPos, goalPos)
-	ds.ComputeShortestPath()
+	shortestPath, err := ds.ComputeShortestPath()
+	if err != nil {
+		panic(err)
+		return
+	}
+	t.Log("shortestPath", shortestPath)
 
 	// Восстанавливаем путь
-	path, err := reconstructPath(ds)
+	path, err := ds.reconstructPath()
 	if err != nil {
 		t.Error("Путь не найден, хотя препятствий нет", err)
 		return
 	}
-
+	PrintPathOnGrid(b, path)
 	// Ожидаемая длина пути для сетки 5x5 от (0,0) до (4,4)
 	expectedPathLength := 4 // При использовании диагональных переходов
 	if len(path)-1 != expectedPathLength {
@@ -92,15 +74,20 @@ func TestDStarComputeShortestPath_WithObstacles(t *testing.T) {
 	goalPos := geom.Point{X: 4, Y: 4}
 
 	ds.Initialize(startPos, goalPos)
-	ds.ComputeShortestPath()
+	shortestPath, err := ds.ComputeShortestPath()
+	if err != nil {
+		panic(err)
+		return
+	}
+	t.Log("shortestPath", shortestPath)
 
 	// Восстанавливаем путь
-	path, err := reconstructPath(ds)
+	path, err := ds.reconstructPath()
 	if err != nil {
 		t.Error("Путь не найден, хотя он существует")
 		return
 	}
-
+	PrintPathOnGrid(b, path)
 	// Проверяем, что путь не проходит через препятствия
 	for _, p := range path {
 		if b.IsObstacle(p) {
@@ -131,14 +118,174 @@ func TestDStarComputeShortestPath_UnreachableGoal(t *testing.T) {
 	goalPos := geom.Point{X: 4, Y: 4}
 
 	ds.Initialize(startPos, goalPos)
-	ds.ComputeShortestPath()
+	shortestPath, err := ds.ComputeShortestPath()
+	if err != nil {
+		panic(err)
+		return
+	}
+	t.Log("shortestPath", shortestPath)
 
 	// Восстанавливаем путь
-	path, err := reconstructPath(ds)
+	path, err := ds.reconstructPath()
 	if err == nil {
 		t.Error("Найден путь, хотя цель недостижима", err)
 	}
+	PrintPathOnGrid(b, path)
 	t.Log(path)
+}
+
+// Тест случае изменения старта
+func TestDStarComputeShortestPath_StartChanged(t *testing.T) {
+	cells := []string{
+		".....",
+		".....",
+		".....",
+		".....",
+		".....",
+	}
+
+	b := &board.Board{
+		Width:  5,
+		Height: 5,
+		Cells:  StringSliceToCells(cells),
+	}
+	ds := &DStar{B: b}
+
+	startPos := geom.Point{X: 0, Y: 0}
+	goalPos := geom.Point{X: 4, Y: 4}
+
+	ds.Initialize(startPos, goalPos)
+	shortestPath, err := ds.ComputeShortestPath()
+	if err != nil {
+		panic(err)
+		return
+	}
+	t.Log("shortestPath", shortestPath)
+	// Восстанавливаем путь
+	path, err := ds.reconstructPath()
+	if err != nil {
+		t.Error("Путь не найден, хотя препятствий нет", err)
+		return
+	}
+	PrintPathOnGrid(b, path)
+	// Ожидаемая длина пути для сетки 5x5 от (0,0) до (4,4)
+	expectedPathLength := 4 // При использовании диагональных переходов
+	if len(path)-1 != expectedPathLength {
+		t.Errorf("Ожидаемая длина пути %d, получено %d", expectedPathLength, len(path)-1)
+	}
+
+	ds.MoveStart(geom.Point{X: 1, Y: 2})
+	shortestPath, err = ds.ComputeShortestPath()
+	if err != nil {
+		panic(err)
+		return
+	}
+	t.Log("shortestPath", shortestPath)
+
+	// Восстанавливаем путь
+	path, err = ds.reconstructPath()
+	if err != nil {
+		t.Error("Путь не найден, хотя препятствий нет", err)
+		return
+	}
+	PrintPathOnGrid(b, path)
+	// Ожидаемая длина пути для сетки 5x5 от (0,0) до (4,4)
+	newExpectedPathLength := 3 // При использовании диагональных переходов
+	if len(path)-1 != newExpectedPathLength {
+		t.Errorf("Ожидаемая длина пути %d, получено %d", expectedPathLength, len(path)-1)
+	}
+}
+
+// Тест случая, когда цель недостижима.
+func TestDStarComputeShortestPathWithUpdates(t *testing.T) {
+	cells := []string{
+		".....",
+		".....",
+		".....",
+		".....",
+		".....",
+	}
+
+	b := &board.Board{
+		Width:  5,
+		Height: 5,
+		Cells:  StringSliceToCells(cells),
+	}
+
+	ds := &DStar{B: b}
+
+	startPos := geom.Point{X: 0, Y: 0}
+	goalPos := geom.Point{X: 4, Y: 4}
+
+	ds.Initialize(startPos, goalPos)
+	shortestPath, err := ds.ComputeShortestPath()
+	if err != nil {
+		panic(err)
+		return
+	}
+	t.Log("shortestPath", shortestPath)
+
+	// Восстанавливаем путь
+	path, err := ds.reconstructPath()
+	if err != nil {
+		t.Error("Путь не найден, хотя препятствий нет", err)
+		return
+	}
+	PrintPathOnGrid(b, path)
+	t.Log(path)
+
+	b.Cells[1][1].Cost = SwampCost
+	ds.UpdateVertex(ds.getNode(geom.Point{X: 1, Y: 1}))
+	shortestPath, err = ds.ComputeShortestPath()
+	if err != nil {
+		panic(err)
+		return
+	}
+	t.Log("shortestPath", shortestPath)
+
+	// Восстанавливаем путь
+	path, err = ds.reconstructPath()
+	if err != nil {
+		t.Error("Путь не найден, хотя препятствий нет", err)
+		return
+	}
+	PrintPathOnGrid(b, path)
+	t.Log(path)
+}
+
+const (
+	RoadCost   = 100
+	GroundCost = 300
+	WoodCost   = 1000
+	SwampCost  = 10000
+	//water      = math.Inf(1)
+)
+
+// Маркеры местности
+const (
+	GroundMarker = '.'
+	RoadMarker   = 'r'
+	WoodMarker   = '|'
+	SwampMarker  = '%'
+	WaterMarker  = '~'
+)
+
+func letterToCost(marker rune) float64 {
+	switch marker {
+	case GroundMarker:
+		return GroundCost
+	case RoadMarker:
+		return RoadCost
+	case WoodMarker:
+		return WoodCost
+	case SwampMarker:
+		return SwampCost
+	case WaterMarker:
+		return math.Inf(1)
+
+	default:
+		panic(fmt.Sprintf("unexpected %c marker", marker))
+	}
 }
 
 func StringSliceToCells(ss []string) [][]board.Cell {
@@ -150,6 +297,55 @@ func StringSliceToCells(ss []string) [][]board.Cell {
 		}
 	}
 	return cells
+}
+
+// costToLetter преобразует стоимость местности обратно в маркер.
+func costToLetter(cost float64) (rune, error) {
+	switch cost {
+	case GroundCost:
+		return GroundMarker, nil
+	case RoadCost:
+		return RoadMarker, nil
+	case WoodCost:
+		return WoodMarker, nil
+	case SwampCost:
+		return SwampMarker, nil
+	case math.Inf(1):
+		return WaterMarker, nil
+	default:
+		return '�', fmt.Errorf("неизвестная стоимость местности: %v", cost)
+	}
+}
+
+func PrintPathOnGrid(b *board.Board, path []geom.Point) {
+	pathMap := make(map[geom.Point]bool)
+	for _, cell := range path {
+		pathMap[cell] = true
+	}
+
+	for y := 0; int64(y) < b.Height; y++ {
+		for x := 0; int64(x) < b.Width; x++ {
+			cell := b.GetCell(int64(x), int64(y))
+			pos := geom.Point{X: float64(x), Y: float64(y)}
+			if _, ok := pathMap[pos]; ok {
+				if pos == path[len(path)-1] {
+					fmt.Print("G")
+				} else if pos == path[0] {
+					fmt.Print("S")
+				} else {
+					fmt.Print("*")
+				}
+
+			} else {
+				r, err := costToLetter(cell.Cost)
+				if err != nil {
+					fmt.Println(err)
+				}
+				fmt.Print(string(r))
+			}
+		}
+		fmt.Println()
+	}
 }
 
 type pathfindTestCase struct {

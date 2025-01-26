@@ -3,6 +3,7 @@ package dstar
 import (
 	"math"
 
+	"github.com/unng-lab/madfarmer/internal/board"
 	"github.com/unng-lab/madfarmer/internal/geom"
 )
 
@@ -36,17 +37,16 @@ type Node struct {
 	RHS       float64    // Оценка стоимости от текущего узла до целевого.
 	Key       [2]float64 // Ключ узла для очереди с приоритетом.
 	Neighbors []*Node    // Соседи текущего узла.
-	Obstacle  bool       // Признак наличия препятствия.
 	Index     int
 }
 
 // Стоимость перехода между узлами.
-func (n *Node) Cost(v *Node) float64 {
-	if n.Obstacle || v.Obstacle {
+func (n *Node) Cost(v *Node, b *board.Board) float64 {
+	if n.Position.To(v.Position) == geom.DirNone {
 		return math.Inf(1)
 	}
-	// Можно добавить разные стоимости для диагональных и прямых переходов.
-	return 1.0
+	cost := b.GetCost(n.Position, v.Position, 0)
+	return cost
 }
 
 // Эвристическая функция — манхэттенское расстояние.
@@ -81,13 +81,12 @@ func (n *Node) to(target Node) byte {
 }
 
 // NewNode создаёт новый узел.
-func NewNode(position geom.Point, obstacle bool) *Node {
+func NewNode(position geom.Point) *Node {
 	return &Node{
 		Position:  position,
 		G:         math.Inf(1),
 		RHS:       math.Inf(1),
 		Index:     -1,
-		Obstacle:  obstacle,
 		Neighbors: make([]*Node, 0, 8),
 	}
 }

@@ -3,7 +3,6 @@ package dstar
 import (
 	"errors"
 	"fmt"
-	"log/slog"
 	"math"
 
 	"github.com/unng-lab/madfarmer/internal/board"
@@ -60,7 +59,8 @@ func (ds *DStar) Initialize(startPos, goalPos geom.Point) {
 	ds.Push(ds.goal)
 }
 
-func (d *DStar) MoveStart(newStart *Node) {
+func (d *DStar) MoveStart(point geom.Point) {
+	newStart := d.getNode(point)
 	oldStart := d.start
 	d.km += oldStart.heuristic(newStart.Position)
 	d.start = newStart
@@ -74,15 +74,14 @@ func (ds *DStar) getNode(pos geom.Point) *Node {
 	if node, exists := ds.nodeCache[key]; exists {
 		return node
 	}
-	obstacle := ds.B.IsObstacle(pos)
-	node := NewNode(pos, obstacle)
+	node := NewNode(pos)
 	ds.nodeCache[key] = node
 	return node
 }
 
 // Проверка корректности позиции (в пределах границ и не препятствие).
 func (ds *DStar) isValidPosition(pos geom.Point) bool {
-	return ds.B.IsInside(pos) && !ds.B.IsObstacle(pos)
+	return ds.B.IsInside(pos)
 }
 
 // Получение соседей узла.
@@ -120,7 +119,7 @@ func (ds *DStar) ComputeShortestPath() (int, error) {
 	i := 0
 	for ds.Len() > 0 {
 		i++
-		slog.Info("Current", "step", i)
+		//slog.Info("Current", "step", i)
 		u := ds.Pop()
 
 		if compareKeys(u.Key, ds.calculateKey(ds.start)) && ds.start.RHS == ds.start.G {
@@ -141,10 +140,10 @@ func (ds *DStar) ComputeShortestPath() (int, error) {
 			}
 		}
 		i = i + 0
-		slog.Info("current", "node ", u)
+		//slog.Info("current", "node ", u)
 		i = i - 0
 	}
-	slog.Debug("Shortest path computed in ", " steps ", i)
+	//slog.Debug("Shortest path computed in ", " steps ", i)
 	return i, nil
 }
 
@@ -154,7 +153,7 @@ func (ds *DStar) UpdateVertex(u *Node) {
 		u.RHS = math.Inf(1)
 		neighbors := ds.getNeighbors(u)
 		for _, s := range neighbors {
-			u.RHS = min(u.RHS, s.G+s.Cost(u))
+			u.RHS = min(u.RHS, s.G+s.Cost(u, ds.B))
 		}
 	}
 
@@ -169,35 +168,8 @@ func (ds *DStar) UpdateVertex(u *Node) {
 	}
 }
 
-// Метод для получения предшественников узла
-func (ds *DStar) predecessors(u *Node) []*Node {
-	return u.Neighbors
-}
-
-// Метод для получения G-стоимости узла (с проверкой Infinity)
-func (ds *DStar) getG(u *Node) float64 {
-	if u == nil {
-		return math.Inf(1)
-	}
-	return u.G
-}
-
-// Метод стоимости перехода между узлами
-func (ds *DStar) Cost(a, b *Node) float64 {
-	if a.Obstacle || b.Obstacle {
-		return math.Inf(1)
-	}
-	// If moving diagonally, cost is sqrt(2), else 1
-	dx := math.Abs(a.Position.X - b.Position.X)
-	dy := math.Abs(a.Position.Y - b.Position.Y)
-	if dx+dy > 1 {
-		return math.Sqrt(2)
-	}
-	return 1.0
-}
-
 // Вспомогательная функция для восстановления пути.
-func reconstructPath(ds *DStar) ([]geom.Point, error) {
+func (ds *DStar) reconstructPath() ([]geom.Point, error) {
 	path := []geom.Point{}
 	current := ds.start
 	for {
@@ -211,7 +183,7 @@ func reconstructPath(ds *DStar) ([]geom.Point, error) {
 		minCost := math.Inf(1)
 		var nextNode *Node
 		for _, neighbor := range ds.getNeighbors(current) {
-			cost := current.Cost(neighbor) + neighbor.G
+			cost := current.Cost(neighbor, ds.B) + neighbor.G
 			if cost < minCost {
 				minCost = cost
 				nextNode = neighbor

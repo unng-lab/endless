@@ -44,17 +44,12 @@ func NewBoard(c *camera.Camera) (*Board, error) {
 	var b Board
 	NewTiles()
 	b.Width, b.Height = CountTile, CountTile
-	rnd := rand.New(rand.NewSource(0))
-	b.Cells = make([][]Cell, CountTile)
+	seed := rand.Intn(5)
+	b.Cells = make([][]Cell, b.Width)
 	for i := range b.Cells {
-		b.Cells[i] = make([]Cell, CountTile)
+		b.Cells[i] = make([]Cell, b.Height)
 		for j := range b.Cells[i] {
-			seed := rnd.Intn(len(Tiles))
-			b.Cells[i][j] = Cell{
-				TileImage:      Tiles[seed].Normal,
-				TileImageSmall: Tiles[seed].Small,
-				Cost:           getCost(seed),
-			}
+			b.Cells[i][j] = NewCell(CellType(seed))
 		}
 	}
 	empty, err := img.Img("empty.jpg", TileSize, TileSize)
@@ -169,17 +164,18 @@ func (b *Board) GetNeighbours(target geom.Point) []geom.Point {
 }
 
 func (b *Board) GetCost(from, to geom.Point, tick int64) float64 {
-	// тут будет сложный расчет стоимости между двумя точками в заданный тик
-	return 1.0
-}
-
-func (b *Board) IsObstacle(p geom.Point) bool {
-	cell := b.GetCell(int64(p.X), int64(p.Y))
-	cost := cell.Cost
-	if cost == math.Inf(1) {
-		return true
+	cellA := b.GetCell(int64(from.X), int64(from.Y))
+	cellB := b.GetCell(int64(to.X), int64(to.Y))
+	if cellA == nil || cellB == nil {
+		panic("cell is nil")
 	}
-	return false
+	if math.IsInf(cellA.Cost, 1) || math.IsInf(cellB.Cost, 1) {
+		return math.Inf(1)
+	}
+
+	avgCost := (cellA.Cost + cellB.Cost) / 2
+	length := from.Length(to)
+	return avgCost * length
 }
 
 func (b *Board) IsInside(p geom.Point) bool {
@@ -187,4 +183,9 @@ func (b *Board) IsInside(p geom.Point) bool {
 		return false
 	}
 	return true
+}
+
+func (b *Board) IsObstacle(p geom.Point) bool {
+	cell := b.GetCell(int64(p.X), int64(p.Y))
+	return math.IsInf(cell.Cost, 1)
 }
