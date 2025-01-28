@@ -118,7 +118,7 @@ func (b *Board) GetCellNumber() int64 {
 
 func (b *Board) GetCell(x, y int64) *Cell {
 	if x < 0 || x > int64(b.Width)-1 || y < 0 || y > int64(b.Height)-1 {
-		return &Cell{}
+		return nil
 	}
 	return b.Cell(int(x), int(y))
 }
