@@ -8,55 +8,41 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/vector"
 	"golang.org/x/image/font/basicfont"
 
-	"github.com/unng-lab/madfarmer/internal/camera"
 	"github.com/unng-lab/madfarmer/internal/geom"
 )
 
 func (u *Unit) Draw(screen *ebiten.Image, counter int) bool {
-	defer u.DrawOptions.GeoM.Reset()
-	u.DrawOptions.GeoM.Scale(
+	drawOptions := drawOptionsPool.Get().(*ebiten.DrawImageOptions)
+	defer func() {
+		drawOptions.GeoM.Reset()
+		drawOptionsPool.Put(drawOptions)
+	}()
+
+	drawOptions.GeoM.Scale(
 		u.Camera.ScaleFactor(),
 		u.Camera.ScaleFactor(),
 	)
 	drawPoint := u.GetDrawPoint()
-	u.DrawOptions.GeoM.Translate(drawPoint.X, drawPoint.Y)
+	drawOptions.GeoM.Translate(drawPoint.X, drawPoint.Y)
 	if u.Focused {
-		screen.DrawImage(u.FocusedAnimation[counter%len(u.FocusedAnimation)], &u.DrawOptions)
-		u.DrawTitle(screen)
+		screen.DrawImage(u.Graphics.FocusedAnimation[counter%len(u.Graphics.FocusedAnimation)], drawOptions)
+		u.DrawTitle(screen, drawOptions)
 	} else {
-		screen.DrawImage(u.Animation[counter%len(u.Animation)], &u.DrawOptions)
+		screen.DrawImage(u.Graphics.Animation[counter%len(u.Graphics.Animation)], drawOptions)
 	}
 
 	if drawRect {
 		u.drawRect(screen)
 	}
-
-	//ebitenutil.DebugPrintAt(
-	//	screen,
-	//	fmt.Sprintf(
-	//		`posX: %0.2f,
-	//posY: %0.2f,
-	//name: %s,
-	//uposX: %0.2f,
-	//uposY: %0.2f`,
-	//		u.DrawOptions.GeoM.Element(0, 2),
-	//		u.DrawOptions.GeoM.Element(1, 2),
-	//		u.Name,
-	//		u.Position.X,
-	//		u.Position.Y,
-	//	),qqqq
-	//	100,
-	//	0,
-	//)
 	return true
 }
 
-func (u *Unit) DrawTitle(screen *ebiten.Image) {
+func (u *Unit) DrawTitle(screen *ebiten.Image, drawOptions *ebiten.DrawImageOptions) {
 	// Создаем шрифт
 	fontFace := basicfont.Face7x13
 
 	// Рисуем текст на экране
-	text.DrawWithOptions(screen, u.Name, fontFace, &u.DrawOptions)
+	text.DrawWithOptions(screen, u.Name, fontFace, drawOptions)
 }
 
 func (u *Unit) drawRect(screen *ebiten.Image) {
@@ -67,7 +53,7 @@ func (u *Unit) drawRect(screen *ebiten.Image) {
 		screen,
 		float32(posX),
 		float32(posY),
-		float32(posX+u.Camera.TileSize()*u.SizeX),
+		float32(posX+u.Camera.TileSize()*u.Positioning.SizeX),
 		float32(posY),
 		1,
 		color.White,
@@ -75,10 +61,10 @@ func (u *Unit) drawRect(screen *ebiten.Image) {
 	)
 	vector.StrokeLine(
 		screen,
-		float32(posX+u.Camera.TileSize()*u.SizeX),
+		float32(posX+u.Camera.TileSize()*u.Positioning.SizeX),
 		float32(posY),
-		float32(posX+u.Camera.TileSize()*u.SizeX),
-		float32(posY+u.Camera.TileSize()*u.SizeY),
+		float32(posX+u.Camera.TileSize()*u.Positioning.SizeX),
+		float32(posY+u.Camera.TileSize()*u.Positioning.SizeY),
 		1,
 		color.White,
 		false,
@@ -88,7 +74,7 @@ func (u *Unit) drawRect(screen *ebiten.Image) {
 		float32(posX),
 		float32(posY),
 		float32(posX),
-		float32(posY+u.Camera.TileSize()*u.SizeY),
+		float32(posY+u.Camera.TileSize()*u.Positioning.SizeY),
 		1,
 		color.White,
 		false,
@@ -96,9 +82,9 @@ func (u *Unit) drawRect(screen *ebiten.Image) {
 	vector.StrokeLine(
 		screen,
 		float32(posX),
-		float32(posY+u.Camera.TileSize()*u.SizeY),
-		float32(posX+u.Camera.TileSize()*u.SizeX),
-		float32(posY+u.Camera.TileSize()*u.SizeY),
+		float32(posY+u.Camera.TileSize()*u.Positioning.SizeY),
+		float32(posX+u.Camera.TileSize()*u.Positioning.SizeX),
+		float32(posY+u.Camera.TileSize()*u.Positioning.SizeY),
 		1,
 		color.White,
 		false,
@@ -107,32 +93,8 @@ func (u *Unit) drawRect(screen *ebiten.Image) {
 
 func (u *Unit) GetDrawPoint() geom.Point {
 	drawPoint := u.Camera.PointToCameraPixel(geom.Point{
-		X: u.Position.X + u.PositionShiftX + u.PositionShiftModX,
-		Y: u.Position.Y + u.PositionShiftY + u.PositionShiftModY,
+		X: u.Positioning.Position.X + u.Positioning.PositionShiftX + u.Positioning.PositionShiftModX,
+		Y: u.Positioning.Position.Y + u.Positioning.PositionShiftY + u.Positioning.PositionShiftModY,
 	})
 	return drawPoint
-}
-
-func (u *Unit) DrawPath(screen *ebiten.Image, camera camera.Camera) {
-	if len(u.Pathing.Path) <= 1 {
-		panic("path is empty")
-	}
-	u.Pathing.Path[len(u.Pathing.Path)-1] = geom.Pt(u.Position.X, u.Position.Y)
-
-	for i := len(u.Pathing.Path) - 1; i > 0; i-- {
-		if !camera.Coordinates.ContainsOR(u.Pathing.Path[i]) ||
-			!camera.Coordinates.ContainsOR(u.Pathing.Path[i-1]) {
-			start := camera.MiddleOfPointInRelativePixels(u.Pathing.Path[i])
-			finish := camera.MiddleOfPointInRelativePixels(u.Pathing.Path[i-1])
-			vector.StrokeLine(screen,
-				float32(start.X),
-				float32(start.Y),
-				float32(finish.X),
-				float32(finish.Y),
-				1,
-				color.White,
-				true,
-			)
-		}
-	}
 }

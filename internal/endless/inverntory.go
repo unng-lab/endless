@@ -44,10 +44,10 @@ func NewRunner(camera *camera.Camera) *unit.Unit {
 	var newUnit unit.Unit
 	newUnit.Type = "runner"
 	newUnit.Camera = camera
-	newUnit.SizeX = frameWidth / board.TileSize
-	newUnit.SizeY = frameHeight / board.TileSize
-	newUnit.PositionShiftX = tileMiddleX - newUnit.SizeX/2
-	newUnit.PositionShiftY = tileMiddleY - newUnit.SizeY
+	newUnit.Positioning.SizeX = frameWidth / board.TileSize
+	newUnit.Positioning.SizeY = frameHeight / board.TileSize
+	newUnit.Positioning.PositionShiftX = tileMiddleX - newUnit.Positioning.SizeX/2
+	newUnit.Positioning.PositionShiftY = tileMiddleY - newUnit.Positioning.SizeY
 	newUnit.Speed = 1 / float64(ebiten.DefaultTPS) / slowness
 	spriteRunner, err := img.Img("runner.png", 256, 96)
 	if err != nil {
@@ -57,6 +57,10 @@ func NewRunner(camera *camera.Camera) *unit.Unit {
 	if err != nil {
 		panic(err)
 	}
+	graphics := unit.Graphics{
+		Animation:        make([]*ebiten.Image, 0, frameCount),
+		FocusedAnimation: make([]*ebiten.Image, 0, frameCount),
+	}
 	for i := range frameCount {
 		sx, sy := frameOX+i*frameWidth, frameOY
 		frame := spriteRunner.SubImage(image.Rect(
@@ -65,7 +69,7 @@ func NewRunner(camera *camera.Camera) *unit.Unit {
 			sx+frameWidth,
 			sy+frameHeight,
 		)).(*ebiten.Image)
-		newUnit.Animation = append(newUnit.Animation, frame)
+		graphics.Animation = append(graphics.Animation, frame)
 
 		frameFocused := spriteFocused.SubImage(image.Rect(
 			sx,
@@ -73,8 +77,10 @@ func NewRunner(camera *camera.Camera) *unit.Unit {
 			sx+frameWidth,
 			sy+frameHeight,
 		)).(*ebiten.Image)
-		newUnit.FocusedAnimation = append(newUnit.FocusedAnimation, frameFocused)
+		graphics.FocusedAnimation = append(graphics.FocusedAnimation, frameFocused)
 	}
+
+	newUnit.Graphics = &graphics
 
 	return &newUnit
 }
@@ -83,7 +89,7 @@ func NewRock(camera *camera.Camera) *unit.Unit {
 	var newUnit unit.Unit
 	newUnit.Type = "rock"
 	newUnit.Camera = camera
-	newUnit.SizeX, newUnit.SizeY = 1, 1
+	newUnit.Positioning.SizeX, newUnit.Positioning.SizeY = 1, 1
 	spriteRocks, err := img.Img("rocks.png", 32, 32)
 	if err != nil {
 		panic(err)
@@ -96,8 +102,13 @@ func NewRock(camera *camera.Camera) *unit.Unit {
 		16,
 	)).(*ebiten.Image)
 
-	newUnit.Animation = append(newUnit.Animation, frame)
-	newUnit.FocusedAnimation = append(newUnit.FocusedAnimation, frame)
+	graphics := unit.Graphics{
+		Animation:        make([]*ebiten.Image, 0, frameCount),
+		FocusedAnimation: make([]*ebiten.Image, 0, frameCount),
+	}
+	graphics.Animation = append(graphics.Animation, frame)
+	graphics.FocusedAnimation = append(graphics.FocusedAnimation, frame)
+	newUnit.Graphics = &graphics
 
 	return &newUnit
 }

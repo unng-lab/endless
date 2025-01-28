@@ -22,8 +22,8 @@ type Road struct {
 
 func (r *Road) Update(unit *Unit) error {
 	part := float64(r.timeToWalkOnePoint-unit.SleepTicks) / float64(r.timeToWalkOnePoint)
-	unit.PositionShiftModX = (r.nextPoint.X - r.position.X) * part
-	unit.PositionShiftModY = (r.nextPoint.Y - r.position.Y) * part
+	unit.Positioning.PositionShiftModX = (r.nextPoint.X - r.position.X) * part
+	unit.Positioning.PositionShiftModY = (r.nextPoint.Y - r.position.Y) * part
 	//slog.Info("shift mod", "x", unit.PositionShiftModX, "y", unit.PositionShiftModY)
 	return nil
 }
@@ -43,7 +43,7 @@ func (r *Road) Next() (int, error) {
 	}()
 
 	if r.nextMove != nil {
-		if r.position == r.unit.Position {
+		if r.position == r.unit.Positioning.Position {
 			if err := r.nextMove(); err == nil {
 				if len(r.Astar.Path) == 0 {
 					slog.Info("task finished")
@@ -59,9 +59,9 @@ func (r *Road) Next() (int, error) {
 
 	}
 
-	dir := r.unit.Position.To(r.Astar.Path[len(r.Astar.Path)-1])
+	dir := r.unit.Positioning.Position.To(r.Astar.Path[len(r.Astar.Path)-1])
 
-	nextPoint, err := r.unit.Position.GetNeighbor(dir)
+	nextPoint, err := r.unit.Positioning.Position.GetNeighbor(dir)
 
 	if err != nil {
 		slog.Error("GetNeighbor", "error", err, "unitType", r.unit.Type, "dir", dir)
@@ -74,10 +74,10 @@ func (r *Road) Next() (int, error) {
 
 	walkOnePoint := timeToWalkOnePoint(r.unit, r.B, nextPoint)
 	r.nextMove = func() error {
-		r.unit.Relocate(r.unit.Position, nextPoint)
+		r.unit.Relocate(r.unit.Positioning.Position, nextPoint)
 		return nil
 	}
-	r.position = r.unit.Position
+	r.position = r.unit.Positioning.Position
 	r.timeToWalkOnePoint = walkOnePoint
 	r.nextPoint = nextPoint
 
@@ -85,7 +85,7 @@ func (r *Road) Next() (int, error) {
 }
 
 func timeToWalkOnePoint(unit *Unit, b *board.Board, nextPoint geom.Point) int {
-	firstCellMoveCost := b.Cells[int(unit.Position.X)][int(unit.Position.Y)].MoveCost(0, 0)
+	firstCellMoveCost := b.Cells[int(unit.Positioning.Position.X)][int(unit.Positioning.Position.Y)].MoveCost(0, 0)
 	secondCellMoveCost := b.Cells[int(nextPoint.X)][int(nextPoint.Y)].MoveCost(0, 0)
 	averageMoveCost := (firstCellMoveCost + secondCellMoveCost) / 2
 	return int(1 / (unit.Speed * averageMoveCost))
@@ -100,7 +100,7 @@ func (r *Road) GetDescription() string {
 }
 
 func (r *Road) Path(to geom.Point) error {
-	err := r.BuildPath(r.unit.Position.X, r.unit.Position.Y, to.X, to.Y)
+	err := r.BuildPath(r.unit.Positioning.Position.X, r.unit.Positioning.Position.Y, to.X, to.Y)
 	if err != nil {
 		return err
 	}

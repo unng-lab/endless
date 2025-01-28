@@ -106,7 +106,7 @@ func getRandomTileImageFromQuadrant(n int) (*ebiten.Image, *ebiten.Image) {
 }
 
 func getWaterImg() (*ebiten.Image, *ebiten.Image) {
-	spriteRocks, err := img.Img("boat.png", 16, 16)
+	spriteRocks, err := img.Img("boat.jpg", 16, 16)
 	if err != nil {
 		panic(err)
 	}

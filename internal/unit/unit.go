@@ -7,35 +7,26 @@ import (
 	"github.com/brianvoe/gofakeit/v7"
 	"github.com/hajimehoshi/ebiten/v2"
 
-	"github.com/unng-lab/madfarmer/internal/astar"
 	"github.com/unng-lab/madfarmer/internal/board"
 	"github.com/unng-lab/madfarmer/internal/camera"
-	"github.com/unng-lab/madfarmer/internal/ch"
 	"github.com/unng-lab/madfarmer/internal/geom"
-)
-
-const (
-	UnitStatusUndefined = iota
-	UnitStatusRunning
-	UnitStatusPaused
-	UnitStatusFinished
-	UnitStatusIdle
 )
 
 const (
 	drawRect = true
 )
 
-type Unit struct {
-	ID int
-	// тип юнита
-	Type string
-	// Имя юнита
-	Name string
-	// обычная анимация
-	Animation []*ebiten.Image
-	// анимация с фокусом
+var drawOptionsPool = sync.Pool{
+	New: func() any {
+		return &ebiten.DrawImageOptions{}
+	},
+}
+
+type Graphics struct {
+	Animation        []*ebiten.Image
 	FocusedAnimation []*ebiten.Image
+}
+type Positioning struct {
 	// Целочисленные координаты
 	Position geom.Point
 	// Размеры иконки
@@ -47,14 +38,21 @@ type Unit struct {
 	// сдвиг иконки относительно задания
 	PositionShiftModX float64 // in tiles
 	PositionShiftModY float64 // in tiles
+}
+
+type Unit struct {
+	ID int
+	// тип юнита
+	Type string
+	// Имя юнита
+	Name string
+
+	Graphics *Graphics
+
+	Positioning Positioning
 	// скорость движения
 	Speed float64 // tiles per update tick
 
-	DrawOptions ebiten.DrawImageOptions
-	//deprecated
-	Pathing astar.Astar
-	//deprecated
-	Status int
 	//Ticks экономные тики для отработки игровых событий
 	Ticks chan *sync.WaitGroup
 	//CameraTicks тики для отработки анимации и тд
@@ -66,12 +64,6 @@ type Unit struct {
 	OnBoard atomic.Bool
 	// Можно немного пооптимизировать и сделать через глобальную переменную
 	Focused bool
-
-	//Analitics
-	AnaliticsDB *ch.AnaliticsDB
-
-	//deprecated
-	CurTarget geom.Point
 
 	//сколько тиков юнит спит до след изменения
 	SleepTicks int
@@ -85,11 +77,9 @@ type Unit struct {
 
 func (u *Unit) New(
 	id int,
-	positionX float64,
-	positionY float64,
+	position geom.Point,
 	b *board.Board,
 	moveChan chan MoveMessage,
-	// db *ch.AnaliticsDB,
 ) *Unit {
 	var unit Unit
 	unit.ID = id
@@ -101,26 +91,15 @@ func (u *Unit) New(
 	unit.CameraTicks = make(chan struct{}, 1)
 	unit.Ticks = make(chan *sync.WaitGroup, 1)
 
-	unit.SizeX = u.SizeX
-	unit.SizeY = u.SizeY
 	unit.Speed = u.Speed
-	// TODO заменить на copy
-	for i := range u.Animation {
-		unit.Animation = append(unit.Animation, u.Animation[i])
-	}
 
-	// TODO заменить на copy
-	for i := range u.FocusedAnimation {
-		unit.FocusedAnimation = append(unit.FocusedAnimation, u.FocusedAnimation[i])
-	}
-	unit.PositionShiftX = u.PositionShiftX
-	unit.PositionShiftY = u.PositionShiftY
+	unit.Graphics = u.Graphics
 
-	//unit.AnaliticsDB = db
+	unit.Positioning = u.Positioning
 
 	unit.Tasks = NewTaskList()
 
-	unit.Relocate(geom.Pt(0, 0), geom.Pt(positionX, positionY))
+	unit.Relocate(geom.Pt(0, 0), position)
 
 	unit.SetTask()
 
@@ -155,10 +134,7 @@ func (u *Unit) run(wg chan *sync.WaitGroup) {
 func (u *Unit) OnBoardUpdate() {
 	var curTask Task
 
-	u.Focused = false
-	if u.isFocused(u.Camera.Cursor) {
-		u.Focused = true
-	}
+	u.Focused = u.isFocused(u.Camera.Cursor)
 
 	if curTask = u.Tasks.Current(); curTask == nil {
 		return
@@ -174,15 +150,12 @@ func (u *Unit) OnBoardUpdate() {
 
 func (u *Unit) Rect() geom.Rectangle {
 	Min := u.GetDrawPoint()
-	Max := Min.Add(geom.Pt(u.SizeX*u.Camera.TileSize(), u.SizeY*u.Camera.TileSize()))
+	Max := Min.Add(geom.Pt(u.Positioning.SizeX*u.Camera.TileSize(), u.Positioning.SizeY*u.Camera.TileSize()))
 	return geom.Rectangle{Min: Min, Max: Max}
 }
 
 func (u *Unit) isFocused(p geom.Point) bool {
-	if p.In(u.Rect()) {
-		return true
-	}
-	return false
+	return p.In(u.Rect())
 }
 
 type MoveMessage struct {

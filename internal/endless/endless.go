@@ -1,10 +1,12 @@
 package endless
 
 import (
-	"github.com/unng-lab/madfarmer/internal/mapgrid"
 	"log/slog"
-	"math/rand"
+	"math/rand/v2"
 	"sync"
+
+	"github.com/unng-lab/madfarmer/internal/geom"
+	"github.com/unng-lab/madfarmer/internal/mapgrid"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
@@ -59,8 +61,7 @@ func NewGame(
 	for i := range unitCount {
 		newUnit := g.inventory.Units["runner"].New(
 			i,
-			float64(rand.Intn(board.CountTile)),
-			float64(rand.Intn(board.CountTile)),
+			getRandomPoint(g.board),
 			g.board,
 			moveChan,
 			//analyticsDB,
@@ -74,11 +75,9 @@ func NewGame(
 	for i := range rockCount {
 		newUnit := g.inventory.Units["rock"].New(
 			i,
-			float64(rand.Intn(board.CountTile)),
-			float64(rand.Intn(board.CountTile)),
+			getRandomPoint(g.board),
 			g.board,
 			moveChan,
-			//analyticsDB,
 		)
 		wg := make(chan *sync.WaitGroup, 1)
 		g.Units = append(g.Units, newUnit)
@@ -91,4 +90,11 @@ func NewGame(
 	slog.Info("game created")
 
 	return &g
+}
+
+func getRandomPoint(board *board.Board) geom.Point {
+	return geom.Point{
+		X: float64(rand.Int64N(board.Width)),
+		Y: float64(rand.Int64N(board.Height)),
+	}
 }

@@ -44,7 +44,7 @@ func NewBoard(c *camera.Camera) (*Board, error) {
 	var b Board
 	NewTiles()
 	b.Width, b.Height = CountTile, CountTile
-	seed := rand.Intn(5)
+	seed := rand.Intn(5) + 1
 	b.Cells = make([][]Cell, b.Width)
 	for i := range b.Cells {
 		b.Cells[i] = make([]Cell, b.Height)

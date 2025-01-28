@@ -19,10 +19,10 @@ func (u *Unit) Relocate(from, to geom.Point) {
 
 	}
 
-	u.Position.X = to.X
-	u.Position.Y = to.Y
-	u.PositionShiftModX = 0
-	u.PositionShiftModY = 0
+	u.Positioning.Position.X = to.X
+	u.Positioning.Position.Y = to.Y
+	u.Positioning.PositionShiftModX = 0
+	u.Positioning.PositionShiftModY = 0
 
 	//slog.Info("Unit.Relocate", "from", from, "to", to)
 }
