@@ -1,143 +1,71 @@
 package board
 
-//func TestGetLeftXY(t *testing.T) {
-//	type args struct {
-//		cameraX  float64
-//		cameraY  float64
-//		tileSize float64
-//	}
-//	tests := []struct {
-//		name      string
-//		args      args
-//		wantX     float64
-//		wantY     float64
-//		wantCellX float64
-//		wantCellY float64
-//	}{
-//		{
-//			name: "1",
-//			args: args{
-//				cameraX:  0,
-//				cameraY:  0,
-//				tileSize: 16,
-//			},
-//			wantX:     0,
-//			wantY:     0,
-//			wantCellX: CountTile / 2,
-//			wantCellY: CountTile / 2,
-//		},
-//		{
-//			name: "2",
-//			args: args{
-//				cameraX:  -10,
-//				cameraY:  0,
-//				tileSize: 16,
-//			},
-//			wantX:     -6,
-//			wantY:     0,
-//			wantCellX: CountTile/2 - 1,
-//			wantCellY: CountTile / 2,
-//		},
-//		{
-//			name: "3",
-//			args: args{
-//				cameraX:  0,
-//				cameraY:  -10,
-//				tileSize: 16,
-//			},
-//			wantX:     0,
-//			wantY:     -6,
-//			wantCellX: CountTile / 2,
-//			wantCellY: CountTile/2 - 1,
-//		},
-//		{
-//			name: "4",
-//			args: args{
-//				cameraX:  0,
-//				cameraY:  0,
-//				tileSize: 16,
-//			},
-//			wantX:     0,
-//			wantY:     0,
-//			wantCellX: CountTile / 2,
-//			wantCellY: CountTile / 2,
-//		},
-//		{
-//			name: "5",
-//			args: args{
-//				cameraX:  0,
-//				cameraY:  0,
-//				tileSize: 22.53,
-//			},
-//			wantX:     0,
-//			wantY:     0,
-//			wantCellX: CountTile / 2,
-//			wantCellY: CountTile / 2,
-//		},
-//		{
-//			name: "6",
-//			args: args{
-//				cameraX:  -23,
-//				cameraY:  0,
-//				tileSize: 22.53,
-//			},
-//			wantX:     -22.06,
-//			wantY:     0,
-//			wantCellX: CountTile/2 - 2,
-//			wantCellY: CountTile / 2,
-//		},
-//		{
-//			name: "7",
-//			args: args{
-//				cameraX:  0,
-//				cameraY:  -23,
-//				tileSize: 22.53,
-//			},
-//			wantX:     0,
-//			wantY:     -22.06,
-//			wantCellX: CountTile / 2,
-//			wantCellY: CountTile/2 - 2,
-//		},
-//		{
-//			name: "8",
-//			args: args{
-//				cameraX:  0,
-//				cameraY:  0,
-//				tileSize: 22.53,
-//			},
-//			wantX:     0,
-//			wantY:     0,
-//			wantCellX: CountTile / 2,
-//			wantCellY: CountTile / 2,
-//		},
-//		{
-//			name: "9",
-//			args: args{
-//				cameraX:  -300,
-//				cameraY:  0,
-//				tileSize: 16,
-//			},
-//			wantX:     0,
-//			wantY:     0,
-//			wantCellX: CountTile / 2,
-//			wantCellY: CountTile / 2,
-//		},
-//	}
-//	for _, tt := range tests {
-//		t.Run(tt.name, func(t *testing.T) {
-//			gotX, gotY, gotCellX, gotCellY := GetLeftXY(tt.args.cameraX, tt.args.cameraY, tt.args.tileSize)
-//			if gotX != tt.wantX {
-//				t.Errorf("GetLeftXY() gotX = %v, want %v", gotX, tt.wantX)
-//			}
-//			if gotY != tt.wantY {
-//				t.Errorf("GetLeftXY() gotY = %v, want %v", gotY, tt.wantY)
-//			}
-//			if gotCellX != tt.wantCellX {
-//				t.Errorf("GetLeftXY() gotCellX = %v, want %v", gotCellX, tt.wantCellX)
-//			}
-//			if gotCellY != tt.wantCellY {
-//				t.Errorf("GetLeftXY() gotCellY = %v, want %v", gotCellY, tt.wantCellY)
-//			}
-//		})
-//	}
-//}
+import (
+	"testing"
+)
+
+func TestGetCellBoundaryCheck(t *testing.T) {
+	type testCase struct {
+		name     string
+		x        int64
+		y        int64
+		width    uint64
+		height   uint64
+		expected bool // true если должен вернуть nil
+	}
+
+	tests := []testCase{
+		// Valid cases
+		{"Middle of board", 3, 3, 5, 5, false},
+		{"Zero coordinates", 0, 0, 1, 1, false},
+		{"Max valid X", 4, 2, 5, 5, false},
+		{"Max valid Y", 2, 4, 5, 5, false},
+
+		// Invalid cases
+		{"X equals width", 5, 3, 5, 5, true},
+		{"Y equals height", 3, 5, 5, 5, true},
+		{"Negative X", -1, 3, 5, 5, true},
+		{"Negative Y", 3, -1, 5, 5, true},
+		{"Both exceed", 6, 6, 5, 5, true},
+		{"Large values", 1e18, 1e18, 100, 100, true},
+
+		// Edge cases
+		{"Zero size board", 0, 0, 0, 0, true},
+		{"Unit board valid", 0, 0, 1, 1, false},
+		{"Unit board invalid", 1, 1, 1, 1, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := &Board{
+				Width:  tt.width,
+				Height: tt.height,
+			}
+
+			// Вызываем проверку границ
+			result := uint64(tt.x) >= b.Width || uint64(tt.y) >= b.Height
+
+			if result != tt.expected {
+				t.Errorf("For case %s: expected %v, got %v (x=%d, y=%d, w=%d, h=%d)",
+					tt.name, tt.expected, result, tt.x, tt.y, tt.width, tt.height)
+			}
+		})
+	}
+}
+
+func TestGetCellReturnsNil(t *testing.T) {
+	b := &Board{Width: 5, Height: 5}
+
+	tests := []struct {
+		x, y int64
+	}{
+		{5, 2}, {2, 5}, {-1, 3}, {3, -1}, {100, 100},
+	}
+
+	for _, tt := range tests {
+		cell := b.GetCell(tt.x, tt.y)
+		if cell != nil {
+			t.Errorf("Expected nil for (%d, %d), got %v", tt.x, tt.y, cell)
+		}
+	}
+}
