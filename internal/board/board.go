@@ -24,7 +24,7 @@ const (
 )
 
 type Board struct {
-	Cells                   [][]Cell
+	Cells                   []Cell
 	Width, Height           uint64
 	TileSize, SmallTileSize uint64
 	CellOnScreen            atomic.Int64
@@ -44,13 +44,12 @@ func NewBoard(c *camera.Camera, tileSize, smallTileSize uint64, tileCount uint64
 	b.TileSize, b.SmallTileSize = tileSize, smallTileSize
 
 	NewTiles(b.TileSize, b.SmallTileSize)
-	seed := rand.Intn(5) + 1
-	b.Cells = make([][]Cell, b.Width)
+	seed := func() int {
+		return rand.Intn(5) + 1
+	}
+	b.Cells = make([]Cell, b.Width*b.Height)
 	for i := range b.Cells {
-		b.Cells[i] = make([]Cell, b.Height)
-		for j := range b.Cells[i] {
-			b.Cells[i][j] = NewCell(CellType(seed), int(b.TileSize))
-		}
+		b.Cells[i] = NewCell(CellType(seed()), int(b.TileSize))
 	}
 	empty, err := img.Img("empty.jpg", tileSize, tileSize)
 	if err != nil {
@@ -63,6 +62,14 @@ func NewBoard(c *camera.Camera, tileSize, smallTileSize uint64, tileCount uint64
 	b.UpdatedCellsBefore = make([]geom.Point, 0, 16)
 	b.UpdatedCells = make([]geom.Point, 0, 16)
 	return &b, nil
+}
+
+func (b *Board) Cell(x, y int) *Cell {
+	return &b.Cells[b.index(x, y)]
+}
+
+func (b *Board) index(x, y int) int {
+	return y*int(b.Width) + x
 }
 
 func (b *Board) Draw(screen *ebiten.Image) {
@@ -81,10 +88,10 @@ func (b *Board) Draw(screen *ebiten.Image) {
 				screen.DrawImage(b.ClearTile, &b.DrawOp)
 			} else {
 				if b.Camera.GetZoomFactor() > hd {
-					screen.DrawImage(b.Cells[int(j)][int(i)].TileImage, &b.DrawOp)
+					screen.DrawImage(b.Cell(int(i), int(j)).TileImage, &b.DrawOp)
 				} else {
 					//TODO оптимизация провалилась, нужно пробовать уменьшать кол-во объектов
-					screen.DrawImage(b.Cells[int(j)][int(i)].TileImageSmall, &b.DrawOp)
+					screen.DrawImage(b.Cell(int(i), int(j)).TileImageSmall, &b.DrawOp)
 				}
 			}
 
@@ -109,19 +116,11 @@ func (b *Board) GetCellNumber() int64 {
 	return b.CellOnScreen.Load()
 }
 
-func getCost(seed int) float64 {
-	if (seed >= 0 && seed < 8) || (seed >= 16 && seed < 24) || (seed >= 32 && seed < 40) || (seed >= 48 && seed < 56) {
-		return 2
-	}
-
-	return 1
-}
-
 func (b *Board) GetCell(x, y int64) *Cell {
 	if x < 0 || x > int64(b.Width)-1 || y < 0 || y > int64(b.Height)-1 {
 		return &Cell{}
 	}
-	return &b.Cells[y][x]
+	return b.Cell(int(x), int(y))
 }
 
 func (b *Board) AddUpdatedCells(from, to geom.Point) {
@@ -167,7 +166,7 @@ func (b *Board) GetCost(from, to geom.Point, tick int64) float64 {
 	cellA := b.GetCell(int64(from.X), int64(from.Y))
 	cellB := b.GetCell(int64(to.X), int64(to.Y))
 	if cellA == nil || cellB == nil {
-		panic("cell is nil")
+		panic("Cell is nil")
 	}
 	if math.IsInf(cellA.Cost, 1) || math.IsInf(cellB.Cost, 1) {
 		return math.Inf(1)

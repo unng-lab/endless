@@ -85,8 +85,8 @@ func (r *Road) Next() (int, error) {
 }
 
 func timeToWalkOnePoint(unit *Unit, b *board.Board, nextPoint geom.Point) int {
-	firstCellMoveCost := b.Cells[int(unit.Positioning.Position.X)][int(unit.Positioning.Position.Y)].MoveCost(0, 0)
-	secondCellMoveCost := b.Cells[int(nextPoint.X)][int(nextPoint.Y)].MoveCost(0, 0)
+	firstCellMoveCost := b.Cell(int(unit.Positioning.Position.X), int(unit.Positioning.Position.Y)).MoveCost(0, 0)
+	secondCellMoveCost := b.Cell(int(unit.Positioning.Position.X), int(unit.Positioning.Position.Y)).MoveCost(0, 0)
 	averageMoveCost := (firstCellMoveCost + secondCellMoveCost) / 2
 	return int(1 / (unit.Speed * averageMoveCost))
 }
