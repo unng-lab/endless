@@ -31,7 +31,6 @@ type Board struct {
 	EmptyCell               *ebiten.Image
 	ClearTile               *ebiten.Image
 	Camera                  *camera.Camera
-	DrawOp                  ebiten.DrawImageOptions
 	UpdatedTick             int64
 	UpdatedCellsBefore      []geom.Point
 	UpdatedCells            []geom.Point
@@ -72,44 +71,105 @@ func (b *Board) index(x, y int) int {
 	return y*int(b.Width) + x
 }
 
-func (b *Board) Draw(screen *ebiten.Image) {
-	//b.DrawOp.GeoM.Translate(-b.Camera.W.GetWidth()/2, -b.Camera.W.GetHeight()/2)
-	b.DrawOp.GeoM.Scale(
-		b.Camera.ScaleFactor(),
-		b.Camera.ScaleFactor(),
-	)
-	//b.DrawOp.GeoM.Translate(b.Camera.W.GetWidth()/2, b.Camera.W.GetHeight()/2)
+//func (b *Board) Draw(screen *ebiten.Image) {
+//	b.DrawOp.GeoM.Scale(
+//		b.Camera.ScaleFactor(),
+//		b.Camera.ScaleFactor(),
+//	)
+//	b.DrawOp.GeoM.Translate(b.Camera.RelativePixels.Min.X, b.Camera.RelativePixels.Min.Y)
+//
+//	cellNumber := int64(0)
+//	maxX, maxY := float64(b.Width-1), float64(b.Height-1)
+//
+//	for j := b.Camera.Coordinates.Min.Y; j <= b.Camera.Coordinates.Max.Y; j++ {
+//		for i := b.Camera.Coordinates.Min.X; i <= b.Camera.Coordinates.Max.X; i++ {
+//			if i < 0 || i > maxX || j < 0 || j > maxY {
+//				screen.DrawImage(b.ClearTile, &b.DrawOp)
+//			} else {
+//				if b.Camera.GetZoomFactor() > hd {
+//					screen.DrawImage(b.Cell(int(i), int(j)).TileImage, &b.DrawOp)
+//				} else {
+//					//TODO оптимизация провалилась, нужно пробовать уменьшать кол-во объектов
+//					screen.DrawImage(b.Cell(int(i), int(j)).TileImageSmall, &b.DrawOp)
+//				}
+//			}
+//
+//			cellNumber++
+//			b.DrawOp.GeoM.Translate(b.Camera.TileSize(), 0)
+//		}
+//		b.DrawOp.GeoM.Reset()
+//		b.DrawOp.GeoM.Scale(
+//			b.Camera.ScaleFactor(),
+//			b.Camera.ScaleFactor(),
+//		)
+//		b.DrawOp.GeoM.Translate(b.Camera.RelativePixels.Min.X, b.Camera.RelativePixels.Min.Y)
+//		b.DrawOp.GeoM.Translate(0, (j+1-b.Camera.Coordinates.Min.Y)*b.Camera.TileSize())
+//	}
+//	b.CellOnScreen.Store(cellNumber)
+//	b.DrawOp.GeoM.Reset()
+//}
 
-	b.DrawOp.GeoM.Translate(b.Camera.RelativePixels.Min.X, b.Camera.RelativePixels.Min.Y)
-	cellNumber := int64(0)
-	for j := b.Camera.Coordinates.Min.Y; j <= b.Camera.Coordinates.Max.Y; j++ {
-		for i := b.Camera.Coordinates.Min.X; i <= b.Camera.Coordinates.Max.X; i++ {
-			if i < 0 || i > float64(b.Width-1) || j < 0 || j > float64(b.Height-1) {
-				screen.DrawImage(b.ClearTile, &b.DrawOp)
-			} else {
-				if b.Camera.GetZoomFactor() > hd {
-					screen.DrawImage(b.Cell(int(i), int(j)).TileImage, &b.DrawOp)
+func (b *Board) Draw(screen *ebiten.Image) {
+	cam := b.Camera
+	scale := cam.ScaleFactor()
+	tileSize := cam.TileSize()
+	tileSizeF := float64(tileSize)
+	useHD := cam.GetZoomFactor() > hd
+
+	// Рассчитываем границы доски
+	maxXBoard := float64(b.Width - 1)
+	maxYBoard := float64(b.Height - 1)
+
+	// Получаем видимую область камеры
+	visible := cam.Coordinates
+	minX, maxX := visible.Min.X, visible.Max.X
+	minY, maxY := visible.Min.Y, visible.Max.Y
+
+	// Рассчитываем количество ячеек на экране
+	cellCount := (maxX - minX + 1) * (maxY - minY + 1)
+	b.CellOnScreen.Store(int64(cellCount))
+
+	// Базовые трансформации
+	baseGeoM := ebiten.GeoM{}
+	baseGeoM.Scale(scale, scale)
+	baseGeoM.Translate(
+		cam.RelativePixels.Min.X,
+		cam.RelativePixels.Min.Y,
+	)
+
+	// Оптимизация: кешируем параметры отрисовки
+	drawOpts := &ebiten.DrawImageOptions{}
+
+	// Основной цикл отрисовки
+	for y, j := 0.0, minY; j <= maxY; j++ {
+		rowGeoM := baseGeoM
+		rowGeoM.Translate(0, y)
+		xOffset := 0.0
+
+		for i := minX; i <= maxX; i++ {
+			// Выбираем изображение для отрисовки
+			var img *ebiten.Image
+			switch {
+			case i < 0 || j < 0 || i > maxXBoard || j > maxYBoard:
+				img = b.ClearTile
+			default:
+				cell := b.Cell(int(i), int(j))
+				if useHD {
+					img = cell.TileImage
 				} else {
-					//TODO оптимизация провалилась, нужно пробовать уменьшать кол-во объектов
-					screen.DrawImage(b.Cell(int(i), int(j)).TileImageSmall, &b.DrawOp)
+					img = cell.TileImageSmall
 				}
 			}
 
-			cellNumber++
-			b.DrawOp.GeoM.Translate(b.Camera.TileSize(), 0)
+			// Устанавливаем геометрическую трансформацию
+			drawOpts.GeoM = rowGeoM
+			drawOpts.GeoM.Translate(xOffset, 0)
+			screen.DrawImage(img, drawOpts)
+
+			xOffset += tileSizeF
 		}
-		b.DrawOp.GeoM.Reset()
-		//b.DrawOp.GeoM.Translate(-b.Camera.W.GetWidth()/2, -b.Camera.W.GetHeight()/2)
-		b.DrawOp.GeoM.Scale(
-			b.Camera.ScaleFactor(),
-			b.Camera.ScaleFactor(),
-		)
-		//b.DrawOp.GeoM.Translate(b.Camera.W.GetWidth()/2, b.Camera.W.GetHeight()/2)
-		b.DrawOp.GeoM.Translate(b.Camera.RelativePixels.Min.X, b.Camera.RelativePixels.Min.Y)
-		b.DrawOp.GeoM.Translate(0, (j+1-b.Camera.Coordinates.Min.Y)*b.Camera.TileSize())
+		y += tileSizeF
 	}
-	b.CellOnScreen.Store(cellNumber)
-	b.DrawOp.GeoM.Reset()
 }
 
 func (b *Board) GetCellNumber() int64 {
