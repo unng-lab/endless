@@ -16,7 +16,7 @@ const (
 )
 
 type MapGrid struct {
-	b                      *board.Board
+	board                  *board.Board
 	camera                 *camera.Camera
 	minX, minY, maxX, maxY int
 	Grid                   [][]map[*unit.Unit]struct{}
@@ -26,12 +26,12 @@ type MapGrid struct {
 	lastUpdateTick         int64
 }
 
-func NewMapGrid(b *board.Board, camera *camera.Camera, moves chan unit.MoveMessage) *MapGrid {
+func NewMapGrid(board *board.Board, camera *camera.Camera, moves chan unit.MoveMessage) *MapGrid {
 	var m MapGrid
-	m.b = b
+	m.board = board
 	m.camera = camera
 
-	squareSize := board.CountTile / gridSize
+	squareSize := board.Width / gridSize
 	m.Grid = make([][]map[*unit.Unit]struct{}, squareSize)
 	for i := range m.Grid {
 		m.Grid[i] = make([]map[*unit.Unit]struct{}, squareSize)
@@ -39,7 +39,7 @@ func NewMapGrid(b *board.Board, camera *camera.Camera, moves chan unit.MoveMessa
 	m.Ticks = make(chan int64, 1)
 	m.Moves = moves
 
-	m.minX, m.minY, m.maxX, m.maxY = 0, 0, board.CountTile/gridSize-1, board.CountTile/gridSize-1
+	m.minX, m.minY, m.maxX, m.maxY = 0, 0, int(board.Width)/gridSize-1, int(board.Height)/gridSize-1
 
 	go m.run()
 
@@ -72,7 +72,7 @@ func (m *MapGrid) run() {
 			m.setUnitsOnboard()
 		case msg := <-m.Moves:
 			m.process(msg)
-			m.b.AddUpdatedCells(msg.From, msg.To)
+			m.board.AddUpdatedCells(msg.From, msg.To)
 		}
 	}
 }

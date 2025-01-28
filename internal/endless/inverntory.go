@@ -2,6 +2,7 @@ package endless
 
 import (
 	"image"
+	"sync"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
@@ -16,16 +17,16 @@ const (
 )
 
 type Inventory struct {
-	Units map[string]*unit.Unit
+	Units map[string]Piece
 }
 
-func NewInverntory(camera *camera.Camera) *Inventory {
+func NewInverntory(board *board.Board, camera *camera.Camera) *Inventory {
 	var i Inventory
-	i.Units = make(map[string]*unit.Unit)
-	runner := NewRunner(camera)
-	i.Units[runner.Type] = runner
-	rock := NewRock(camera)
-	i.Units[rock.Type] = rock
+	i.Units = make(map[string]Piece)
+	runner := NewRunner(board, camera)
+	i.Units[runner.Type()] = runner
+	rock := NewRock(board, camera)
+	i.Units[rock.Type()] = rock
 	return &i
 }
 
@@ -40,15 +41,35 @@ const (
 	tileMiddleY = 0.75
 )
 
-func NewRunner(camera *camera.Camera) *unit.Unit {
-	var newUnit unit.Unit
-	newUnit.Type = "runner"
-	newUnit.Camera = camera
-	newUnit.Positioning.SizeX = frameWidth / board.TileSize
-	newUnit.Positioning.SizeY = frameHeight / board.TileSize
-	newUnit.Positioning.PositionShiftX = tileMiddleX - newUnit.Positioning.SizeX/2
-	newUnit.Positioning.PositionShiftY = tileMiddleY - newUnit.Positioning.SizeY
-	newUnit.Speed = 1 / float64(ebiten.DefaultTPS) / slowness
+type Piece interface {
+	Type() string
+	Unit(
+		id int,
+		name string,
+		moveChan chan unit.MoveMessage,
+		cameraTicks chan struct{},
+		ticks chan *sync.WaitGroup,
+	) *unit.Unit
+}
+
+type Runner struct {
+	Board       *board.Board
+	Camera      *camera.Camera
+	Graphics    *unit.Graphics
+	Positioning unit.Positioning
+	Speed       float64
+	Name        string
+}
+
+func (r *Runner) Type() string {
+	return r.Name
+}
+
+func NewRunner(board *board.Board, camera *camera.Camera) *Runner {
+	var r Runner
+	r.Board = board
+	r.Camera = camera
+	r.Name = "runner"
 	spriteRunner, err := img.Img("runner.png", 256, 96)
 	if err != nil {
 		panic(err)
@@ -61,6 +82,7 @@ func NewRunner(camera *camera.Camera) *unit.Unit {
 		Animation:        make([]*ebiten.Image, 0, frameCount),
 		FocusedAnimation: make([]*ebiten.Image, 0, frameCount),
 	}
+
 	for i := range frameCount {
 		sx, sy := frameOX+i*frameWidth, frameOY
 		frame := spriteRunner.SubImage(image.Rect(
@@ -80,16 +102,82 @@ func NewRunner(camera *camera.Camera) *unit.Unit {
 		graphics.FocusedAnimation = append(graphics.FocusedAnimation, frameFocused)
 	}
 
-	newUnit.Graphics = &graphics
+	r.Graphics = &graphics
 
+	r.Positioning.SizeX = frameWidth / float64(board.TileSize)
+	r.Positioning.SizeY = frameHeight / float64(board.TileSize)
+	r.Positioning.PositionShiftX = tileMiddleX - r.Positioning.SizeX/2
+	r.Positioning.PositionShiftY = tileMiddleY - r.Positioning.SizeY
+	r.Speed = 1 / float64(ebiten.DefaultTPS) / slowness
+
+	return &r
+}
+
+func (r *Runner) Unit(
+	id int,
+	name string,
+	moveChan chan unit.MoveMessage,
+	cameraTicks chan struct{},
+	ticks chan *sync.WaitGroup,
+) *unit.Unit {
+	var newUnit unit.Unit
+	newUnit.ID = id
+	newUnit.Name = name
+	newUnit.Type = r.Type()
+	newUnit.Positioning = r.Positioning
+	newUnit.Speed = r.Speed
+	newUnit.Graphics = r.Graphics
+	newUnit.Camera = r.Camera
+	newUnit.Board = r.Board
+	newUnit.MoveChan = moveChan
+	newUnit.CameraTicks = cameraTicks
+	newUnit.Ticks = ticks
+	newUnit.Tasks = unit.NewTaskList()
 	return &newUnit
 }
 
-func NewRock(camera *camera.Camera) *unit.Unit {
+type Rock struct {
+	Board       *board.Board
+	Camera      *camera.Camera
+	Graphics    *unit.Graphics
+	Positioning unit.Positioning
+	Speed       float64
+	Name        string
+}
+
+func (r Rock) Type() string {
+	return r.Name
+}
+
+func (r Rock) Unit(
+	id int,
+	name string,
+	moveChan chan unit.MoveMessage,
+	cameraTicks chan struct{},
+	ticks chan *sync.WaitGroup,
+) *unit.Unit {
 	var newUnit unit.Unit
-	newUnit.Type = "rock"
-	newUnit.Camera = camera
-	newUnit.Positioning.SizeX, newUnit.Positioning.SizeY = 1, 1
+	newUnit.ID = id
+	newUnit.Name = name
+	newUnit.Type = r.Type()
+	newUnit.Positioning = r.Positioning
+	newUnit.Speed = r.Speed
+	newUnit.Graphics = r.Graphics
+	newUnit.Camera = r.Camera
+	newUnit.Board = r.Board
+	newUnit.MoveChan = moveChan
+	newUnit.CameraTicks = cameraTicks
+	newUnit.Ticks = ticks
+	newUnit.Tasks = unit.NewTaskList()
+	return &newUnit
+}
+
+func NewRock(board *board.Board, camera *camera.Camera) *Rock {
+	var r Rock
+	r.Name = "rock"
+	r.Board = board
+	r.Camera = camera
+	r.Positioning.SizeX, r.Positioning.SizeY = 1, 1
 	spriteRocks, err := img.Img("rocks.png", 32, 32)
 	if err != nil {
 		panic(err)
@@ -108,7 +196,7 @@ func NewRock(camera *camera.Camera) *unit.Unit {
 	}
 	graphics.Animation = append(graphics.Animation, frame)
 	graphics.FocusedAnimation = append(graphics.FocusedAnimation, frame)
-	newUnit.Graphics = &graphics
+	r.Graphics = &graphics
 
-	return &newUnit
+	return &r
 }

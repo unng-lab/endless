@@ -10,8 +10,6 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/vector"
-
-	"github.com/unng-lab/madfarmer/internal/board"
 )
 
 var Counter int
@@ -76,8 +74,8 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	//	screen,
 	//	float32(posX),
 	//	float32(posY),
-	//	float32(g.camera.TileSize()),
-	//	float32(g.camera.TileSize()),
+	//	float32(g.camera.tileSize()),
+	//	float32(g.camera.tileSize()),
 	//	color.White,
 	//	false,
 	//)
@@ -122,14 +120,14 @@ CellY: %0.2f`,
 			posY,
 			cursor.X,
 			cursor.Y,
-			GetCellNumber(cursor.X, g.camera.GetPositionX(), g.camera.TileSize()),
-			GetCellNumber(cursor.Y, g.camera.GetPositionY(), g.camera.TileSize()),
+			GetCellNumber(cursor.X, g.camera.GetPositionX(), g.camera.TileSize(), float64(g.board.Width)),
+			GetCellNumber(cursor.Y, g.camera.GetPositionY(), g.camera.TileSize(), float64(g.board.Height)),
 		),
 	)
 }
 
-func GetCellNumber(cursor float64, camera float64, tileSize float64) float64 {
-	return math.Trunc((cursor+camera-tileSize/2)/tileSize) + board.CountTile/2
+func GetCellNumber(cursor float64, camera float64, tileSize float64, tileCount float64) float64 {
+	return math.Trunc((cursor+camera-tileSize/2)/tileSize) + tileCount/2
 }
 
 func GetLeftAngle(cameraX, cameraY, cursorX, cursorY, tileSizeX, tileSizeY float64) (float64, float64) {

@@ -99,8 +99,6 @@ func (u *Unit) New(
 
 	unit.Tasks = NewTaskList()
 
-	unit.Relocate(geom.Pt(0, 0), position)
-
 	unit.SetTask()
 
 	return &unit
@@ -110,12 +108,11 @@ func (u *Unit) SetOnBoard(b bool) {
 	u.OnBoard.Store(b)
 }
 
-func (u *Unit) Run(wg chan *sync.WaitGroup) {
-	go u.run(wg)
+func (u *Unit) Run() {
+	go u.run()
 }
 
-func (u *Unit) run(wg chan *sync.WaitGroup) {
-	u.Ticks = wg
+func (u *Unit) run() {
 	for {
 		select {
 		case tick := <-u.Ticks:

@@ -23,41 +23,41 @@ const (
 	updatedCellsBuffer = 64
 )
 
-const CountTile = 1024
-
 type Board struct {
-	Cells              [][]Cell
-	Width, Height      int64
-	CellOnScreen       atomic.Int64
-	EmptyCell          *ebiten.Image
-	ClearTile          *ebiten.Image
-	Camera             *camera.Camera
-	DrawOp             ebiten.DrawImageOptions
-	UpdatedTick        int64
-	UpdatedCellsBefore []geom.Point
-	UpdatedCells       []geom.Point
-	UpdatedCellsMutex  sync.Mutex
+	Cells                   [][]Cell
+	Width, Height           uint64
+	TileSize, SmallTileSize uint64
+	CellOnScreen            atomic.Int64
+	EmptyCell               *ebiten.Image
+	ClearTile               *ebiten.Image
+	Camera                  *camera.Camera
+	DrawOp                  ebiten.DrawImageOptions
+	UpdatedTick             int64
+	UpdatedCellsBefore      []geom.Point
+	UpdatedCells            []geom.Point
+	UpdatedCellsMutex       sync.Mutex
 }
 
-func NewBoard(c *camera.Camera) (*Board, error) {
-	// TODO тут какой то лютый пздц и надо привести к нормальному виду
+func NewBoard(c *camera.Camera, tileSize, smallTileSize uint64, tileCount uint64) (*Board, error) {
 	var b Board
-	NewTiles()
-	b.Width, b.Height = CountTile, CountTile
+	b.Width, b.Height = tileCount, tileCount
+	b.TileSize, b.SmallTileSize = tileSize, smallTileSize
+
+	NewTiles(b.TileSize, b.SmallTileSize)
 	seed := rand.Intn(5) + 1
 	b.Cells = make([][]Cell, b.Width)
 	for i := range b.Cells {
 		b.Cells[i] = make([]Cell, b.Height)
 		for j := range b.Cells[i] {
-			b.Cells[i][j] = NewCell(CellType(seed))
+			b.Cells[i][j] = NewCell(CellType(seed), int(b.TileSize))
 		}
 	}
-	empty, err := img.Img("empty.jpg", TileSize, TileSize)
+	empty, err := img.Img("empty.jpg", tileSize, tileSize)
 	if err != nil {
 		panic(err)
 	}
 	b.EmptyCell = empty
-	b.ClearTile = ebiten.NewImage(TileSize, TileSize)
+	b.ClearTile = ebiten.NewImage(int(tileSize), int(tileSize))
 	b.ClearTile.Fill(color.Black)
 	b.Camera = c
 	b.UpdatedCellsBefore = make([]geom.Point, 0, 16)
@@ -118,7 +118,7 @@ func getCost(seed int) float64 {
 }
 
 func (b *Board) GetCell(x, y int64) *Cell {
-	if x < 0 || x > b.Width-1 || y < 0 || y > b.Height-1 {
+	if x < 0 || x > int64(b.Width)-1 || y < 0 || y > int64(b.Height)-1 {
 		return &Cell{}
 	}
 	return &b.Cells[y][x]
@@ -156,7 +156,7 @@ func (b *Board) GetNeighbours(target geom.Point) []geom.Point {
 	for _, dir := range directions {
 		nx, ny := int(target.X)+dir[0], int(target.Y)+dir[1]
 		// Проверяем, что новые координаты внутри границ карты
-		if nx >= 0 && nx < CountTile-1 && ny >= 0 && ny < CountTile-1 {
+		if nx >= 0 && nx < int(b.Width)-1 && ny >= 0 && ny < int(b.Height)-1 {
 			neighbors = append(neighbors, geom.Point{float64(nx), float64(ny)})
 		}
 	}

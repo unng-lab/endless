@@ -5,6 +5,8 @@ import (
 	"math/rand/v2"
 	"sync"
 
+	"github.com/brianvoe/gofakeit/v7"
+
 	"github.com/unng-lab/madfarmer/internal/geom"
 	"github.com/unng-lab/madfarmer/internal/mapgrid"
 
@@ -22,6 +24,9 @@ const (
 	// TODO пересмотреть решение
 	// пока нужно держать больше чем сумма всех юнитов
 	moveChanBuffer = 1000000 // 1 миллион
+
+	tileSize  = 16
+	tileCount = 1024
 )
 
 var _ ebiten.Game = (*Game)(nil) // ensure Game implements ebiten.Game
@@ -44,44 +49,51 @@ func NewGame(
 	var g Game
 	g.Units = make([]*unit.Unit, 0, unitCount)
 	g.OnBoard = make([]*unit.Unit, 0, unitCount)
-	g.camera = camera.New(board.TileSize, board.CountTile)
+	g.camera = camera.New(tileSize, tileCount)
 	slog.Info("camera created")
 	g.ui = ui.New(g.camera)
 	slog.Info("ui created")
-	newBoard, err := board.NewBoard(g.camera)
+	newBoard, err := board.NewBoard(g.camera, tileSize, tileSize, tileCount)
 	if err != nil {
 		panic(err)
 	}
 	g.board = newBoard
 	slog.Info("board created")
 
-	g.inventory = NewInverntory(g.camera)
+	g.inventory = NewInverntory(g.board, g.camera)
 	slog.Info("inventory created")
 	moveChan := make(chan unit.MoveMessage, moveChanBuffer)
+	unitPiece := g.inventory.Units["runner"]
 	for i := range unitCount {
-		newUnit := g.inventory.Units["runner"].New(
+		chanWg := make(chan *sync.WaitGroup, 1)
+		chanCameraTicks := make(chan struct{}, 1)
+		newRunner := unitPiece.Unit(
 			i,
-			getRandomPoint(g.board),
-			g.board,
+			gofakeit.Name(),
 			moveChan,
-			//analyticsDB,
+			chanCameraTicks,
+			chanWg,
 		)
-		wg := make(chan *sync.WaitGroup, 1)
-		g.Units = append(g.Units, newUnit)
-		newUnit.Run(wg)
+
+		g.Units = append(g.Units, newRunner)
+		newRunner.Relocate(geom.Pt(0, 0), getRandomPoint(g.board))
+		newRunner.Run()
 	}
 	slog.Info("units created")
-
+	rockPiece := g.inventory.Units["rock"]
 	for i := range rockCount {
-		newUnit := g.inventory.Units["rock"].New(
+		chanWg := make(chan *sync.WaitGroup, 1)
+		chanCameraTicks := make(chan struct{}, 1)
+		newRock := rockPiece.Unit(
 			i,
-			getRandomPoint(g.board),
-			g.board,
+			"Rock named "+gofakeit.Name(),
 			moveChan,
+			chanCameraTicks,
+			chanWg,
 		)
-		wg := make(chan *sync.WaitGroup, 1)
-		g.Units = append(g.Units, newUnit)
-		newUnit.Run(wg)
+		g.Units = append(g.Units, newRock)
+		newRock.Relocate(geom.Pt(0, 0), getRandomPoint(g.board))
+		newRock.Run()
 	}
 	slog.Info("rocks created")
 
@@ -94,7 +106,7 @@ func NewGame(
 
 func getRandomPoint(board *board.Board) geom.Point {
 	return geom.Point{
-		X: float64(rand.Int64N(board.Width)),
-		Y: float64(rand.Int64N(board.Height)),
+		X: float64(rand.Uint64N(board.Width)),
+		Y: float64(rand.Uint64N(board.Height)),
 	}
 }

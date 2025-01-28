@@ -10,12 +10,7 @@ import (
 
 var Tiles [256]Tile
 
-const (
-	TileSize      = 16
-	SmallTileSize = 16
-)
-
-func NewTiles() {
+func NewTiles(tileSize uint64, smallTileSize uint64) {
 	sprite, err := img.Img("normal.png", 256, 256)
 	if err != nil {
 		panic(err)
@@ -27,16 +22,16 @@ func NewTiles() {
 	for j := range 16 {
 		for i := range 16 {
 			Tiles[j*16+i].Normal = sprite.SubImage(image.Rect(
-				i*TileSize,
-				j*TileSize,
-				(i+1)*TileSize,
-				(j+1)*TileSize,
+				i*int(tileSize),
+				j*int(tileSize),
+				(i+1)*int(tileSize),
+				(j+1)*int(tileSize),
 			)).(*ebiten.Image)
 			Tiles[j*16+i].Small = spriteSmall.SubImage(image.Rect(
-				i*SmallTileSize,
-				j*SmallTileSize,
-				(i+1)*SmallTileSize,
-				(j+1)*SmallTileSize,
+				i*int(smallTileSize),
+				j*int(smallTileSize),
+				(i+1)*int(smallTileSize),
+				(j+1)*int(smallTileSize),
 			)).(*ebiten.Image)
 		}
 	}

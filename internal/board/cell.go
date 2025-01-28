@@ -66,22 +66,22 @@ func (c *Cell) MoveCost(start, end int64) float64 {
 	return tCost + c.Cost
 }
 
-func NewCell(cellType CellType) Cell {
+func NewCell(cellType CellType, tileSize int) Cell {
 	var cell Cell
 	cell.Type = cellType
 	switch cellType {
 	case CellTypeGround:
 		cell.Cost = GroundCost
-		cell.TileImage, cell.TileImageSmall = getRandomTileImageFromQuadrant(1)
+		cell.TileImage, cell.TileImageSmall = getRandomTileImageFromQuadrant(1, tileSize)
 	case CellTypeRoad:
 		cell.Cost = RoadCost
-		cell.TileImage, cell.TileImageSmall = getRandomTileImageFromQuadrant(3)
+		cell.TileImage, cell.TileImageSmall = getRandomTileImageFromQuadrant(3, tileSize)
 	case CellTypeWood:
 		cell.Cost = WoodCost
-		cell.TileImage, cell.TileImageSmall = getRandomTileImageFromQuadrant(4)
+		cell.TileImage, cell.TileImageSmall = getRandomTileImageFromQuadrant(4, tileSize)
 	case CellTypeSwamp:
 		cell.Cost = SwampCost
-		cell.TileImage, cell.TileImageSmall = getRandomTileImageFromQuadrant(2)
+		cell.TileImage, cell.TileImageSmall = getRandomTileImageFromQuadrant(2, tileSize)
 	case CellTypeWater:
 		cell.Cost = math.Inf(1)
 		cell.TileImage, cell.TileImageSmall = getWaterImg()
@@ -94,11 +94,11 @@ func NewCell(cellType CellType) Cell {
 	return cell
 }
 
-func getRandomTileImageFromQuadrant(n int) (*ebiten.Image, *ebiten.Image) {
+func getRandomTileImageFromQuadrant(n int, tileSize int) (*ebiten.Image, *ebiten.Image) {
 	if n <= 0 || n > 4 {
 		panic("Неверный размер квадрата")
 	}
-	i, err := getRandomElementFromQuadrant(n, TileSize)
+	i, err := getRandomElementFromQuadrant(n, tileSize)
 	if err != nil {
 		panic(err)
 	}
