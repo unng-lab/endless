@@ -15,7 +15,7 @@ func (g *Game) Update() error {
 	select {
 	case g.MapGrid.Ticks <- gameTickCounter:
 	default:
-		g.log.Warn("MapGrid ticks channel is full")
+		g.log.Info("MapGrid ticks channel is full")
 	}
 	for i := range g.Units {
 		if g.MapGrid.CheckOnBoard(g.Units[i]) {
@@ -23,7 +23,7 @@ func (g *Game) Update() error {
 			select {
 			case g.Units[i].CameraTicks <- struct{}{}:
 			default:
-				g.log.Warn("Camera ticks channel is full")
+				g.log.Info("Camera ticks channel is full")
 				//максимально не блокируем
 
 			}

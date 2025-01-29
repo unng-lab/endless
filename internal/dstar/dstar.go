@@ -153,7 +153,7 @@ func (ds *DStar) UpdateVertex(u *Node) {
 		u.RHS = math.Inf(1)
 		neighbors := ds.getNeighbors(u)
 		for _, s := range neighbors {
-			u.RHS = min(u.RHS, s.G+s.Cost(u, ds.B))
+			u.RHS = min(u.RHS, s.G+u.Cost(s, ds.B))
 		}
 	}
 

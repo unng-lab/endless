@@ -3,6 +3,7 @@ package endless
 import (
 	"image"
 	"sync"
+	"sync/atomic"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
@@ -15,6 +16,12 @@ import (
 const (
 	slowness = 1
 )
+
+var serial atomic.Uint64
+
+func inc() uint64 {
+	return serial.Add(1) - 1
+}
 
 type Inventory struct {
 	Units map[string]Piece
@@ -44,7 +51,6 @@ const (
 type Piece interface {
 	Type() string
 	Unit(
-		id int,
 		name string,
 		moveChan chan unit.MoveMessage,
 		cameraTicks chan struct{},
@@ -114,14 +120,13 @@ func NewRunner(board *board.Board, camera *camera.Camera) *Runner {
 }
 
 func (r *Runner) Unit(
-	id int,
 	name string,
 	moveChan chan unit.MoveMessage,
 	cameraTicks chan struct{},
 	ticks chan *sync.WaitGroup,
 ) *unit.Unit {
 	var newUnit unit.Unit
-	newUnit.ID = id
+	newUnit.ID = inc()
 	newUnit.Name = name
 	newUnit.Type = r.Type()
 	newUnit.Positioning = r.Positioning
@@ -150,14 +155,13 @@ func (r Rock) Type() string {
 }
 
 func (r Rock) Unit(
-	id int,
 	name string,
 	moveChan chan unit.MoveMessage,
 	cameraTicks chan struct{},
 	ticks chan *sync.WaitGroup,
 ) *unit.Unit {
 	var newUnit unit.Unit
-	newUnit.ID = id
+	newUnit.ID = inc()
 	newUnit.Name = name
 	newUnit.Type = r.Type()
 	newUnit.Positioning = r.Positioning

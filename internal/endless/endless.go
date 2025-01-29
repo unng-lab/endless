@@ -23,7 +23,7 @@ const (
 	rockCount = 100000
 	// TODO пересмотреть решение
 	// пока нужно держать больше чем сумма всех юнитов
-	moveChanBuffer = 1000000 // 1 миллион
+	moveChanBuffer = 1000 // 1 миллион
 
 	tileSize  = 16
 	tileCount = 1024
@@ -64,11 +64,11 @@ func NewGame(
 	g.inventory = NewInverntory(g.board, g.camera)
 	slog.Info("inventory created")
 	g.moveChan = make(chan unit.MoveMessage, moveChanBuffer)
+	g.MapGrid = mapgrid.NewMapGrid(g.board, g.camera, g.moveChan)
+	slog.Info("mapgrid created")
 	g.createRocks()
 	g.createUnits()
 
-	g.MapGrid = mapgrid.NewMapGrid(g.board, g.camera, g.moveChan)
-	slog.Info("mapgrid created")
 	slog.Info("game created")
 
 	return &g
@@ -83,11 +83,10 @@ func getRandomPoint(board *board.Board) geom.Point {
 
 func (g *Game) createUnits() {
 	unitPiece := g.inventory.Units["runner"]
-	for i := range unitCount {
+	for range unitCount {
 		chanWg := make(chan *sync.WaitGroup, 1)
 		chanCameraTicks := make(chan struct{}, 1)
 		newRunner := unitPiece.Unit(
-			i,
 			gofakeit.Name(),
 			g.moveChan,
 			chanCameraTicks,
@@ -103,11 +102,10 @@ func (g *Game) createUnits() {
 
 func (g *Game) createRocks() {
 	rockPiece := g.inventory.Units["rock"]
-	for i := range rockCount {
+	for range rockCount {
 		chanWg := make(chan *sync.WaitGroup, 1)
 		chanCameraTicks := make(chan struct{}, 1)
 		newRock := rockPiece.Unit(
-			i,
 			"Rock named "+gofakeit.Name(),
 			g.moveChan,
 			chanCameraTicks,

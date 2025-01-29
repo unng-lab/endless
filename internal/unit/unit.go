@@ -2,9 +2,7 @@ package unit
 
 import (
 	"sync"
-	"sync/atomic"
 
-	"github.com/brianvoe/gofakeit/v7"
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"github.com/unng-lab/madfarmer/internal/board"
@@ -41,7 +39,7 @@ type Positioning struct {
 }
 
 type Unit struct {
-	ID int
+	ID uint64
 	// тип юнита
 	Type string
 	// Имя юнита
@@ -60,11 +58,8 @@ type Unit struct {
 	Camera      *camera.Camera
 	// Карта игры
 	Board *board.Board
-	// Статус что находится на экране игры
-	OnBoard atomic.Bool
 	// Можно немного пооптимизировать и сделать через глобальную переменную
 	Focused bool
-
 	//сколько тиков юнит спит до след изменения
 	SleepTicks int
 
@@ -73,39 +68,6 @@ type Unit struct {
 	RoadTask Road
 
 	MoveChan chan MoveMessage
-}
-
-func (u *Unit) New(
-	id int,
-	position geom.Point,
-	b *board.Board,
-	moveChan chan MoveMessage,
-) *Unit {
-	var unit Unit
-	unit.ID = id
-	unit.Type = u.Type
-	unit.Name = gofakeit.Name()
-	unit.Camera = u.Camera
-	unit.Board = b
-	unit.MoveChan = moveChan
-	unit.CameraTicks = make(chan struct{}, 1)
-	unit.Ticks = make(chan *sync.WaitGroup, 1)
-
-	unit.Speed = u.Speed
-
-	unit.Graphics = u.Graphics
-
-	unit.Positioning = u.Positioning
-
-	unit.Tasks = NewTaskList()
-
-	unit.SetTask()
-
-	return &unit
-}
-
-func (u *Unit) SetOnBoard(b bool) {
-	u.OnBoard.Store(b)
 }
 
 func (u *Unit) Run() {

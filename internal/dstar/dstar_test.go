@@ -234,7 +234,7 @@ func TestDStarComputeShortestPathWithUpdates(t *testing.T) {
 	PrintPathOnGrid(b, path)
 	t.Log(path)
 
-	b.Cells[1][1].Cost = SwampCost
+	b.Cell(1, 1).Cost = SwampCost
 	ds.UpdateVertex(ds.getNode(geom.Point{X: 1, Y: 1}))
 	shortestPath, err = ds.ComputeShortestPath()
 	if err != nil {
@@ -288,15 +288,18 @@ func letterToCost(marker rune) float64 {
 	}
 }
 
-func StringSliceToCells(ss []string) [][]board.Cell {
-	cells := make([][]board.Cell, len(ss))
+func StringSliceToCells(ss []string) []board.Cell {
+	cells := make([]board.Cell, len(ss)*len(ss[0]))
 	for i, s := range ss {
-		cells[i] = make([]board.Cell, len(s))
 		for j := range s {
-			cells[i][j].Cost = letterToCost(rune(s[j]))
+			cells[index(i, j, len(ss[0]))].Cost = letterToCost(rune(s[j]))
 		}
 	}
 	return cells
+}
+
+func index(x, y int, width int) int {
+	return y*width + x
 }
 
 // costToLetter преобразует стоимость местности обратно в маркер.
@@ -323,8 +326,8 @@ func PrintPathOnGrid(b *board.Board, path []geom.Point) {
 		pathMap[cell] = true
 	}
 
-	for y := 0; int64(y) < b.Height; y++ {
-		for x := 0; int64(x) < b.Width; x++ {
+	for y := 0; uint64(y) < b.Height; y++ {
+		for x := 0; uint64(x) < b.Width; x++ {
 			cell := b.GetCell(int64(x), int64(y))
 			pos := geom.Point{X: float64(x), Y: float64(y)}
 			if _, ok := pathMap[pos]; ok {

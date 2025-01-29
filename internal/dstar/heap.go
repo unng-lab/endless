@@ -1,5 +1,6 @@
 package dstar
 
+// TODO рассмотреть возможность и необходимость перейти на Фибоначчиеву кучу
 import "log/slog"
 
 func (ds *DStar) up(j int) {
