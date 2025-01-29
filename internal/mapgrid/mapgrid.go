@@ -1,6 +1,8 @@
 package mapgrid
 
 import (
+	"sync"
+
 	"github.com/unng-lab/madfarmer/internal/board"
 	"github.com/unng-lab/madfarmer/internal/camera"
 	"github.com/unng-lab/madfarmer/internal/geom"
@@ -9,10 +11,11 @@ import (
 
 const (
 	// gridSize размер ячейки грида в квадратах карты
-	gridSize     = 16
-	buffer       = 1000
-	squareBuffer = 32
-	unitCapacity = 64
+	gridSizeShift = 4 // gridSize = 16 (1 << 4)
+	gridSize      = 1 << gridSizeShift
+	buffer        = 1000
+	squareBuffer  = 32
+	unitCapacity  = 64
 )
 
 type MapGrid struct {
@@ -24,6 +27,8 @@ type MapGrid struct {
 	Ticks                  chan int64
 	updated                bool
 	lastUpdateTick         int64
+	onBoardList            map[*unit.Unit]struct{}
+	mu                     sync.RWMutex
 }
 
 func NewMapGrid(board *board.Board, camera *camera.Camera, moves chan unit.MoveMessage) *MapGrid {
@@ -38,7 +43,7 @@ func NewMapGrid(board *board.Board, camera *camera.Camera, moves chan unit.MoveM
 	}
 	m.Ticks = make(chan int64, 1)
 	m.Moves = moves
-
+	m.onBoardList = make(map[*unit.Unit]struct{}, unitCapacity)
 	m.minX, m.minY, m.maxX, m.maxY = 0, 0, int(board.Width)/gridSize-1, int(board.Height)/gridSize-1
 
 	go m.run()
@@ -47,8 +52,8 @@ func NewMapGrid(board *board.Board, camera *camera.Camera, moves chan unit.MoveM
 }
 
 func (m *MapGrid) hash(pos geom.Point) (int, int) {
-	x := int(pos.X / gridSize)
-	y := int(pos.Y / gridSize)
+	x := int(pos.X) >> gridSizeShift
+	y := int(pos.Y) >> gridSizeShift
 	if x < m.minX {
 		x = m.minX
 	}
@@ -126,15 +131,34 @@ func (m *MapGrid) AddUnit(to geom.Point, u *unit.Unit) {
 }
 
 func (m *MapGrid) setUnitsOnboard() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	clear(m.onBoardList)
 	x1, y1 := m.hash(m.camera.Coordinates.Min)
 	x2, y2 := m.hash(m.camera.Coordinates.Max)
 	for x := x1; x <= x2; x++ {
 		for y := y1; y <= y2; y++ {
 			if m.Grid[x][y] != nil {
 				for u := range m.Grid[x][y] {
-					u.SetOnBoard(true)
+					m.onBoardList[u] = struct{}{}
 				}
 			}
 		}
 	}
+}
+
+func (m *MapGrid) CheckOnBoard(u *unit.Unit) bool {
+	// код через трайлок приводит к потере производительности в 2 раза
+	// код через рлок на текущий момент оптимален
+	//if m.mu.TryRLock() {
+	//	defer m.mu.RUnlock()
+	//	_, ok := m.onBoardList[u]
+	//	return ok
+	//}
+	//return true
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	_, ok := m.onBoardList[u]
+	return ok
 }

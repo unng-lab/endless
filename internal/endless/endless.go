@@ -41,6 +41,7 @@ type Game struct {
 	Units     []*unit.Unit
 	OnBoard   []*unit.Unit
 	MapGrid   *mapgrid.MapGrid
+	moveChan  chan unit.MoveMessage
 }
 
 func NewGame(
@@ -62,42 +63,11 @@ func NewGame(
 
 	g.inventory = NewInverntory(g.board, g.camera)
 	slog.Info("inventory created")
-	moveChan := make(chan unit.MoveMessage, moveChanBuffer)
-	unitPiece := g.inventory.Units["runner"]
-	for i := range unitCount {
-		chanWg := make(chan *sync.WaitGroup, 1)
-		chanCameraTicks := make(chan struct{}, 1)
-		newRunner := unitPiece.Unit(
-			i,
-			gofakeit.Name(),
-			moveChan,
-			chanCameraTicks,
-			chanWg,
-		)
+	g.moveChan = make(chan unit.MoveMessage, moveChanBuffer)
+	g.createRocks()
+	g.createUnits()
 
-		g.Units = append(g.Units, newRunner)
-		newRunner.Relocate(geom.Pt(0, 0), getRandomPoint(g.board))
-		newRunner.Run()
-	}
-	slog.Info("units created")
-	rockPiece := g.inventory.Units["rock"]
-	for i := range rockCount {
-		chanWg := make(chan *sync.WaitGroup, 1)
-		chanCameraTicks := make(chan struct{}, 1)
-		newRock := rockPiece.Unit(
-			i,
-			"Rock named "+gofakeit.Name(),
-			moveChan,
-			chanCameraTicks,
-			chanWg,
-		)
-		g.Units = append(g.Units, newRock)
-		newRock.Relocate(geom.Pt(0, 0), getRandomPoint(g.board))
-		newRock.Run()
-	}
-	slog.Info("rocks created")
-
-	g.MapGrid = mapgrid.NewMapGrid(g.board, g.camera, moveChan)
+	g.MapGrid = mapgrid.NewMapGrid(g.board, g.camera, g.moveChan)
 	slog.Info("mapgrid created")
 	slog.Info("game created")
 
@@ -109,4 +79,43 @@ func getRandomPoint(board *board.Board) geom.Point {
 		X: float64(rand.Uint64N(board.Width)),
 		Y: float64(rand.Uint64N(board.Height)),
 	}
+}
+
+func (g *Game) createUnits() {
+	unitPiece := g.inventory.Units["runner"]
+	for i := range unitCount {
+		chanWg := make(chan *sync.WaitGroup, 1)
+		chanCameraTicks := make(chan struct{}, 1)
+		newRunner := unitPiece.Unit(
+			i,
+			gofakeit.Name(),
+			g.moveChan,
+			chanCameraTicks,
+			chanWg,
+		)
+
+		g.Units = append(g.Units, newRunner)
+		newRunner.Relocate(geom.Pt(0, 0), getRandomPoint(g.board))
+		newRunner.Run()
+	}
+	slog.Info("units created")
+}
+
+func (g *Game) createRocks() {
+	rockPiece := g.inventory.Units["rock"]
+	for i := range rockCount {
+		chanWg := make(chan *sync.WaitGroup, 1)
+		chanCameraTicks := make(chan struct{}, 1)
+		newRock := rockPiece.Unit(
+			i,
+			"Rock named "+gofakeit.Name(),
+			g.moveChan,
+			chanCameraTicks,
+			chanWg,
+		)
+		g.Units = append(g.Units, newRock)
+		newRock.Relocate(geom.Pt(0, 0), getRandomPoint(g.board))
+		newRock.Run()
+	}
+	slog.Info("rocks created")
 }

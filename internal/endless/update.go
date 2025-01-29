@@ -18,7 +18,7 @@ func (g *Game) Update() error {
 		g.log.Warn("MapGrid ticks channel is full")
 	}
 	for i := range g.Units {
-		if g.Units[i].OnBoard.Load() {
+		if g.MapGrid.CheckOnBoard(g.Units[i]) {
 			// сигнализируем о том, что мы находимся на карте и нужно работать с анимацией
 			select {
 			case g.Units[i].CameraTicks <- struct{}{}:

@@ -130,7 +130,6 @@ func (u *Unit) run() {
 
 func (u *Unit) OnBoardUpdate() {
 	var curTask Task
-
 	u.Focused = u.isFocused(u.Camera.Cursor)
 
 	if curTask = u.Tasks.Current(); curTask == nil {
