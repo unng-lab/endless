@@ -86,22 +86,7 @@ func NewMapGrid(board *board.Board, camera *camera.Camera, moves chan unit.MoveM
 }
 
 func (m *MapGrid) hash(pos geom.Point) (int, int) {
-	x := int(pos.X) >> gridSizeShift
-	y := int(pos.Y) >> gridSizeShift
-	if x < m.minX {
-		x = m.minX
-	}
-	if y < m.minY {
-		y = m.minY
-	}
-	if x > m.maxX {
-		x = m.maxX
-	}
-	if y > m.maxY {
-		y = m.maxY
-	}
-
-	return x, y
+	return max(min(int(pos.X)>>gridSizeShift, m.maxX), m.minX), max(min(int(pos.Y)>>gridSizeShift, m.maxY), m.minY)
 }
 
 func (m *MapGrid) run(workerPoolCount uint64) {
@@ -158,12 +143,17 @@ func (m *MapGrid) subProcess(coords [3]int) {
 func (m *MapGrid) process(msg unit.MoveMessage) {
 	hashFromX, hashFromY := m.hash(msg.From)
 	hashToX, hashToY := m.hash(msg.To)
-	if msg.To != msg.From {
-		fromList := m.Points[msg.From]
-		fromList.Remove(msg.U)
-		toList := m.Points[msg.To]
-		toList.Add(msg.U)
-	}
+	func() {
+		m.PointsMutex.Lock()
+		defer m.PointsMutex.Unlock()
+		if msg.To != msg.From {
+			fromList := m.Points[msg.From]
+			fromList.Remove(msg.U)
+			toList := m.Points[msg.To]
+			toList.Add(msg.U)
+		}
+	}()
+
 	if hashFromX != hashToX || hashFromY != hashToY {
 		if m.Grid[hashFromX][hashFromY] != nil {
 			delete(m.Grid[hashFromX][hashFromY], msg.U)
