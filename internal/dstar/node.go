@@ -2,6 +2,7 @@ package dstar
 
 import (
 	"math"
+	"sync"
 
 	"github.com/unng-lab/madfarmer/internal/board"
 	"github.com/unng-lab/madfarmer/internal/geom"
@@ -28,6 +29,14 @@ var neighborsOffsets = [8]geom.Point{
 	{-1, 1},
 	{1, -1},
 	{1, 1},
+}
+
+var nodePool = sync.Pool{
+	New: func() interface{} {
+		return &Node{
+			Neighbors: make([]*Node, 0, 8),
+		}
+	},
 }
 
 // Node представляет узел в графе.
@@ -82,11 +91,15 @@ func (n *Node) to(target Node) byte {
 
 // NewNode создаёт новый узел.
 func NewNode(position geom.Point) *Node {
-	return &Node{
-		Position:  position,
-		G:         math.Inf(1),
-		RHS:       math.Inf(1),
-		Index:     -1,
-		Neighbors: make([]*Node, 0, 8),
-	}
+	newNode := nodePool.Get().(*Node)
+	newNode.reset()
+	newNode.Position = position
+	return newNode
+}
+
+func (n *Node) reset() {
+	n.G = math.Inf(1)
+	n.RHS = math.Inf(1)
+	n.Neighbors = n.Neighbors[:0]
+	n.Index = -1
 }

@@ -59,13 +59,13 @@ func (ds *DStar) Initialize(startPos, goalPos geom.Point) {
 	ds.Push(ds.goal)
 }
 
-func (d *DStar) MoveStart(point geom.Point) {
-	newStart := d.getNode(point)
-	oldStart := d.start
-	d.km += oldStart.heuristic(newStart.Position)
-	d.start = newStart
-	d.UpdateVertex(oldStart)
-	d.UpdateVertex(d.start)
+func (ds *DStar) MoveStart(point geom.Point) {
+	newStart := ds.getNode(point)
+	oldStart := ds.start
+	ds.km += oldStart.heuristic(newStart.Position)
+	ds.start = newStart
+	ds.UpdateVertex(oldStart)
+	ds.UpdateVertex(ds.start)
 }
 
 // Получение узла по позиции, создание нового при необходимости.
@@ -195,4 +195,15 @@ func (ds *DStar) reconstructPath() ([]geom.Point, error) {
 		current = nextNode
 	}
 	return path, nil
+}
+
+func (ds *DStar) Finish() {
+	for _, n := range ds.nodeCache {
+		nodePool.Put(n)
+	}
+	clear(ds.nodeCache)
+	ds.nodes = ds.nodes[:0]
+	ds.start = nil
+	ds.goal = nil
+	ds.km = 0
 }

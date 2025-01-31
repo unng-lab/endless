@@ -1,9 +1,11 @@
 package board
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"math/rand/v2"
+	"sync"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
@@ -36,6 +38,14 @@ type Cell struct {
 	Cost float64
 	// Храним стоимость перемещения в зависимости от временного интервала
 	Costs IntervalTree
+
+	UnitList      []UnitOnCell
+	UnitListMutex sync.RWMutex
+}
+
+type UnitOnCell struct {
+	ID   uint64
+	Cost float64
 }
 
 // MoveCost Функция расчета стоимости перемещения в зависимости от временного интервала
@@ -90,7 +100,7 @@ func NewCell(cellType CellType, tileSize int) Cell {
 	default:
 		panic("Неизвестный тип клетки")
 	}
-
+	cell.UnitList = make([]UnitOnCell, 0)
 	return cell
 }
 
@@ -197,4 +207,34 @@ func getRandomElementFromQuadrant(quadrant, N int) (int, error) {
 	randomIndex := randomRow*N + randomCol
 
 	return randomIndex, nil
+}
+
+func (c *Cell) AddUnit(id uint64, cost float64) error {
+	c.UnitListMutex.Lock()
+	defer c.UnitListMutex.Unlock()
+	if math.IsInf(c.Cost, 1) {
+		return errors.New("нельзя добавлять новые юниты, т.к. стоимость уже бесконечна")
+	}
+	c.UnitList = append(c.UnitList, UnitOnCell{
+		ID:   id,
+		Cost: cost,
+	})
+	if math.IsInf(cost, 1) {
+		c.Cost = math.Inf(1)
+	} else {
+		c.Cost += cost
+	}
+	return nil
+}
+
+func (c *Cell) RemoveUnit(id uint64) error {
+	c.UnitListMutex.Lock()
+	defer c.UnitListMutex.Unlock()
+	for i := range c.UnitList {
+		if c.UnitList[i].ID == id {
+			c.UnitList = append(c.UnitList[:i], c.UnitList[i+1:]...)
+			return nil
+		}
+	}
+	return errors.New("не удалось удалить юнит")
 }

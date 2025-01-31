@@ -1,6 +1,7 @@
 package unit
 
 import (
+	"math"
 	"sync"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -119,4 +120,8 @@ func (u *Unit) isFocused(p geom.Point) bool {
 type MoveMessage struct {
 	U        *Unit
 	From, To geom.Point
+}
+
+func (u *Unit) Cost() float64 {
+	return math.Inf(1)
 }

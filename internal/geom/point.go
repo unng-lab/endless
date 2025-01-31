@@ -111,3 +111,7 @@ func (p Point) GetNeighbor(dir Direction) (Point, error) {
 		return p, errors.New("invalid direction") // если направление некорректно, возвращаем исходную точку
 	}
 }
+
+func (p Point) GetInts() (int, int) {
+	return int(p.X), int(p.Y)
+}

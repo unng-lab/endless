@@ -2,6 +2,7 @@ package endless
 
 import (
 	"log/slog"
+	"math"
 	"math/rand/v2"
 	"sync"
 
@@ -75,10 +76,15 @@ func NewGame(
 }
 
 func getRandomPoint(board *board.Board) geom.Point {
-	return geom.Point{
+	p := geom.Point{
 		X: float64(rand.Uint64N(board.Width)),
 		Y: float64(rand.Uint64N(board.Height)),
 	}
+	cell := board.Cell(p.GetInts())
+	if math.IsInf(cell.Cost, 1) {
+		return getRandomPoint(board)
+	}
+	return p
 }
 
 func (g *Game) createUnits() {
@@ -94,7 +100,7 @@ func (g *Game) createUnits() {
 		)
 
 		g.Units = append(g.Units, newRunner)
-		newRunner.Relocate(geom.Pt(0, 0), getRandomPoint(g.board))
+		newRunner.Spawn(getRandomPoint(g.board))
 		newRunner.Run()
 	}
 	slog.Info("units created")
@@ -112,7 +118,7 @@ func (g *Game) createRocks() {
 			chanWg,
 		)
 		g.Units = append(g.Units, newRock)
-		newRock.Relocate(geom.Pt(0, 0), getRandomPoint(g.board))
+		newRock.Spawn(getRandomPoint(g.board))
 		newRock.Run()
 	}
 	slog.Info("rocks created")

@@ -23,8 +23,6 @@ type MapGrid struct {
 	camera                 *camera.Camera
 	minX, minY, maxX, maxY int
 	Grid                   [][]map[*unit.Unit]struct{}
-	Points                 map[geom.Point]UnitList
-	PointsMutex            sync.RWMutex
 	Moves                  chan unit.MoveMessage
 	Ticks                  chan int64
 	updated                bool
@@ -52,14 +50,6 @@ func (ul *UnitList) Remove(u *unit.Unit) int {
 		}
 	}
 	return len(ul.list)
-}
-
-func (m *MapGrid) getUnitsFromPos(pos geom.Point) []*unit.Unit {
-	m.PointsMutex.RLock()
-	defer m.PointsMutex.RUnlock()
-	res := make([]*unit.Unit, 0, len(m.Points[pos].list))
-	copy(res, m.Points[pos].list)
-	return res
 }
 
 func NewMapGrid(board *board.Board, camera *camera.Camera, moves chan unit.MoveMessage) *MapGrid {
@@ -143,17 +133,6 @@ func (m *MapGrid) subProcess(coords [3]int) {
 func (m *MapGrid) process(msg unit.MoveMessage) {
 	hashFromX, hashFromY := m.hash(msg.From)
 	hashToX, hashToY := m.hash(msg.To)
-	func() {
-		m.PointsMutex.Lock()
-		defer m.PointsMutex.Unlock()
-		if msg.To != msg.From {
-			fromList := m.Points[msg.From]
-			fromList.Remove(msg.U)
-			toList := m.Points[msg.To]
-			toList.Add(msg.U)
-		}
-	}()
-
 	if hashFromX != hashToX || hashFromY != hashToY {
 		if m.Grid[hashFromX][hashFromY] != nil {
 			delete(m.Grid[hashFromX][hashFromY], msg.U)
