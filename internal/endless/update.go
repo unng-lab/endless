@@ -35,7 +35,7 @@ func (g *Game) Update() error {
 		} else {
 			if g.Units[i].Tasks.Current() != nil {
 				g.wg.Add(1)
-				g.Units[i].Ticks <- &g.wg
+				g.Units[i].Ticks <- gameTickCounter
 			}
 		}
 	}

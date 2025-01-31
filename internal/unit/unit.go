@@ -53,10 +53,13 @@ type Unit struct {
 	Speed float64 // tiles per update tick
 
 	//Ticks экономные тики для отработки игровых событий
-	Ticks chan *sync.WaitGroup
+	Ticks chan int64
 	//CameraTicks тики для отработки анимации и тд
 	CameraTicks chan struct{}
-	Camera      *camera.Camera
+	// WG завершение рабочего цикла
+	WG *sync.WaitGroup
+
+	Camera *camera.Camera
 	// Карта игры
 	Board *board.Board
 	// Можно немного пооптимизировать и сделать через глобальную переменную
@@ -78,13 +81,16 @@ func (u *Unit) Run() {
 func (u *Unit) run() {
 	for {
 		select {
-		case tick := <-u.Ticks:
-			n, err := u.Update()
-			if err != nil {
-				return
-			}
-			u.SleepTicks = n
-			tick.Done()
+		case <-u.Ticks:
+			func() {
+				defer u.WG.Done()
+				n, err := u.Update()
+				if err != nil {
+					return
+				}
+				u.SleepTicks = n
+			}()
+
 		case <-u.CameraTicks:
 			u.OnBoardUpdate()
 		}

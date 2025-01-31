@@ -2,7 +2,6 @@ package endless
 
 import (
 	"image"
-	"sync"
 	"sync/atomic"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -54,7 +53,7 @@ type Piece interface {
 		name string,
 		moveChan chan unit.MoveMessage,
 		cameraTicks chan struct{},
-		ticks chan *sync.WaitGroup,
+		ticks chan int64,
 	) *unit.Unit
 }
 
@@ -123,7 +122,7 @@ func (r *Runner) Unit(
 	name string,
 	moveChan chan unit.MoveMessage,
 	cameraTicks chan struct{},
-	ticks chan *sync.WaitGroup,
+	ticks chan int64,
 ) *unit.Unit {
 	var newUnit unit.Unit
 	newUnit.ID = inc()
@@ -158,7 +157,7 @@ func (r Rock) Unit(
 	name string,
 	moveChan chan unit.MoveMessage,
 	cameraTicks chan struct{},
-	ticks chan *sync.WaitGroup,
+	ticks chan int64,
 ) *unit.Unit {
 	var newUnit unit.Unit
 	newUnit.ID = inc()

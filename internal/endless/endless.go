@@ -90,7 +90,7 @@ func getRandomPoint(board *board.Board) geom.Point {
 func (g *Game) createUnits() {
 	unitPiece := g.inventory.Units["runner"]
 	for range unitCount {
-		chanWg := make(chan *sync.WaitGroup, 1)
+		chanWg := make(chan int64, 1)
 		chanCameraTicks := make(chan struct{}, 1)
 		newRunner := unitPiece.Unit(
 			gofakeit.Name(),
@@ -100,6 +100,7 @@ func (g *Game) createUnits() {
 		)
 
 		g.Units = append(g.Units, newRunner)
+		newRunner.WG = &g.wg
 		newRunner.Spawn(getRandomPoint(g.board))
 		newRunner.Run()
 	}
@@ -109,7 +110,7 @@ func (g *Game) createUnits() {
 func (g *Game) createRocks() {
 	rockPiece := g.inventory.Units["rock"]
 	for range rockCount {
-		chanWg := make(chan *sync.WaitGroup, 1)
+		chanWg := make(chan int64, 1)
 		chanCameraTicks := make(chan struct{}, 1)
 		newRock := rockPiece.Unit(
 			"Rock named "+gofakeit.Name(),
@@ -118,6 +119,7 @@ func (g *Game) createRocks() {
 			chanWg,
 		)
 		g.Units = append(g.Units, newRock)
+		newRock.WG = &g.wg
 		newRock.Spawn(getRandomPoint(g.board))
 		newRock.Run()
 	}
