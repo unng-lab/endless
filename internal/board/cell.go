@@ -44,8 +44,9 @@ type Cell struct {
 }
 
 type UnitOnCell struct {
-	ID   uint64
-	Cost float64
+	ID    uint64
+	Index int
+	Cost  float64
 }
 
 // MoveCost Функция расчета стоимости перемещения в зависимости от временного интервала
@@ -209,15 +210,16 @@ func getRandomElementFromQuadrant(quadrant, N int) (int, error) {
 	return randomIndex, nil
 }
 
-func (c *Cell) AddUnit(id uint64, cost float64) error {
+func (c *Cell) AddUnit(id uint64, index int, cost float64) error {
 	c.UnitListMutex.Lock()
 	defer c.UnitListMutex.Unlock()
 	if math.IsInf(c.Cost, 1) {
 		return errors.New("нельзя добавлять новые юниты, т.к. стоимость уже бесконечна")
 	}
 	c.UnitList = append(c.UnitList, UnitOnCell{
-		ID:   id,
-		Cost: cost,
+		ID:    id,
+		Index: index,
+		Cost:  cost,
 	})
 	if math.IsInf(cost, 1) {
 		c.Cost = math.Inf(1)

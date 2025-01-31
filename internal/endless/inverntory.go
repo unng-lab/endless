@@ -50,6 +50,7 @@ const (
 type Piece interface {
 	Type() string
 	Unit(
+		index int,
 		name string,
 		moveChan chan unit.MoveMessage,
 		cameraTicks chan struct{},
@@ -119,12 +120,14 @@ func NewRunner(board *board.Board, camera *camera.Camera) *Runner {
 }
 
 func (r *Runner) Unit(
+	index int,
 	name string,
 	moveChan chan unit.MoveMessage,
 	cameraTicks chan struct{},
 	ticks chan int64,
 ) *unit.Unit {
 	var newUnit unit.Unit
+	newUnit.Index = index
 	newUnit.ID = inc()
 	newUnit.Name = name
 	newUnit.Type = r.Type()
@@ -154,12 +157,14 @@ func (r Rock) Type() string {
 }
 
 func (r Rock) Unit(
+	index int,
 	name string,
 	moveChan chan unit.MoveMessage,
 	cameraTicks chan struct{},
 	ticks chan int64,
 ) *unit.Unit {
 	var newUnit unit.Unit
+	newUnit.Index = index
 	newUnit.ID = inc()
 	newUnit.Name = name
 	newUnit.Type = r.Type()

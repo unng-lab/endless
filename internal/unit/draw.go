@@ -24,11 +24,12 @@ func (u *Unit) Draw(screen *ebiten.Image, counter int) bool {
 	)
 	drawPoint := u.GetDrawPoint()
 	drawOptions.GeoM.Translate(drawPoint.X, drawPoint.Y)
+	anim := counter & 0xFFFF >> 6
 	if u.Focused {
-		screen.DrawImage(u.Graphics.FocusedAnimation[counter%len(u.Graphics.FocusedAnimation)], drawOptions)
+		screen.DrawImage(u.Graphics.FocusedAnimation[anim%len(u.Graphics.FocusedAnimation)], drawOptions)
 		u.DrawTitle(screen, drawOptions)
 	} else {
-		screen.DrawImage(u.Graphics.Animation[counter%len(u.Graphics.Animation)], drawOptions)
+		screen.DrawImage(u.Graphics.Animation[anim%len(u.Graphics.Animation)], drawOptions)
 	}
 
 	if drawRect {

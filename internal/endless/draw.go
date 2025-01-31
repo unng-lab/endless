@@ -18,9 +18,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	Counter++
 	g.camera.Prepare()
 	g.board.Draw(screen)
-	for i := range g.OnBoard {
-		g.OnBoard[i].Draw(screen, Counter)
-	}
+	g.DrawOnBoard(screen, Counter)
 	cursor := g.camera.Cursor
 	posX, posY := GetLeftAngle(
 		g.camera.GetPositionX(),
@@ -149,4 +147,16 @@ func GetLeftAngle(cameraX, cameraY, cursorX, cursorY, tileSizeX, tileSizeY float
 	}
 
 	return x + math.Trunc((cursorX-x)/tileSizeX)*tileSizeX, y + math.Trunc((cursorY-y)/tileSizeY)*tileSizeY
+}
+
+func (g *Game) DrawOnBoard(screen *ebiten.Image, counter int) {
+	x1, y1 := max(g.camera.Coordinates.Min.X, 0), max(g.camera.Coordinates.Min.Y, 0)
+	x2, y2 := min(g.camera.Coordinates.Max.X, float64(g.board.Width)), min(g.camera.Coordinates.Max.Y, float64(g.board.Height))
+	for y := y1; y <= y2; y++ {
+		for x := x1; x <= x2; x++ {
+			for i := range g.board.Cell(int(x), int(y)).UnitList {
+				g.Units[g.board.Cell(int(x), int(y)).UnitList[i].Index].Draw(screen, counter)
+			}
+		}
+	}
 }

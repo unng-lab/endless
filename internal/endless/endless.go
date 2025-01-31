@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"math"
 	"math/rand/v2"
+	"runtime"
 	"sync"
 
 	"github.com/brianvoe/gofakeit/v7"
@@ -33,16 +34,19 @@ const (
 var _ ebiten.Game = (*Game)(nil) // ensure Game implements ebiten.Game
 
 type Game struct {
-	log       *slog.Logger
-	camera    *camera.Camera
-	wg        sync.WaitGroup
-	ui        *ui.UIEngine
-	inventory *Inventory
-	board     *board.Board
-	Units     []*unit.Unit
-	OnBoard   []*unit.Unit
-	MapGrid   *mapgrid.MapGrid
-	moveChan  chan unit.MoveMessage
+	log          *slog.Logger
+	camera       *camera.Camera
+	wg           sync.WaitGroup
+	ui           *ui.UIEngine
+	inventory    *Inventory
+	board        *board.Board
+	Units        []*unit.Unit
+	UnitsMutex   sync.Mutex
+	OnBoard      []*unit.Unit
+	OnBoardMutex sync.Mutex
+	MapGrid      *mapgrid.MapGrid
+	moveChan     chan unit.MoveMessage
+	workersPool  []chan int64
 }
 
 func NewGame(
@@ -70,9 +74,20 @@ func NewGame(
 	g.createRocks()
 	g.createUnits()
 
+	g.runWorkers()
+
 	slog.Info("game created")
 
 	return &g
+}
+
+func (g *Game) runWorkers() {
+	num := runtime.NumCPU() / 4
+	for i := range num {
+		ch := make(chan int64, 1)
+		g.workersPool = append(g.workersPool, ch)
+		go g.workerRun(i, num, ch)
+	}
 }
 
 func getRandomPoint(board *board.Board) geom.Point {
@@ -93,6 +108,7 @@ func (g *Game) createUnits() {
 		chanWg := make(chan int64, 1)
 		chanCameraTicks := make(chan struct{}, 1)
 		newRunner := unitPiece.Unit(
+			len(g.Units),
 			gofakeit.Name(),
 			g.moveChan,
 			chanCameraTicks,
@@ -113,6 +129,7 @@ func (g *Game) createRocks() {
 		chanWg := make(chan int64, 1)
 		chanCameraTicks := make(chan struct{}, 1)
 		newRock := rockPiece.Unit(
+			len(g.Units),
 			"Rock named "+gofakeit.Name(),
 			g.moveChan,
 			chanCameraTicks,

@@ -25,7 +25,7 @@ func (u *Unit) Spawn(to geom.Point) {
 
 func (u *Unit) set(to geom.Point) {
 	cell := u.Board.Cell(to.GetInts())
-	err := cell.AddUnit(u.ID, u.Cost())
+	err := cell.AddUnit(u.ID, u.Index, u.Cost())
 	if err != nil {
 		panic(err)
 	}

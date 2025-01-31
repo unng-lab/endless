@@ -40,7 +40,8 @@ type Positioning struct {
 }
 
 type Unit struct {
-	ID uint64
+	ID    uint64
+	Index int
 	// тип юнита
 	Type string
 	// Имя юнита

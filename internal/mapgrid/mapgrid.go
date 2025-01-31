@@ -75,7 +75,7 @@ func NewMapGrid(board *board.Board, camera *camera.Camera, moves chan unit.MoveM
 	return &m
 }
 
-func (m *MapGrid) hash(pos geom.Point) (int, int) {
+func (m *MapGrid) Hash(pos geom.Point) (int, int) {
 	return max(min(int(pos.X)>>gridSizeShift, m.maxX), m.minX), max(min(int(pos.Y)>>gridSizeShift, m.maxY), m.minY)
 }
 
@@ -107,6 +107,7 @@ func (m *MapGrid) onBoardWriter() {
 func (m *MapGrid) addUnitToList(u *unit.Unit) {
 	defer m.onBoardWG.Done()
 	m.onBoardList[u] = struct{}{}
+
 }
 
 func (m *MapGrid) runSop() {
@@ -131,8 +132,8 @@ func (m *MapGrid) subProcess(coords [3]int) {
 }
 
 func (m *MapGrid) process(msg unit.MoveMessage) {
-	hashFromX, hashFromY := m.hash(msg.From)
-	hashToX, hashToY := m.hash(msg.To)
+	hashFromX, hashFromY := m.Hash(msg.From)
+	hashToX, hashToY := m.Hash(msg.To)
 	if hashFromX != hashToX || hashFromY != hashToY {
 		if m.Grid[hashFromX][hashFromY] != nil {
 			delete(m.Grid[hashFromX][hashFromY], msg.U)
@@ -162,7 +163,7 @@ func (m *MapGrid) UpdatedAt() int64 {
 }
 
 func (m *MapGrid) DeleteUnit(from geom.Point, u *unit.Unit) {
-	x, y := m.hash(from)
+	x, y := m.Hash(from)
 	if m.Grid[x][y] != nil {
 		delete(m.Grid[x][y], u)
 		if len(m.Grid[x][y]) == 0 {
@@ -172,7 +173,7 @@ func (m *MapGrid) DeleteUnit(from geom.Point, u *unit.Unit) {
 }
 
 func (m *MapGrid) AddUnit(to geom.Point, u *unit.Unit) {
-	x, y := m.hash(to)
+	x, y := m.Hash(to)
 	if m.Grid[x][y] == nil {
 		m.Grid[x][y] = make(map[*unit.Unit]struct{}, unitCapacity)
 	}
@@ -183,8 +184,8 @@ func (m *MapGrid) setUnitsOnboard() {
 	m.onBoardListMutex.Lock()
 	defer m.onBoardListMutex.Unlock()
 	clear(m.onBoardList)
-	x1, y1 := m.hash(m.camera.Coordinates.Min)
-	x2, y2 := m.hash(m.camera.Coordinates.Max)
+	x1, y1 := m.Hash(m.camera.Coordinates.Min)
+	x2, y2 := m.Hash(m.camera.Coordinates.Max)
 	for x := x1; x <= x2; x++ {
 		m.onBoardWG.Add(1)
 		m.onBoardProcessChan <- [3]int{x, y1, y2}

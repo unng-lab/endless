@@ -167,7 +167,7 @@ func (c *Camera) Prepare() {
 	}
 
 	a, b := ebiten.CursorPosition()
-	c.Cursor = geom.Point{float64(a), float64(b)}
+	c.Cursor = geom.Point{X: float64(a), Y: float64(b)}
 }
 
 func (c *Camera) GetCurrentPixels() geom.Rectangle {
