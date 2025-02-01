@@ -47,9 +47,15 @@ func NewBoard(c *camera.Camera, tileSize, smallTileSize uint64, tileCount uint64
 		return rand.IntN(5) + 1
 	}
 	b.Cells = make([]Cell, b.Width*b.Height)
-	for i := range b.Cells {
-		b.Cells[i] = NewCell(CellType(seed()), int(b.TileSize))
+	for y := 0; y < int(b.Height); y++ {
+		for x := 0; x < int(b.Width); x++ {
+			b.Cells[b.index(x, y)] = NewCell(CellType(seed()), int(b.TileSize), geom.Point{
+				X: float64(x),
+				Y: float64(y),
+			})
+		}
 	}
+
 	empty, err := img.Img("empty.jpg", tileSize, tileSize)
 	if err != nil {
 		panic(err)
@@ -249,14 +255,12 @@ func (b *Board) IsObstacle(p geom.Point) bool {
 	return math.IsInf(cell.Cost, 1)
 }
 
-func (b *Board) GetRandomPoint() geom.Point {
-	p := geom.Point{
-		X: float64(rand.Uint64N(b.Width)),
-		Y: float64(rand.Uint64N(b.Height)),
+func (b *Board) GetRandomFreePoint() geom.Point {
+	index := rand.IntN(len(b.Cells))
+	for i := index; i < len(b.Cells); i++ {
+		if len(b.Cells[i].UnitList) == 0 && !math.IsInf(b.Cells[i].Cost, 1) {
+			return b.Cells[i].Point
+		}
 	}
-	cell := b.Cell(p.GetInts())
-	if math.IsInf(cell.Cost, 1) {
-		return b.GetRandomPoint()
-	}
-	return p
+	return b.GetRandomFreePoint()
 }

@@ -72,7 +72,7 @@ type Unit struct {
 
 	RoadTask Road
 
-	MoveChan chan MoveMessage
+	//MoveChan chan MoveMessage
 }
 
 func (u *Unit) Run() {

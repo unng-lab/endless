@@ -10,6 +10,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"github.com/unng-lab/madfarmer/assets/img"
+	"github.com/unng-lab/madfarmer/internal/geom"
 )
 
 type CellType byte
@@ -38,6 +39,8 @@ type Cell struct {
 	Cost float64
 	// Храним стоимость перемещения в зависимости от временного интервала
 	Costs IntervalTree
+
+	Point geom.Point
 
 	UnitList      []UnitOnCell
 	UnitListMutex sync.RWMutex
@@ -80,7 +83,7 @@ func (c *Cell) MoveCost(start, end int64) float64 {
 	return tCost + c.Cost
 }
 
-func NewCell(cellType CellType, tileSize int) Cell {
+func NewCell(cellType CellType, tileSize int, point geom.Point) Cell {
 	var cell Cell
 	cell.Type = cellType
 	switch cellType {
@@ -105,6 +108,7 @@ func NewCell(cellType CellType, tileSize int) Cell {
 		panic("Неизвестный тип клетки")
 	}
 	cell.UnitList = make([]UnitOnCell, 0)
+	cell.Point = point
 	return cell
 }
 

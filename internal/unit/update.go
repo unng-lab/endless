@@ -2,8 +2,6 @@ package unit
 
 import (
 	"log/slog"
-
-	"github.com/unng-lab/madfarmer/internal/geom"
 )
 
 // Update возвращает время до следующего вызова Update или ошибку
@@ -16,7 +14,7 @@ func (u *Unit) SetTask() {
 	if u.Type == "runner" && u.Tasks.Current() == nil {
 		//временное для добавление сходу задания на попиздовать куда то
 		u.RoadTask = NewRoad(u.Board, u)
-		err := u.RoadTask.Path(geom.Point{X: 512, Y: 512})
+		err := u.RoadTask.Path(u.Board.GetRandomFreePoint())
 		if err != nil {
 			slog.Error("road task ", "error", err)
 

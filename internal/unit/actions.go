@@ -11,14 +11,12 @@ func (u *Unit) Relocate(from, to geom.Point) {
 		panic(err)
 	}
 	u.set(to)
-	u.tellToMapGrid(from, to)
 	return
 	//slog.Info("Unit.Relocate", "from", from, "to", to)
 }
 
 func (u *Unit) Spawn(to geom.Point) {
 	u.set(to)
-	u.tellToMapGrid(geom.Point{}, to)
 }
 
 func (u *Unit) set(to geom.Point) {
@@ -33,21 +31,3 @@ func (u *Unit) set(to geom.Point) {
 	u.Positioning.PositionShiftModX = 0
 	u.Positioning.PositionShiftModY = 0
 }
-
-func (u *Unit) tellToMapGrid(from, to geom.Point) {
-	//select {
-	//
-	//case u.MoveChan <- MoveMessage{
-	//	U:    u,
-	//	From: from,
-	//	To:   to,
-	//}:
-	//default:
-	//	slog.Warn("Unit.Relocate: channel is full", "unitType", u.Type, "unit", u)
-	//}
-}
-
-//func (u *Unit) MoveToNeighbor(direction geom.Direction) {
-//	p := u.Position.GetNeighbor(direction)
-//	u.Relocate(p)
-//}

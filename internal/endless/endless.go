@@ -18,11 +18,9 @@ import (
 )
 
 const (
-	unitCount = 1000
-	rockCount = 100000
-	// TODO пересмотреть решение
-	// пока нужно держать больше чем сумма всех юнитов
-	moveChanBuffer = 1000 // 1 миллион
+	unitCount      = 10000
+	rockCount      = 100000
+	moveChanBuffer = 1000
 
 	tileSize  = 16
 	tileCount = 1024
@@ -49,6 +47,7 @@ func NewGame(
 // analyticsDB *ch.AnaliticsDB,
 ) *Game {
 	var g Game
+	g.log = slog.Default()
 	g.Units = make([]*unit.Unit, 0, unitCount)
 	g.camera = camera.New(tileSize, tileCount)
 	slog.Info("camera created")
@@ -63,9 +62,6 @@ func NewGame(
 
 	g.inventory = NewInverntory(g.board, g.camera)
 	slog.Info("inventory created")
-	g.moveChan = make(chan unit.MoveMessage, moveChanBuffer)
-	//g.MapGrid = mapgrid.NewMapGrid(g.board, g.camera, g.moveChan)
-	slog.Info("mapgrid created")
 	g.createRocks()
 	g.createUnits()
 
@@ -100,7 +96,7 @@ func (g *Game) createUnits() {
 
 		g.Units = append(g.Units, newRunner)
 		newRunner.WG = &g.wg
-		newRunner.Spawn(g.board.GetRandomPoint())
+		newRunner.Spawn(g.board.GetRandomFreePoint())
 		newRunner.Run()
 		newRunner.SetTask()
 	}
@@ -121,7 +117,7 @@ func (g *Game) createRocks() {
 		)
 		g.Units = append(g.Units, newRock)
 		newRock.WG = &g.wg
-		newRock.Spawn(g.board.GetRandomPoint())
+		newRock.Spawn(g.board.GetRandomFreePoint())
 		newRock.Run()
 		newRock.SetTask()
 	}

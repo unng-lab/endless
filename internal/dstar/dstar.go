@@ -43,7 +43,8 @@ func NewDStar(b *board.Board) *DStar {
 // Инициализация алгоритма D* Lite.
 func (ds *DStar) Initialize(startPos, goalPos geom.Point) {
 	ds.km = 0
-	ds.nodes = []*Node{}
+	// можно пооптимизировать
+	ds.nodes = ds.nodes[:0]
 	ds.nodeCache = make(map[nodeCacheKey]*Node)
 
 	ds.start = ds.getNode(startPos)
