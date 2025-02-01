@@ -1,8 +1,6 @@
 package unit
 
 import (
-	"log/slog"
-
 	"github.com/unng-lab/madfarmer/internal/geom"
 )
 
@@ -37,16 +35,16 @@ func (u *Unit) set(to geom.Point) {
 }
 
 func (u *Unit) tellToMapGrid(from, to geom.Point) {
-	select {
-
-	case u.MoveChan <- MoveMessage{
-		U:    u,
-		From: from,
-		To:   to,
-	}:
-	default:
-		slog.Warn("Unit.Relocate: channel is full", "unitType", u.Type, "unit", u)
-	}
+	//select {
+	//
+	//case u.MoveChan <- MoveMessage{
+	//	U:    u,
+	//	From: from,
+	//	To:   to,
+	//}:
+	//default:
+	//	slog.Warn("Unit.Relocate: channel is full", "unitType", u.Type, "unit", u)
+	//}
 }
 
 //func (u *Unit) MoveToNeighbor(direction geom.Direction) {

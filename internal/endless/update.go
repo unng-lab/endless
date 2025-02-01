@@ -1,15 +1,14 @@
 package endless
 
 import (
-	"github.com/unng-lab/madfarmer/internal/unit"
+	"time"
 )
 
 var gameTickCounter int64
 
 func (g *Game) Update() error {
-	//t := time.Now()
+	t := time.Now()
 	gameTickCounter++
-	g.OnBoard = g.OnBoard[:0]
 	if err := g.camera.Update(); err != nil {
 		return err
 	}
@@ -17,17 +16,17 @@ func (g *Game) Update() error {
 		return err
 	}
 	g.board.ClearUpdatedCells()
-	select {
-	case g.MapGrid.Ticks <- gameTickCounter:
-	default:
-		g.log.Info("MapGrid ticks channel is full")
-	}
+	//select {
+	//case g.MapGrid.Ticks <- gameTickCounter:
+	//default:
+	//	g.log.Info("MapGrid ticks channel is full")
+	//}
 	for i := range g.workersPool {
 		g.wg.Add(1)
 		g.workersPool[i] <- gameTickCounter
 	}
 	g.wg.Wait()
-	//println(time.Since(t).Microseconds())
+	println(time.Since(t).Microseconds())
 	return nil
 }
 
@@ -43,7 +42,8 @@ func (g *Game) workerRun(offset, shift int, gameTickChan chan int64) {
 func (g *Game) workersProcess(offset, shift int, gameTickCounter int64) {
 	defer g.wg.Done()
 	for i := offset; i < len(g.Units); i += shift {
-		if g.MapGrid.CheckOnBoard(g.Units[i]) {
+		unitStatus := g.Units[i].Process()
+		if unitStatus.OnBoard {
 			// сигнализируем о том, что мы находимся на карте и нужно работать с анимацией
 			select {
 			case g.Units[i].CameraTicks <- struct{}{}:
@@ -52,8 +52,6 @@ func (g *Game) workersProcess(offset, shift int, gameTickCounter int64) {
 				//максимально не блокируем
 
 			}
-
-			//g.addOnBoard(g.Units[i])
 		}
 		if g.Units[i].SleepTicks > 0 {
 			g.Units[i].SleepTicks--
@@ -61,13 +59,8 @@ func (g *Game) workersProcess(offset, shift int, gameTickCounter int64) {
 			if g.Units[i].Tasks.Current() != nil {
 				g.wg.Add(1)
 				g.Units[i].Ticks <- gameTickCounter
+				//g.Units[i].Play(gameTickCounter)
 			}
 		}
 	}
-}
-
-func (g *Game) addOnBoard(unit *unit.Unit) {
-	g.OnBoardMutex.Lock()
-	defer g.OnBoardMutex.Unlock()
-	g.OnBoard = append(g.OnBoard, unit)
 }

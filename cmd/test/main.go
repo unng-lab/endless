@@ -1,14 +1,29 @@
 package main
 
 import (
-	"time"
+	"fmt"
+	"iter"
 )
 
 func main() {
-	offset := 3
-	shift := 8
-	for i := offset; i < 100; i += shift {
-		println(i)
-		time.Sleep(time.Second)
+	for p := range genFib() {
+		fmt.Println(p)
+
+		if p > 1000 {
+			break
+		}
+	}
+}
+
+func genFib() iter.Seq[int] {
+	return func(yield func(int) bool) {
+		a, b := 1, 1
+
+		for {
+			if !yield(a) {
+				return
+			}
+			a, b = b, a+b
+		}
 	}
 }

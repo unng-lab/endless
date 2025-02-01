@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	slowness = 1
+	slowness = 1000
 )
 
 var serial atomic.Uint64

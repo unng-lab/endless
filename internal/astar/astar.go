@@ -189,8 +189,11 @@ func (a *Astar) BuildPath(fromX, fromY, toX, toY float64) error {
 				y:        current.y + neighbors[i].Y,
 				priority: 0,
 			}
-
-			score := a.B.GetCell(int64(neighbor.x), int64(neighbor.y)).MoveCost(0, 0)
+			cell := a.B.GetCell(int64(neighbor.x), int64(neighbor.y))
+			if cell == nil {
+				continue
+			}
+			score := cell.MoveCost(0, 0)
 			if score <= 0 {
 				continue
 			}

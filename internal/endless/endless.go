@@ -2,14 +2,11 @@ package endless
 
 import (
 	"log/slog"
-	"math"
-	"math/rand/v2"
 	"runtime"
 	"sync"
 
 	"github.com/brianvoe/gofakeit/v7"
 
-	"github.com/unng-lab/madfarmer/internal/geom"
 	"github.com/unng-lab/madfarmer/internal/mapgrid"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -34,19 +31,18 @@ const (
 var _ ebiten.Game = (*Game)(nil) // ensure Game implements ebiten.Game
 
 type Game struct {
-	log          *slog.Logger
-	camera       *camera.Camera
-	wg           sync.WaitGroup
-	ui           *ui.UIEngine
-	inventory    *Inventory
-	board        *board.Board
-	Units        []*unit.Unit
-	UnitsMutex   sync.Mutex
-	OnBoard      []*unit.Unit
-	OnBoardMutex sync.Mutex
-	MapGrid      *mapgrid.MapGrid
-	moveChan     chan unit.MoveMessage
-	workersPool  []chan int64
+	log            *slog.Logger
+	camera         *camera.Camera
+	wg             sync.WaitGroup
+	ui             *ui.UIEngine
+	inventory      *Inventory
+	board          *board.Board
+	Units          []*unit.Unit
+	UnitsMutex     sync.Mutex
+	OnBoardCounter int64
+	MapGrid        *mapgrid.MapGrid
+	moveChan       chan unit.MoveMessage
+	workersPool    []chan int64
 }
 
 func NewGame(
@@ -54,7 +50,6 @@ func NewGame(
 ) *Game {
 	var g Game
 	g.Units = make([]*unit.Unit, 0, unitCount)
-	g.OnBoard = make([]*unit.Unit, 0, unitCount)
 	g.camera = camera.New(tileSize, tileCount)
 	slog.Info("camera created")
 	g.ui = ui.New(g.camera)
@@ -69,7 +64,7 @@ func NewGame(
 	g.inventory = NewInverntory(g.board, g.camera)
 	slog.Info("inventory created")
 	g.moveChan = make(chan unit.MoveMessage, moveChanBuffer)
-	g.MapGrid = mapgrid.NewMapGrid(g.board, g.camera, g.moveChan)
+	//g.MapGrid = mapgrid.NewMapGrid(g.board, g.camera, g.moveChan)
 	slog.Info("mapgrid created")
 	g.createRocks()
 	g.createUnits()
@@ -82,24 +77,12 @@ func NewGame(
 }
 
 func (g *Game) runWorkers() {
-	num := runtime.NumCPU() / 4
+	num := runtime.NumCPU() / 2
 	for i := range num {
 		ch := make(chan int64, 1)
 		g.workersPool = append(g.workersPool, ch)
 		go g.workerRun(i, num, ch)
 	}
-}
-
-func getRandomPoint(board *board.Board) geom.Point {
-	p := geom.Point{
-		X: float64(rand.Uint64N(board.Width)),
-		Y: float64(rand.Uint64N(board.Height)),
-	}
-	cell := board.Cell(p.GetInts())
-	if math.IsInf(cell.Cost, 1) {
-		return getRandomPoint(board)
-	}
-	return p
 }
 
 func (g *Game) createUnits() {
@@ -117,8 +100,9 @@ func (g *Game) createUnits() {
 
 		g.Units = append(g.Units, newRunner)
 		newRunner.WG = &g.wg
-		newRunner.Spawn(getRandomPoint(g.board))
+		newRunner.Spawn(g.board.GetRandomPoint())
 		newRunner.Run()
+		newRunner.SetTask()
 	}
 	slog.Info("units created")
 }
@@ -137,8 +121,9 @@ func (g *Game) createRocks() {
 		)
 		g.Units = append(g.Units, newRock)
 		newRock.WG = &g.wg
-		newRock.Spawn(getRandomPoint(g.board))
+		newRock.Spawn(g.board.GetRandomPoint())
 		newRock.Run()
+		newRock.SetTask()
 	}
 	slog.Info("rocks created")
 }

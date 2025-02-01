@@ -51,6 +51,9 @@ type UnitOnCell struct {
 
 // MoveCost Функция расчета стоимости перемещения в зависимости от временного интервала
 func (c *Cell) MoveCost(start, end int64) float64 {
+	if c == nil {
+		panic(errors.New("Cell is nil"))
+	}
 	// Если клетка является препятствием (гора, яма и т.д.), то возвращаем максимальную стоимость
 	if math.IsInf(c.Cost, 1) {
 		return c.Cost

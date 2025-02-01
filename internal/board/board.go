@@ -4,7 +4,7 @@ import (
 	"image/color"
 	"log/slog"
 	"math"
-	"math/rand"
+	"math/rand/v2"
 	"sync"
 	"sync/atomic"
 
@@ -44,7 +44,7 @@ func NewBoard(c *camera.Camera, tileSize, smallTileSize uint64, tileCount uint64
 
 	NewTiles(b.TileSize, b.SmallTileSize)
 	seed := func() int {
-		return rand.Intn(5) + 1
+		return rand.IntN(5) + 1
 	}
 	b.Cells = make([]Cell, b.Width*b.Height)
 	for i := range b.Cells {
@@ -247,4 +247,16 @@ func (b *Board) IsInside(p geom.Point) bool {
 func (b *Board) IsObstacle(p geom.Point) bool {
 	cell := b.GetCell(int64(p.X), int64(p.Y))
 	return math.IsInf(cell.Cost, 1)
+}
+
+func (b *Board) GetRandomPoint() geom.Point {
+	p := geom.Point{
+		X: float64(rand.Uint64N(b.Width)),
+		Y: float64(rand.Uint64N(b.Height)),
+	}
+	cell := b.Cell(p.GetInts())
+	if math.IsInf(cell.Cost, 1) {
+		return b.GetRandomPoint()
+	}
+	return p
 }

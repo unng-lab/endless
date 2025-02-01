@@ -98,6 +98,15 @@ func (u *Unit) run() {
 	}
 }
 
+func (u *Unit) Play(gameTick int64) {
+	defer u.WG.Done()
+	n, err := u.Update()
+	if err != nil {
+		return
+	}
+	u.SleepTicks = n
+}
+
 func (u *Unit) OnBoardUpdate() {
 	var curTask Task
 	u.Focused = u.isFocused(u.Camera.Cursor)
@@ -131,4 +140,23 @@ type MoveMessage struct {
 
 func (u *Unit) Cost() float64 {
 	return math.Inf(1)
+}
+
+type Status struct {
+	OnBoard  bool
+	Position geom.Point
+}
+
+func (u *Unit) Process() Status {
+	var ustatus Status
+	ustatus.OnBoard = u.checkOnBoard()
+	ustatus.Position = u.Positioning.Position
+	return ustatus
+}
+
+func (u *Unit) checkOnBoard() bool {
+	return u.Positioning.Position.In(geom.Rectangle{
+		Min: u.Camera.Coordinates.Min,
+		Max: u.Camera.Coordinates.Max,
+	})
 }

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	_ "github.com/silbinarywolf/preferdiscretegpu"
 
 	"github.com/unng-lab/madfarmer/internal/endless"
 )
