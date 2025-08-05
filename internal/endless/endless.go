@@ -7,6 +7,7 @@ import (
 
 	"github.com/brianvoe/gofakeit/v7"
 
+	"github.com/unng-lab/madfarmer/internal/geom"
 	"github.com/unng-lab/madfarmer/internal/mapgrid"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -18,8 +19,8 @@ import (
 )
 
 const (
-	unitCount      = 10000
-	rockCount      = 100000
+	unitCount      = 1
+	rockCount      = 0
 	moveChanBuffer = 1000
 
 	tileSize  = 16
@@ -39,7 +40,6 @@ type Game struct {
 	UnitsMutex     sync.Mutex
 	OnBoardCounter int64
 	MapGrid        *mapgrid.MapGrid
-	moveChan       chan unit.MoveMessage
 	workersPool    []chan int64
 }
 
@@ -89,14 +89,14 @@ func (g *Game) createUnits() {
 		newRunner := unitPiece.Unit(
 			len(g.Units),
 			gofakeit.Name(),
-			g.moveChan,
 			chanCameraTicks,
 			chanWg,
 		)
 
 		g.Units = append(g.Units, newRunner)
 		newRunner.WG = &g.wg
-		newRunner.Spawn(g.board.GetRandomFreePoint())
+		//newRunner.Spawn(g.board.GetRandomFreePoint())
+		newRunner.Spawn(geom.Point{X: 0, Y: 0})
 		newRunner.Run()
 		newRunner.SetTask()
 	}
@@ -111,7 +111,6 @@ func (g *Game) createRocks() {
 		newRock := rockPiece.Unit(
 			len(g.Units),
 			"Rock named "+gofakeit.Name(),
-			g.moveChan,
 			chanCameraTicks,
 			chanWg,
 		)

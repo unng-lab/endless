@@ -58,12 +58,51 @@ func (n *Node) Cost(v *Node, b *board.Board) float64 {
 	return cost
 }
 
-// Эвристическая функция — манхэттенское расстояние.
+const (
+	minCost float64 = 1
+	avgCost float64 = 5.5
+	maxCost float64 = 10
+)
+
 func (n *Node) heuristic(goal geom.Point) float64 {
+	h1 := n.heuristicAvgCost(goal)
+	h2 := n.heuristicMinCost(goal)
+	h3 := n.heuristicAdaptive(goal)
+	return max(h1, h2, h3)
+}
+
+func (n *Node) heuristicMinCost(goal geom.Point) float64 {
 	// Using Euclidean distance as heuristic
 	dx := n.Position.X - goal.X
 	dy := n.Position.Y - goal.Y
-	return math.Hypot(dx, dy)
+	return (dx + dy) * minCost
+}
+
+func (n *Node) heuristicAvgCost(goal geom.Point) float64 {
+	// Using Euclidean distance as heuristic
+	dx := n.Position.X - goal.X
+	dy := n.Position.Y - goal.Y
+	return (dx + dy) * avgCost
+}
+
+func (n *Node) heuristicAdaptive(goal geom.Point) float64 {
+	dx := math.Abs(n.Position.X - goal.X)
+	dy := math.Abs(n.Position.Y - goal.Y)
+
+	// D = минимальная стоимость прямого перемещения
+	// D2 = минимальная стоимость диагонального перемещения
+	D := minCost
+	D2 := D * math.Sqrt(2) // Для евклидовой метрики
+
+	return D*math.Max(dx, dy) + (D2-2*D)*math.Min(dx, dy)
+}
+
+func (n *Node) heuristicMaxCost(goal geom.Point) float64 {
+	dx := math.Abs(n.Position.X - goal.X)
+	dy := math.Abs(n.Position.Y - goal.Y)
+	maxC := minCost
+	minC := maxCost
+	return maxC*math.Max(dx, dy) + minC*math.Abs(dx-dy)
 }
 
 func (n *Node) to(target Node) byte {

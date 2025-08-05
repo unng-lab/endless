@@ -13,7 +13,7 @@ import (
 )
 
 func main() {
-	go StartPProfHttp()
+	//go StartPProfHttp()
 	ebiten.SetWindowSize(800, 800)
 	//ebiten.SetFullscreen(true)
 	ebiten.SetWindowTitle("MadFarmer")

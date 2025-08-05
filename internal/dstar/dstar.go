@@ -3,6 +3,7 @@ package dstar
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 
 	"github.com/unng-lab/madfarmer/internal/board"
@@ -18,6 +19,8 @@ const (
 )
 
 var errNoPath = errors.New("no Path")
+
+var counter int
 
 type nodeCacheKey struct {
 	x, y int64
@@ -90,7 +93,7 @@ func (ds *DStar) getNeighbors(u *Node) []*Node {
 	neighbors := []*Node{}
 	for _, offset := range neighborsOffsets {
 		pos := geom.Point{X: u.Position.X + offset.X, Y: u.Position.Y + offset.Y}
-		if ds.isValidPosition(pos) {
+		if ds.isValidPosition(pos) && !ds.B.IsObstacle(pos) {
 			neighbors = append(neighbors, ds.getNode(pos))
 		}
 	}
@@ -116,40 +119,35 @@ func compareKeys(a, b [2]float64) bool {
 }
 
 // ComputeShortestPath выполняет вычисление кратчайшего пути. Возвращает количество шагов и ошибку если путь не существует.
-func (ds *DStar) ComputeShortestPath() (int, error) {
+func (ds *DStar) ComputeShortestPath() error {
+	slog.Info("ComputeShortestPath", "start", ds.start.Position, "goal", ds.goal.Position)
 	i := 0
 	for ds.Len() > 0 {
 		i++
-		//slog.Info("Current", "step", i)
 		u := ds.Pop()
 
 		if compareKeys(u.Key, ds.calculateKey(ds.start)) && ds.start.RHS == ds.start.G {
-			//panic("Shortest path not found")
 			break
 		}
 
 		if u.G > u.RHS {
 			u.G = u.RHS
-			for _, s := range ds.getNeighbors(u) {
-				ds.UpdateVertex(s)
-			}
 		} else {
 			u.G = math.Inf(1)
 			ds.UpdateVertex(u)
-			for _, s := range ds.getNeighbors(u) {
-				ds.UpdateVertex(s)
-			}
 		}
-		i = i + 0
-		//slog.Info("current", "node ", u)
-		i = i - 0
+		for _, s := range ds.getNeighbors(u) {
+			ds.UpdateVertex(s)
+		}
 	}
-	//slog.Debug("Shortest path computed in ", " steps ", i)
-	return i, nil
+	slog.Info("update vertex", "counter", counter)
+	slog.Info("ComputeShortestPath", "steps", i)
+	return nil
 }
 
 // Обновление узла в очереди с приоритетом.
 func (ds *DStar) UpdateVertex(u *Node) {
+	counter++
 	if u.Position != ds.goal.Position {
 		u.RHS = math.Inf(1)
 		neighbors := ds.getNeighbors(u)
@@ -167,6 +165,34 @@ func (ds *DStar) UpdateVertex(u *Node) {
 		u.Key = ds.calculateKey(u)
 		ds.Push(u)
 	}
+}
+
+var ErrPathIsOver = errors.New("путь окончен")
+var ErrPathNotFound = errors.New("путь не найден")
+var ErrPathBroken = errors.New("путь оборвался")
+
+func (ds *DStar) Next() (geom.Point, error) {
+	current := ds.start
+	if current.Position == ds.goal.Position {
+		return geom.Point{}, ErrPathIsOver
+	}
+	if current.G == math.Inf(1) {
+		return geom.Point{}, ErrPathNotFound
+	}
+	minCost := math.Inf(1)
+	var nextNode *Node
+	for _, neighbor := range ds.getNeighbors(current) {
+		cost := current.Cost(neighbor, ds.B) + neighbor.G
+		if cost < minCost {
+			minCost = cost
+			nextNode = neighbor
+		}
+	}
+	if nextNode == nil {
+		return geom.Point{}, ErrPathBroken
+	}
+
+	return nextNode.Position, nil
 }
 
 // Вспомогательная функция для восстановления пути.
@@ -207,4 +233,11 @@ func (ds *DStar) Finish() {
 	ds.start = nil
 	ds.goal = nil
 	ds.km = 0
+}
+
+func (ds *DStar) Finished() bool {
+	if ds.start == ds.goal {
+		return true
+	}
+	return false
 }

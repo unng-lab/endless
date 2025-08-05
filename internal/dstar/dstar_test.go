@@ -30,12 +30,11 @@ func TestDStarComputeShortestPath_NoObstacles(t *testing.T) {
 	goalPos := geom.Point{X: 4, Y: 4}
 
 	ds.Initialize(startPos, goalPos)
-	shortestPath, err := ds.ComputeShortestPath()
+	err := ds.ComputeShortestPath()
 	if err != nil {
 		panic(err)
 		return
 	}
-	t.Log("shortestPath", shortestPath)
 
 	// Восстанавливаем путь
 	path, err := ds.reconstructPath()
@@ -43,12 +42,59 @@ func TestDStarComputeShortestPath_NoObstacles(t *testing.T) {
 		t.Error("Путь не найден, хотя препятствий нет", err)
 		return
 	}
-	PrintPathOnGrid(b, path)
+	PrintPathOnGrid(b, path, ds.nodeCache)
 	// Ожидаемая длина пути для сетки 5x5 от (0,0) до (4,4)
 	expectedPathLength := 4 // При использовании диагональных переходов
 	if len(path)-1 != expectedPathLength {
 		t.Errorf("Ожидаемая длина пути %d, получено %d", expectedPathLength, len(path)-1)
 	}
+	t.Log("in cache ", len(ds.nodeCache))
+}
+
+func TestDStarComputeShortestPath_NoObstacles_Large(t *testing.T) {
+	cells := []string{
+		"..........",
+		"..........",
+		"..........",
+		"..........",
+		"..........",
+		"..........",
+		"..........",
+		"..........",
+		"..........",
+		"..........",
+	}
+
+	b := &board.Board{
+		Width:  10,
+		Height: 10,
+		Cells:  StringSliceToCells(cells),
+	}
+	ds := &DStar{B: b}
+
+	startPos := geom.Point{X: 0, Y: 0}
+	goalPos := geom.Point{X: 9, Y: 9}
+
+	ds.Initialize(startPos, goalPos)
+	err := ds.ComputeShortestPath()
+	if err != nil {
+		panic(err)
+		return
+	}
+
+	// Восстанавливаем путь
+	path, err := ds.reconstructPath()
+	if err != nil {
+		t.Error("Путь не найден, хотя препятствий нет", err)
+		return
+	}
+	PrintPathOnGrid(b, path, ds.nodeCache)
+	// Ожидаемая длина пути для сетки 5x5 от (0,0) до (4,4)
+	expectedPathLength := 9 // При использовании диагональных переходов
+	if len(path)-1 != expectedPathLength {
+		t.Errorf("Ожидаемая длина пути %d, получено %d", expectedPathLength, len(path)-1)
+	}
+	t.Log("in cache ", len(ds.nodeCache))
 }
 
 // Тест поиска пути с препятствиями.
@@ -74,12 +120,11 @@ func TestDStarComputeShortestPath_WithObstacles(t *testing.T) {
 	goalPos := geom.Point{X: 4, Y: 4}
 
 	ds.Initialize(startPos, goalPos)
-	shortestPath, err := ds.ComputeShortestPath()
+	err := ds.ComputeShortestPath()
 	if err != nil {
 		panic(err)
 		return
 	}
-	t.Log("shortestPath", shortestPath)
 
 	// Восстанавливаем путь
 	path, err := ds.reconstructPath()
@@ -87,7 +132,7 @@ func TestDStarComputeShortestPath_WithObstacles(t *testing.T) {
 		t.Error("Путь не найден, хотя он существует")
 		return
 	}
-	PrintPathOnGrid(b, path)
+	PrintPathOnGrid(b, path, ds.nodeCache)
 	// Проверяем, что путь не проходит через препятствия
 	for _, p := range path {
 		if b.IsObstacle(p) {
@@ -118,19 +163,18 @@ func TestDStarComputeShortestPath_UnreachableGoal(t *testing.T) {
 	goalPos := geom.Point{X: 4, Y: 4}
 
 	ds.Initialize(startPos, goalPos)
-	shortestPath, err := ds.ComputeShortestPath()
+	err := ds.ComputeShortestPath()
 	if err != nil {
 		panic(err)
 		return
 	}
-	t.Log("shortestPath", shortestPath)
 
 	// Восстанавливаем путь
 	path, err := ds.reconstructPath()
 	if err == nil {
 		t.Error("Найден путь, хотя цель недостижима", err)
 	}
-	PrintPathOnGrid(b, path)
+	PrintPathOnGrid(b, path, ds.nodeCache)
 	t.Log(path)
 }
 
@@ -155,19 +199,18 @@ func TestDStarComputeShortestPath_StartChanged(t *testing.T) {
 	goalPos := geom.Point{X: 4, Y: 4}
 
 	ds.Initialize(startPos, goalPos)
-	shortestPath, err := ds.ComputeShortestPath()
+	err := ds.ComputeShortestPath()
 	if err != nil {
 		panic(err)
 		return
 	}
-	t.Log("shortestPath", shortestPath)
 	// Восстанавливаем путь
 	path, err := ds.reconstructPath()
 	if err != nil {
 		t.Error("Путь не найден, хотя препятствий нет", err)
 		return
 	}
-	PrintPathOnGrid(b, path)
+	PrintPathOnGrid(b, path, ds.nodeCache)
 	// Ожидаемая длина пути для сетки 5x5 от (0,0) до (4,4)
 	expectedPathLength := 4 // При использовании диагональных переходов
 	if len(path)-1 != expectedPathLength {
@@ -175,12 +218,11 @@ func TestDStarComputeShortestPath_StartChanged(t *testing.T) {
 	}
 
 	ds.MoveStart(geom.Point{X: 1, Y: 2})
-	shortestPath, err = ds.ComputeShortestPath()
+	err = ds.ComputeShortestPath()
 	if err != nil {
 		panic(err)
 		return
 	}
-	t.Log("shortestPath", shortestPath)
 
 	// Восстанавливаем путь
 	path, err = ds.reconstructPath()
@@ -188,7 +230,7 @@ func TestDStarComputeShortestPath_StartChanged(t *testing.T) {
 		t.Error("Путь не найден, хотя препятствий нет", err)
 		return
 	}
-	PrintPathOnGrid(b, path)
+	PrintPathOnGrid(b, path, ds.nodeCache)
 	// Ожидаемая длина пути для сетки 5x5 от (0,0) до (4,4)
 	newExpectedPathLength := 3 // При использовании диагональных переходов
 	if len(path)-1 != newExpectedPathLength {
@@ -218,30 +260,27 @@ func TestDStarComputeShortestPathWithUpdates(t *testing.T) {
 	goalPos := geom.Point{X: 4, Y: 4}
 
 	ds.Initialize(startPos, goalPos)
-	shortestPath, err := ds.ComputeShortestPath()
+	err := ds.ComputeShortestPath()
 	if err != nil {
 		panic(err)
 		return
 	}
-	t.Log("shortestPath", shortestPath)
-
 	// Восстанавливаем путь
 	path, err := ds.reconstructPath()
 	if err != nil {
 		t.Error("Путь не найден, хотя препятствий нет", err)
 		return
 	}
-	PrintPathOnGrid(b, path)
+	PrintPathOnGrid(b, path, ds.nodeCache)
 	t.Log(path)
 
 	b.Cell(1, 1).Cost = SwampCost
 	ds.UpdateVertex(ds.getNode(geom.Point{X: 1, Y: 1}))
-	shortestPath, err = ds.ComputeShortestPath()
+	err = ds.ComputeShortestPath()
 	if err != nil {
 		panic(err)
 		return
 	}
-	t.Log("shortestPath", shortestPath)
 
 	// Восстанавливаем путь
 	path, err = ds.reconstructPath()
@@ -249,7 +288,7 @@ func TestDStarComputeShortestPathWithUpdates(t *testing.T) {
 		t.Error("Путь не найден, хотя препятствий нет", err)
 		return
 	}
-	PrintPathOnGrid(b, path)
+	PrintPathOnGrid(b, path, ds.nodeCache)
 	t.Log(path)
 }
 
@@ -293,6 +332,7 @@ func StringSliceToCells(ss []string) []board.Cell {
 	for i, s := range ss {
 		for j := range s {
 			cells[index(i, j, len(ss[0]))].Cost = letterToCost(rune(s[j]))
+			cells[index(i, j, len(ss[0]))].Point = geom.Point{X: float64(i), Y: float64(j)}
 		}
 	}
 	return cells
@@ -320,7 +360,7 @@ func costToLetter(cost float64) (rune, error) {
 	}
 }
 
-func PrintPathOnGrid(b *board.Board, path []geom.Point) {
+func PrintPathOnGrid(b *board.Board, path []geom.Point, nodes map[nodeCacheKey]*Node) {
 	pathMap := make(map[geom.Point]bool)
 	for _, cell := range path {
 		pathMap[cell] = true
@@ -339,7 +379,10 @@ func PrintPathOnGrid(b *board.Board, path []geom.Point) {
 					fmt.Print("*")
 				}
 
+			} else if _, ok := nodes[nodeCacheKey{x: int64(pos.X), y: int64(pos.Y)}]; ok {
+				fmt.Print("C")
 			} else {
+
 				r, err := costToLetter(cell.Cost)
 				if err != nil {
 					fmt.Println(err)

@@ -1,6 +1,8 @@
 package unit
 
 import (
+	"log/slog"
+
 	"github.com/unng-lab/madfarmer/internal/board"
 	"github.com/unng-lab/madfarmer/internal/dstar"
 	"github.com/unng-lab/madfarmer/internal/geom"
@@ -39,47 +41,40 @@ func (r *Road) Next() (int, error) {
 	//		slog.Error("error recover", "panic", r)
 	//	}
 	//}()
-	//
-	//if r.nextMove != nil {
-	//	if r.position == r.unit.Positioning.Position {
-	//		if err := r.nextMove(); err == nil {
-	//			if len(r.Astar.Path) == 0 {
-	//				slog.Info("task finished")
-	//				return 0, ErrTaskFinished
-	//			}
-	//		} else {
-	//			slog.Error("nextMove", err)
-	//		}
-	//	} else {
-	//		// если передвинулся то надо логику обработать
-	//		slog.Error("юнит переместился в другую точку", r.unit)
-	//	}
-	//
-	//}
-	//
-	//dir := r.unit.Positioning.Position.To(r.Astar.Path[len(r.Astar.Path)-1])
-	//
-	//nextPoint, err := r.unit.Positioning.Position.GetNeighbor(dir)
-	//
-	//if err != nil {
-	//	slog.Error("GetNeighbor", "error", err, "unitType", r.unit.Type, "dir", dir)
-	//	return 0, err
-	//}
-	//
-	//if nextPoint == r.Astar.Path[len(r.Astar.Path)-1] {
-	//	r.Astar.Path = r.Astar.Path[:len(r.Astar.Path)-1]
-	//}
-	//
-	//walkOnePoint := timeToWalkOnePoint(r.unit, r.B, nextPoint)
-	//r.nextMove = func() error {
-	//	r.unit.Relocate(r.unit.Positioning.Position, nextPoint)
-	//	return nil
-	//}
-	//r.position = r.unit.Positioning.Position
-	//r.timeToWalkOnePoint = walkOnePoint
-	//r.nextPoint = nextPoint
-	//
-	//return walkOnePoint, nil
+
+	if r.nextMove != nil {
+		if r.position == r.unit.Positioning.Position {
+			if err := r.nextMove(); err == nil {
+				if r.Finished() {
+					r.Finish()
+					slog.Info("task finished")
+					return 0, ErrTaskFinished
+				}
+			} else {
+				slog.Error("nextMove", err)
+			}
+		} else {
+			// если передвинулся то надо логику обработать
+			slog.Error("юнит переместился в другую точку", r.unit)
+		}
+
+	}
+	nextPoint, err := r.DStar.Next()
+	if err != nil {
+		panic(err)
+	}
+
+	walkOnePoint := timeToWalkOnePoint(r.unit, r.B, nextPoint)
+	r.nextMove = func() error {
+		r.unit.Relocate(r.unit.Positioning.Position, nextPoint)
+		r.MoveStart(nextPoint)
+		return nil
+	}
+	r.position = r.unit.Positioning.Position
+	r.timeToWalkOnePoint = walkOnePoint
+	r.nextPoint = nextPoint
+
+	return walkOnePoint, nil
 	return 0, nil
 }
 
@@ -99,9 +94,10 @@ func (r *Road) GetDescription() string {
 }
 
 func (r *Road) Path(to geom.Point) error {
-	//err := r.BuildPath(r.unit.Positioning.Position.X, r.unit.Positioning.Position.Y, to.X, to.Y)
-	//if err != nil {
-	//	return err
-	//}
+	r.Initialize(r.unit.Positioning.Position, to)
+	err := r.ComputeShortestPath()
+	if err != nil {
+		return err
+	}
 	return nil
 }

@@ -1,13 +1,8 @@
 package endless
 
-import (
-	"time"
-)
-
 var gameTickCounter int64
 
 func (g *Game) Update() error {
-	t := time.Now()
 	gameTickCounter++
 	if err := g.camera.Update(); err != nil {
 		return err
@@ -26,7 +21,6 @@ func (g *Game) Update() error {
 		g.workersPool[i] <- gameTickCounter
 	}
 	g.wg.Wait()
-	println(time.Since(t).Microseconds())
 	return nil
 }
 
@@ -54,7 +48,7 @@ func (g *Game) workersProcess(offset, numWorkers int, gameTickCounter int64) {
 				select {
 				case g.Units[i].CameraTicks <- struct{}{}:
 				default:
-					g.log.Info("Camera ticks channel is full")
+					//g.log.Info("Camera ticks channel is full")
 					//максимально не блокируем
 
 				}

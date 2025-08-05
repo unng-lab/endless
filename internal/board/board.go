@@ -44,7 +44,7 @@ func NewBoard(c *camera.Camera, tileSize, smallTileSize uint64, tileCount uint64
 
 	NewTiles(b.TileSize, b.SmallTileSize)
 	seed := func() int {
-		return rand.IntN(5) + 1
+		return rand.IntN(4) + 1
 	}
 	b.Cells = make([]Cell, b.Width*b.Height)
 	for y := 0; y < int(b.Height); y++ {
@@ -240,7 +240,7 @@ func (b *Board) GetCost(from, to geom.Point, tick int64) float64 {
 
 	avgCost := (cellA.Cost + cellB.Cost) / 2
 	length := from.Length(to)
-	return avgCost * length
+	return avgCost * length / 100
 }
 
 func (b *Board) IsInside(p geom.Point) bool {

@@ -152,7 +152,7 @@ func GetLeftAngle(cameraX, cameraY, cursorX, cursorY, tileSizeX, tileSizeY float
 func (g *Game) DrawOnBoard(screen *ebiten.Image, counter int) {
 	g.OnBoardCounter = 0
 	x1, y1 := max(g.camera.Coordinates.Min.X, 0), max(g.camera.Coordinates.Min.Y, 0)
-	x2, y2 := min(g.camera.Coordinates.Max.X, float64(g.board.Width)), min(g.camera.Coordinates.Max.Y, float64(g.board.Height))
+	x2, y2 := min(g.camera.Coordinates.Max.X, float64(g.board.Width-1)), min(g.camera.Coordinates.Max.Y, float64(g.board.Height-1))
 	for y := y1; y <= y2; y++ {
 		for x := x1; x <= x2; x++ {
 			for i := range g.board.Cell(int(x), int(y)).UnitList {

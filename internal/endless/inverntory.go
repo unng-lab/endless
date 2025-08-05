@@ -52,7 +52,6 @@ type Piece interface {
 	Unit(
 		index int,
 		name string,
-		moveChan chan unit.MoveMessage,
 		cameraTicks chan struct{},
 		ticks chan int64,
 	) *unit.Unit
@@ -122,7 +121,6 @@ func NewRunner(board *board.Board, camera *camera.Camera) *Runner {
 func (r *Runner) Unit(
 	index int,
 	name string,
-	moveChan chan unit.MoveMessage,
 	cameraTicks chan struct{},
 	ticks chan int64,
 ) *unit.Unit {
@@ -136,7 +134,6 @@ func (r *Runner) Unit(
 	newUnit.Graphics = r.Graphics
 	newUnit.Camera = r.Camera
 	newUnit.Board = r.Board
-	newUnit.MoveChan = moveChan
 	newUnit.CameraTicks = cameraTicks
 	newUnit.Ticks = ticks
 	newUnit.Tasks = unit.NewTaskList()
@@ -159,7 +156,6 @@ func (r Rock) Type() string {
 func (r Rock) Unit(
 	index int,
 	name string,
-	moveChan chan unit.MoveMessage,
 	cameraTicks chan struct{},
 	ticks chan int64,
 ) *unit.Unit {
@@ -173,7 +169,6 @@ func (r Rock) Unit(
 	newUnit.Graphics = r.Graphics
 	newUnit.Camera = r.Camera
 	newUnit.Board = r.Board
-	newUnit.MoveChan = moveChan
 	newUnit.CameraTicks = cameraTicks
 	newUnit.Ticks = ticks
 	newUnit.Tasks = unit.NewTaskList()
