@@ -14,7 +14,7 @@ import (
 
 func main() {
 	//go StartPProfHttp()
-	ebiten.SetWindowSize(800, 800)
+	ebiten.SetWindowSize(1200, 800)
 	//ebiten.SetFullscreen(true)
 	ebiten.SetWindowTitle("MadFarmer")
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)

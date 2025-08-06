@@ -8,13 +8,13 @@ import (
 	"github.com/brianvoe/gofakeit/v7"
 
 	"github.com/unng-lab/madfarmer/internal/geom"
-	"github.com/unng-lab/madfarmer/internal/mapgrid"
+
+	"github.com/unng-lab/madfarmer/internal/board"
+
+	"github.com/unng-lab/madfarmer/internal/camera"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
-	"github.com/unng-lab/madfarmer/internal/board"
-	"github.com/unng-lab/madfarmer/internal/camera"
-	"github.com/unng-lab/madfarmer/internal/ui"
 	"github.com/unng-lab/madfarmer/internal/unit"
 )
 
@@ -33,26 +33,21 @@ type Game struct {
 	log            *slog.Logger
 	camera         *camera.Camera
 	wg             sync.WaitGroup
-	ui             *ui.UIEngine
 	inventory      *Inventory
 	board          *board.Board
 	Units          []*unit.Unit
 	UnitsMutex     sync.Mutex
 	OnBoardCounter int64
-	MapGrid        *mapgrid.MapGrid
 	workersPool    []chan int64
 }
 
-func NewGame(
-// analyticsDB *ch.AnaliticsDB,
-) *Game {
+func NewGame() *Game {
 	var g Game
 	g.log = slog.Default()
 	g.Units = make([]*unit.Unit, 0, unitCount)
 	g.camera = camera.New(tileSize, tileCount)
 	slog.Info("camera created")
-	g.ui = ui.New(g.camera)
-	slog.Info("ui created")
+
 	newBoard, err := board.NewBoard(g.camera, tileSize, tileSize, tileCount)
 	if err != nil {
 		panic(err)

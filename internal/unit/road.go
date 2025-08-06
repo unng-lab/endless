@@ -3,15 +3,15 @@ package unit
 import (
 	"log/slog"
 
+	"github.com/unng-lab/madfarmer/internal/astar"
 	"github.com/unng-lab/madfarmer/internal/board"
-	"github.com/unng-lab/madfarmer/internal/dstar"
 	"github.com/unng-lab/madfarmer/internal/geom"
 )
 
 var _ Task = new(Road)
 
 type Road struct {
-	*dstar.DStar
+	astar.Astar
 
 	unit               *Unit
 	nextMove           func() error
@@ -31,22 +31,21 @@ func (r *Road) Update(unit *Unit) error {
 func NewRoad(b *board.Board, unit *Unit) Road {
 	return Road{
 		unit:  unit,
-		DStar: dstar.NewDStar(b),
+		Astar: astar.NewAstar(b),
 	}
 }
 
 func (r *Road) Next() (int, error) {
-	//defer func() {
-	//	if r := recover(); r != nil {
-	//		slog.Error("error recover", "panic", r)
-	//	}
-	//}()
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("error recover", "panic", r)
+		}
+	}()
 
 	if r.nextMove != nil {
 		if r.position == r.unit.Positioning.Position {
 			if err := r.nextMove(); err == nil {
-				if r.Finished() {
-					r.Finish()
+				if len(r.Astar.Path) == 0 {
 					slog.Info("task finished")
 					return 0, ErrTaskFinished
 				}
@@ -59,15 +58,23 @@ func (r *Road) Next() (int, error) {
 		}
 
 	}
-	nextPoint, err := r.DStar.Next()
+
+	dir := r.unit.Positioning.Position.To(r.Astar.Path[len(r.Astar.Path)-1])
+
+	nextPoint, err := r.unit.Positioning.Position.GetNeighbor(dir)
+
 	if err != nil {
-		panic(err)
+		slog.Error("GetNeighbor", "error", err, "unitType", r.unit.Type, "dir", dir)
+		return 0, err
+	}
+
+	if nextPoint == r.Astar.Path[len(r.Astar.Path)-1] {
+		r.Astar.Path = r.Astar.Path[:len(r.Astar.Path)-1]
 	}
 
 	walkOnePoint := timeToWalkOnePoint(r.unit, r.B, nextPoint)
 	r.nextMove = func() error {
 		r.unit.Relocate(r.unit.Positioning.Position, nextPoint)
-		r.MoveStart(nextPoint)
 		return nil
 	}
 	r.position = r.unit.Positioning.Position
@@ -75,7 +82,6 @@ func (r *Road) Next() (int, error) {
 	r.nextPoint = nextPoint
 
 	return walkOnePoint, nil
-	return 0, nil
 }
 
 func timeToWalkOnePoint(unit *Unit, b *board.Board, nextPoint geom.Point) int {
@@ -94,8 +100,7 @@ func (r *Road) GetDescription() string {
 }
 
 func (r *Road) Path(to geom.Point) error {
-	r.Initialize(r.unit.Positioning.Position, to)
-	err := r.ComputeShortestPath()
+	err := r.BuildPath(r.unit.Positioning.Position.X, r.unit.Positioning.Position.Y, to.X, to.Y)
 	if err != nil {
 		return err
 	}
