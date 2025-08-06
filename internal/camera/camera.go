@@ -182,38 +182,12 @@ func (c *Camera) MiddleOfPointInRelativePixels(point geom.Point) geom.Point {
 	}
 }
 
-//func AbsoluteToRelative(point geom.Point) geom.Point {
-//	return geom.Point{
-//		X: math.Trunc(point.X / c.cfg.tileSize),
-//		Y: math.Trunc(point.Y / c.cfg.tileSize),
-//	}
-//}
-//
-//func RelativeToAbsolute(point geom.Point) geom.Point {
-//	return geom.Point{
-//		X: point.X * DefaultTileSize,
-//		Y: point.Y * DefaultTileSize,
-//	}
-//}
-//
-//func MiddleOfRelativePointInAbsolutePixels(point geom.Point) geom.Point {
-//	return geom.Point{
-//		X: point.X*DefaultTileSize + DefaultTileSize/2,
-//		Y: point.Y*DefaultTileSize + DefaultTileSize/2,
-//	}
-//}
-
 func (c *Camera) PointToCameraPixel(point geom.Point) geom.Point {
 	return geom.Point{
 		X: point.X*c.tileSize - c.AbsolutePixels.Min.X,
 		Y: point.Y*c.tileSize - c.AbsolutePixels.Min.Y,
 	}
 }
-
-//func (c *Camera) DrawPixelMinPoint() (float64, float64) {
-//	return c.AbsolutePixels.Min.X - c.tileSize*CountTile/2,
-//		c.AbsolutePixels.Min.Y - c.tileSize*CountTile/2
-//}
 
 func New(tileSize float64, tileCount float64) *Camera {
 	return &Camera{
