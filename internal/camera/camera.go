@@ -234,38 +234,7 @@ func New(tileSize float64, tileCount float64) *Camera {
 }
 
 func (c *Camera) Update() error {
-	if ebiten.IsKeyPressed(ebiten.KeyA) || ebiten.IsKeyPressed(ebiten.KeyArrowLeft) {
-		//slog.Info("Left")
-		c.Left()
-	}
-	if ebiten.IsKeyPressed(ebiten.KeyD) || ebiten.IsKeyPressed(ebiten.KeyArrowRight) {
-		//slog.Info("Right")
-		c.Right()
-	}
-	if ebiten.IsKeyPressed(ebiten.KeyW) || ebiten.IsKeyPressed(ebiten.KeyArrowUp) {
-		//slog.Info("Up")
-		c.Up()
-	}
-	if ebiten.IsKeyPressed(ebiten.KeyS) || ebiten.IsKeyPressed(ebiten.KeyArrowDown) {
-		//slog.Info("Down")
-		c.Down()
-	}
 
-	if ebiten.IsKeyPressed(ebiten.KeyQ) {
-		//slog.Info("ZoomDown")
-		c.ZoomDown()
-	}
-
-	if ebiten.IsKeyPressed(ebiten.KeyE) {
-		//slog.Info("ZoomUp")
-		c.ZoomUp()
-	}
-
-	if ebiten.IsKeyPressed(ebiten.KeySpace) {
-		//slog.Info("w/h", zap.Int("w", c.cfg.Width()), zap.Int("h", c.cfg.Height()))
-		// TODO сделать по центру карты
-		c.Reset(0, 0)
-	}
 	return nil
 }
 

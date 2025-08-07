@@ -1,9 +1,5 @@
 package endless
 
-import (
-	"github.com/unng-lab/madfarmer/internal/actions"
-)
-
 var gameTickCounter int64
 
 func (g *Game) Update() error {
@@ -13,7 +9,7 @@ func (g *Game) Update() error {
 	}
 
 	g.board.ClearUpdatedCells()
-	actions.Update()
+	g.action.Update()
 	for i := range g.workersPool {
 		g.wg.Add(1)
 		g.workersPool[i] <- gameTickCounter

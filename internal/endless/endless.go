@@ -7,6 +7,7 @@ import (
 
 	"github.com/brianvoe/gofakeit/v7"
 
+	"github.com/unng-lab/madfarmer/internal/actions"
 	"github.com/unng-lab/madfarmer/internal/geom"
 
 	"github.com/unng-lab/madfarmer/internal/board"
@@ -39,6 +40,7 @@ type Game struct {
 	UnitsMutex     sync.Mutex
 	OnBoardCounter int64
 	workersPool    []chan int64
+	action         *actions.Action
 }
 
 func NewGame() *Game {
@@ -46,17 +48,18 @@ func NewGame() *Game {
 	g.log = slog.Default()
 	g.Units = make([]*unit.Unit, 0, unitCount)
 	g.camera = camera.New(tileSize, tileCount)
-	slog.Info("camera created")
+	g.log.Info("camera created")
 
 	newBoard, err := board.NewBoard(g.camera, tileSize, tileSize, tileCount)
 	if err != nil {
 		panic(err)
 	}
 	g.board = newBoard
-	slog.Info("board created")
-
+	g.log.Info("board created")
+	g.action = actions.NewAction(g.camera)
+	g.log.Info("action created")
 	g.inventory = NewInverntory(g.board, g.camera)
-	slog.Info("inventory created")
+	g.log.Info("inventory created")
 	g.createRocks()
 	g.createUnits()
 
