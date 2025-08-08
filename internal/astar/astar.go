@@ -3,6 +3,7 @@ package astar
 import (
 	"errors"
 	"log/slog"
+	"math"
 	"sync"
 
 	"github.com/unng-lab/madfarmer/internal/board"
@@ -15,11 +16,12 @@ const (
 	smallCapacity = 8
 	costsCapacity = 32
 	fromsCapacity = 32
-	costDiagonal  = 1.414
+	costDiagonal  = math.Sqrt2
 )
 
 const (
-	DirUp byte = iota
+	DirNone byte = iota
+	DirUp
 	DirUpRight
 	DirRight
 	DirDownRight

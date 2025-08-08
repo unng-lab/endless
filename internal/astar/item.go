@@ -1,8 +1,9 @@
 package astar
 
 import (
-	"github.com/unng-lab/madfarmer/internal/geom"
 	"math"
+
+	"github.com/unng-lab/madfarmer/internal/geom"
 )
 
 var neighbors = [8]geom.Point{
@@ -22,7 +23,11 @@ type Item struct {
 }
 
 func (i Item) heuristic(goalX, goalY float64) float64 {
-	return math.Abs(i.x-goalX) + math.Abs(i.y-goalY)
+	dx := math.Abs(i.x - goalX)
+	dy := math.Abs(i.y - goalY)
+	xyMin := math.Min(dx, dy)
+	xyMax := math.Max(dx, dy)
+	return costDiagonal*xyMin + (xyMax - xyMin)
 }
 
 func (i Item) to(targer Item) byte {
@@ -44,6 +49,6 @@ func (i Item) to(targer Item) byte {
 	case x == 1 && y == 1:
 		return DirDownRight
 	default:
-		panic("unreachable")
+		return DirNone
 	}
 }
