@@ -65,6 +65,9 @@ type Astar struct {
 }
 
 func NewAstar(b *board.Board) Astar {
+	if b == nil {
+		panic("board is nil")
+	}
 	return Astar{
 		B:    b,
 		Path: make([]geom.Point, 0, pathCapacity),
