@@ -1,8 +1,8 @@
 package navmesh
 
 import (
-	"github.com/unng-lab/madfarmer/internal/chunk"
-	"github.com/unng-lab/madfarmer/internal/geom"
+	"github.com/unng-lab/endless/internal/chunk"
+	"github.com/unng-lab/endless/internal/geom"
 )
 
 // RectPoly — прямоугольный полигон, описывающий область прохода

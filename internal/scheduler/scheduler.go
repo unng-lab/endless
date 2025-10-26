@@ -9,11 +9,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/unng-lab/madfarmer/internal/cache"
-	"github.com/unng-lab/madfarmer/internal/chunk"
-	"github.com/unng-lab/madfarmer/internal/geom"
-	"github.com/unng-lab/madfarmer/internal/hpa"
-	"github.com/unng-lab/madfarmer/internal/pathfinding"
+	"github.com/unng-lab/endless/internal/cache"
+	"github.com/unng-lab/endless/internal/chunk"
+	"github.com/unng-lab/endless/internal/geom"
+	"github.com/unng-lab/endless/internal/hpa"
+	"github.com/unng-lab/endless/internal/pathfinding"
 )
 
 // PathRequest — запрос на поиск пути

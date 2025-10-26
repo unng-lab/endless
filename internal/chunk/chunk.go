@@ -5,7 +5,7 @@ import (
 	"math/rand/v2"
 	"sync"
 
-	"github.com/unng-lab/madfarmer/internal/geom"
+	"github.com/unng-lab/endless/internal/geom"
 )
 
 const (

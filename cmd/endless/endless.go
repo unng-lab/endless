@@ -9,14 +9,14 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 
-	"github.com/unng-lab/madfarmer/internal/endless"
+	"github.com/unng-lab/endless/internal/endless"
 )
 
 func main() {
 	//go StartPProfHttp()
 	ebiten.SetWindowSize(1200, 800)
 	//ebiten.SetFullscreen(true)
-	ebiten.SetWindowTitle("MadFarmer")
+	ebiten.SetWindowTitle("endless")
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 	ebiten.SetScreenClearedEveryFrame(false)
 	ebiten.SetVsyncEnabled(false)

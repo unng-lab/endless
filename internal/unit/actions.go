@@ -1,7 +1,7 @@
 package unit
 
 import (
-	"github.com/unng-lab/madfarmer/internal/geom"
+	"github.com/unng-lab/endless/internal/geom"
 )
 
 func (u *Unit) Relocate(from, to geom.Point) {

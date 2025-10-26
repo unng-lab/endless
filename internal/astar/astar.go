@@ -6,8 +6,8 @@ import (
 	"math"
 	"sync"
 
-	"github.com/unng-lab/madfarmer/internal/board"
-	"github.com/unng-lab/madfarmer/internal/geom"
+	"github.com/unng-lab/endless/internal/board"
+	"github.com/unng-lab/endless/internal/geom"
 )
 
 const (

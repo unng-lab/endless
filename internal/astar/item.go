@@ -3,7 +3,7 @@ package astar
 import (
 	"math"
 
-	"github.com/unng-lab/madfarmer/internal/geom"
+	"github.com/unng-lab/endless/internal/geom"
 )
 
 var neighbors = [8]geom.Point{

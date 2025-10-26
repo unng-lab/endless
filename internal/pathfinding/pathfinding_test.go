@@ -4,8 +4,8 @@ package pathfinding
 import (
 	"testing"
 
-	"github.com/unng-lab/madfarmer/internal/geom"
-	"github.com/unng-lab/madfarmer/internal/navmesh"
+	"github.com/unng-lab/endless/internal/geom"
+	"github.com/unng-lab/endless/internal/navmesh"
 )
 
 func TestStringPulling(t *testing.T) {

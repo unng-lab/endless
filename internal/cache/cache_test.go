@@ -4,7 +4,7 @@ package cache
 import (
 	"testing"
 
-	"github.com/unng-lab/madfarmer/internal/geom"
+	"github.com/unng-lab/endless/internal/geom"
 )
 
 func TestPathCache(t *testing.T) {

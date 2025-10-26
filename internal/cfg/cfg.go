@@ -16,11 +16,6 @@ const (
 
 type Default struct {
 	log *slog.Logger
-	uiConfig
-	ebitenfxConfig
-	gameConfig
-	scrConfig
-	slogfxConfig
 	runnerConfig
 }
 
@@ -59,31 +54,6 @@ func New(log *slog.Logger) *Default {
 			strings.TrimPrefix(s, prefix)), "_", delim, -1)
 	}), nil); err != nil {
 		d.log.Error("k.Load", err)
-		return nil
-	}
-
-	if err := k.Unmarshal("ui", &d.uiConfig); err != nil {
-		d.log.Error("k.Unmarshal", err)
-		return nil
-	}
-
-	if err := k.Unmarshal("ebitenfx", &d.ebitenfxConfig); err != nil {
-		d.log.Error("k.Unmarshal", err)
-		return nil
-	}
-
-	if err := k.Unmarshal("game", &d.gameConfig); err != nil {
-		d.log.Error("k.Unmarshal", err)
-		return nil
-	}
-
-	if err := k.Unmarshal("scr", &d.scrConfig); err != nil {
-		d.log.Error("k.Unmarshal", err)
-		return nil
-	}
-
-	if err := k.Unmarshal("slogfx", &d.slogfxConfig); err != nil {
-		d.log.Error("k.Unmarshal", err)
 		return nil
 	}
 

@@ -6,8 +6,8 @@ import (
 	"math"
 	"sync"
 
-	"github.com/unng-lab/madfarmer/internal/chunk"
-	"github.com/unng-lab/madfarmer/internal/geom"
+	"github.com/unng-lab/endless/internal/chunk"
+	"github.com/unng-lab/endless/internal/geom"
 )
 
 const ClusterChunkSize = 4 // сколько чанков на сторону кластера

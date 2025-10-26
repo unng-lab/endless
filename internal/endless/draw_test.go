@@ -3,7 +3,7 @@ package endless
 import (
 	"testing"
 
-	"github.com/unng-lab/madfarmer/internal/board"
+	"github.com/unng-lab/endless/internal/board"
 )
 
 func TestGetCellNumberX(t *testing.T) {

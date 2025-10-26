@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/unng-lab/madfarmer/internal/cache"
-	"github.com/unng-lab/madfarmer/internal/chunk"
-	"github.com/unng-lab/madfarmer/internal/geom"
-	"github.com/unng-lab/madfarmer/internal/hpa"
+	"github.com/unng-lab/endless/internal/cache"
+	"github.com/unng-lab/endless/internal/chunk"
+	"github.com/unng-lab/endless/internal/geom"
+	"github.com/unng-lab/endless/internal/hpa"
 )
 
 func TestSchedulerBasics(t *testing.T) {

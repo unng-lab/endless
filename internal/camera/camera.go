@@ -5,8 +5,8 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 
-	"github.com/unng-lab/madfarmer/internal/geom"
-	"github.com/unng-lab/madfarmer/internal/window"
+	"github.com/unng-lab/endless/internal/geom"
+	"github.com/unng-lab/endless/internal/window"
 )
 
 const (

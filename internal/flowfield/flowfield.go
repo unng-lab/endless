@@ -4,8 +4,8 @@ package flowfield
 import (
 	"errors"
 
-	"github.com/unng-lab/madfarmer/internal/chunk"
-	"github.com/unng-lab/madfarmer/internal/geom"
+	"github.com/unng-lab/endless/internal/chunk"
+	"github.com/unng-lab/endless/internal/geom"
 )
 
 // BuildFlowField строит поле потока для прямоугольной области

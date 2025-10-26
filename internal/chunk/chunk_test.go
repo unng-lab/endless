@@ -4,7 +4,7 @@ package chunk
 import (
 	"testing"
 
-	"github.com/unng-lab/madfarmer/internal/geom"
+	"github.com/unng-lab/endless/internal/geom"
 )
 
 func TestGrid(t *testing.T) {

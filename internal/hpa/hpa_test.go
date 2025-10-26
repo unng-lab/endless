@@ -4,7 +4,7 @@ package hpa
 import (
 	"testing"
 
-	"github.com/unng-lab/madfarmer/internal/geom"
+	"github.com/unng-lab/endless/internal/geom"
 )
 
 func TestClusterGraph(t *testing.T) {

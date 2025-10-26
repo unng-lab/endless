@@ -3,7 +3,7 @@ package unit
 import (
 	"log/slog"
 
-	"github.com/unng-lab/madfarmer/internal/geom"
+	"github.com/unng-lab/endless/internal/geom"
 )
 
 // Update возвращает время до следующего вызова Update или ошибку

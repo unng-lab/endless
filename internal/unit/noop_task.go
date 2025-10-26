@@ -1,6 +1,6 @@
 package unit
 
-import "github.com/unng-lab/madfarmer/internal/board"
+import "github.com/unng-lab/endless/internal/board"
 
 var _ Task = new(NoopTask)
 

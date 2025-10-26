@@ -6,7 +6,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 
-	"github.com/unng-lab/madfarmer/internal/camera"
+	"github.com/unng-lab/endless/internal/camera"
 )
 
 type Action struct {
