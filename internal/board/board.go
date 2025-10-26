@@ -77,44 +77,6 @@ func (b *Board) index(x, y int) int {
 	return y*int(b.Width) + x
 }
 
-//func (b *Board) Draw(screen *ebiten.Image) {
-//	b.DrawOp.GeoM.Scale(
-//		b.Camera.ScaleFactor(),
-//		b.Camera.ScaleFactor(),
-//	)
-//	b.DrawOp.GeoM.Translate(b.Camera.RelativePixels.Min.X, b.Camera.RelativePixels.Min.Y)
-//
-//	cellNumber := int64(0)
-//	maxX, maxY := float64(b.Width-1), float64(b.Height-1)
-//
-//	for j := b.Camera.Coordinates.Min.Y; j <= b.Camera.Coordinates.Max.Y; j++ {
-//		for i := b.Camera.Coordinates.Min.X; i <= b.Camera.Coordinates.Max.X; i++ {
-//			if i < 0 || i > maxX || j < 0 || j > maxY {
-//				screen.DrawImage(b.ClearTile, &b.DrawOp)
-//			} else {
-//				if b.Camera.GetZoomFactor() > hd {
-//					screen.DrawImage(b.Cell(int(i), int(j)).TileImage, &b.DrawOp)
-//				} else {
-//					//TODO оптимизация провалилась, нужно пробовать уменьшать кол-во объектов
-//					screen.DrawImage(b.Cell(int(i), int(j)).TileImageSmall, &b.DrawOp)
-//				}
-//			}
-//
-//			cellNumber++
-//			b.DrawOp.GeoM.Translate(b.Camera.TileSize(), 0)
-//		}
-//		b.DrawOp.GeoM.Reset()
-//		b.DrawOp.GeoM.Scale(
-//			b.Camera.ScaleFactor(),
-//			b.Camera.ScaleFactor(),
-//		)
-//		b.DrawOp.GeoM.Translate(b.Camera.RelativePixels.Min.X, b.Camera.RelativePixels.Min.Y)
-//		b.DrawOp.GeoM.Translate(0, (j+1-b.Camera.Coordinates.Min.Y)*b.Camera.TileSize())
-//	}
-//	b.CellOnScreen.Store(cellNumber)
-//	b.DrawOp.GeoM.Reset()
-//}
-
 func (b *Board) Draw(screen *ebiten.Image) {
 	cam := b.Camera
 	scale := cam.ScaleFactor()

@@ -20,8 +20,8 @@ import (
 )
 
 const (
-	unitCount      = 1
-	rockCount      = 0
+	unitCount      = 10
+	rockCount      = 100
 	moveChanBuffer = 1000
 
 	tileSize  = 16

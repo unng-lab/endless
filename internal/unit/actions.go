@@ -23,7 +23,7 @@ func (u *Unit) set(to geom.Point) {
 	cell := u.Board.Cell(to.GetInts())
 	err := cell.AddUnit(u.ID, u.Index, u.Cost())
 	if err != nil {
-		panic(err)
+		//panic(err)
 	}
 
 	u.Positioning.Position.X = to.X
