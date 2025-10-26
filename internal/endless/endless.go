@@ -20,9 +20,8 @@ import (
 )
 
 const (
-	unitCount      = 10
-	rockCount      = 100
-	moveChanBuffer = 1000
+	unitCount = 10
+	rockCount = 100
 
 	tileSize  = 16
 	tileCount = 1024
@@ -41,6 +40,8 @@ type Game struct {
 	OnBoardCounter int64
 	workersPool    []chan int64
 	action         *actions.Action
+	drawCounter    int
+	tickCounter    int64
 }
 
 func NewGame() *Game {
@@ -58,7 +59,7 @@ func NewGame() *Game {
 	g.log.Info("board created")
 	g.action = actions.NewAction(g.camera)
 	g.log.Info("action created")
-	g.inventory = NewInverntory(g.board, g.camera)
+	g.inventory = NewInventory(g.board, g.camera)
 	g.log.Info("inventory created")
 	g.createRocks()
 	g.createUnits()
@@ -72,6 +73,10 @@ func NewGame() *Game {
 
 func (g *Game) runWorkers() {
 	num := runtime.NumCPU() / 2
+	if num < 1 {
+		num = 1
+	}
+	g.workersPool = make([]chan int64, 0, num)
 	for i := range num {
 		ch := make(chan int64, 1)
 		g.workersPool = append(g.workersPool, ch)
@@ -82,18 +87,17 @@ func (g *Game) runWorkers() {
 func (g *Game) createUnits() {
 	unitPiece := g.inventory.Units["runner"]
 	for range unitCount {
-		chanWg := make(chan int64, 1)
-		chanCameraTicks := make(chan struct{}, 1)
+		tickChan := make(chan int64, 1)
+		cameraTickChan := make(chan struct{}, 1)
 		newRunner := unitPiece.Unit(
 			len(g.Units),
 			gofakeit.Name(),
-			chanCameraTicks,
-			chanWg,
+			cameraTickChan,
+			tickChan,
 		)
 
 		g.Units = append(g.Units, newRunner)
 		newRunner.WG = &g.wg
-		//newRunner.Spawn(g.board.GetRandomFreePoint())
 		newRunner.Spawn(geom.Point{X: 0, Y: 0})
 		newRunner.Run()
 		newRunner.SetTask()
@@ -104,13 +108,13 @@ func (g *Game) createUnits() {
 func (g *Game) createRocks() {
 	rockPiece := g.inventory.Units["rock"]
 	for range rockCount {
-		chanWg := make(chan int64, 1)
-		chanCameraTicks := make(chan struct{}, 1)
+		tickChan := make(chan int64, 1)
+		cameraTickChan := make(chan struct{}, 1)
 		newRock := rockPiece.Unit(
 			len(g.Units),
 			"Rock named "+gofakeit.Name(),
-			chanCameraTicks,
-			chanWg,
+			cameraTickChan,
+			tickChan,
 		)
 		g.Units = append(g.Units, newRock)
 		newRock.WG = &g.wg

@@ -33,7 +33,7 @@ func New(log *slog.Logger) *Default {
 		"scr.test":                    "developer",
 		"slogfx.test":                 "developer",
 	}, delim), nil); err != nil {
-		d.log.Error("k.Load", err)
+		d.log.Error("k.Load", "err", err)
 		return nil
 	}
 
@@ -53,7 +53,7 @@ func New(log *slog.Logger) *Default {
 		return strings.Replace(strings.ToLower(
 			strings.TrimPrefix(s, prefix)), "_", delim, -1)
 	}), nil); err != nil {
-		d.log.Error("k.Load", err)
+		d.log.Error("k.Load", "err", err)
 		return nil
 	}
 

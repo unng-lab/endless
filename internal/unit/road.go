@@ -50,11 +50,11 @@ func (r *Road) Next() (int, error) {
 					return 0, ErrTaskFinished
 				}
 			} else {
-				slog.Error("nextMove", err)
+				slog.Error("nextMove failed", "err", err)
 			}
 		} else {
 			// если передвинулся то надо логику обработать
-			slog.Error("юнит переместился в другую точку", r.unit)
+			slog.Error("юнит переместился в другую точку", "unit", r.unit)
 		}
 
 	}

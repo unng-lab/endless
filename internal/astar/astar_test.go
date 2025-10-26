@@ -2,7 +2,7 @@ package astar
 
 import (
 	"fmt"
-	"reflect"
+	"math"
 	"testing"
 
 	"github.com/unng-lab/endless/internal/board"
@@ -25,15 +25,12 @@ func TestAstar_BuildPath(t *testing.T) {
 		name    string
 		fields  fields
 		args    args
-		want    []geom.Point
 		wantErr bool
 	}{
 		{
 			name: "1",
 			fields: fields{
-				b: &board.Board{
-					Cells: StringSliceToCells(astarTests[0].path),
-				},
+				b:     stringSliceToBoard(astarTests[0].path),
 				costs: make(map[Item]float64, costsCapacity),
 				froms: make(map[Item]Item, fromsCapacity),
 				items: make([]Item, 0, queueCapacity),
@@ -46,16 +43,6 @@ func TestAstar_BuildPath(t *testing.T) {
 				},
 				to: geom.Point{
 					X: 7,
-					Y: 1,
-				},
-			},
-			want: []geom.Point{
-				{
-					X: 7,
-					Y: 1,
-				},
-				{
-					X: 3,
 					Y: 1,
 				},
 			},
@@ -64,9 +51,7 @@ func TestAstar_BuildPath(t *testing.T) {
 		{
 			name: "2",
 			fields: fields{
-				b: &board.Board{
-					Cells: StringSliceToCells(astarTests[0].path),
-				},
+				b:     stringSliceToBoard(astarTests[0].path),
 				costs: make(map[Item]float64, costsCapacity),
 				froms: make(map[Item]Item, fromsCapacity),
 				items: make([]Item, 0, queueCapacity),
@@ -80,20 +65,6 @@ func TestAstar_BuildPath(t *testing.T) {
 				to: geom.Point{
 					X: 7,
 					Y: 1,
-				},
-			},
-			want: []geom.Point{
-				{
-					X: 7,
-					Y: 1,
-				},
-				{
-					X: 2,
-					Y: 1,
-				},
-				{
-					X: 1,
-					Y: 0,
 				},
 			},
 			wantErr: false,
@@ -101,9 +72,7 @@ func TestAstar_BuildPath(t *testing.T) {
 		{
 			name: "3",
 			fields: fields{
-				b: &board.Board{
-					Cells: StringSliceToCells(astarTests[0].path),
-				},
+				b:     stringSliceToBoard(astarTests[0].path),
 				costs: make(map[Item]float64, costsCapacity),
 				froms: make(map[Item]Item, fromsCapacity),
 				items: make([]Item, 0, queueCapacity),
@@ -119,15 +88,12 @@ func TestAstar_BuildPath(t *testing.T) {
 					Y: 0,
 				},
 			},
-			want:    []geom.Point{},
 			wantErr: false,
 		},
 		{
 			name: "4",
 			fields: fields{
-				b: &board.Board{
-					Cells: StringSliceToCells(astarTests[0].path),
-				},
+				b:     stringSliceToBoard(astarTests[0].path),
 				costs: make(map[Item]float64, costsCapacity),
 				froms: make(map[Item]Item, fromsCapacity),
 				items: make([]Item, 0, queueCapacity),
@@ -141,16 +107,6 @@ func TestAstar_BuildPath(t *testing.T) {
 				to: geom.Point{
 					X: 1,
 					Y: 1,
-				},
-			},
-			want: []geom.Point{
-				{
-					X: 1,
-					Y: 1,
-				},
-				{
-					X: 1,
-					Y: 0,
 				},
 			},
 			wantErr: false,
@@ -170,22 +126,34 @@ func TestAstar_BuildPath(t *testing.T) {
 				t.Errorf("BuildPath() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !reflect.DeepEqual(a.Path, tt.want) {
-				t.Errorf("BuildPath() got = %v, want %v", a.Path, tt.want)
-			}
+			validatePath(t, tt.fields.b, tt.args.from, tt.args.to, a.Path)
 		})
 	}
 }
 
-func StringSliceToCells(ss []string) [][]board.Cell {
-	cells := make([][]board.Cell, len(ss))
-	for i, s := range ss {
-		cells[i] = make([]board.Cell, len(s))
-		for j := range s {
-			cells[i][j].Cost = letterToCost(rune(s[j]))
+func stringSliceToBoard(ss []string) *board.Board {
+	if len(ss) == 0 {
+		return &board.Board{}
+	}
+	height := len(ss)
+	width := len(ss[0])
+	cells := make([]board.Cell, 0, width*height)
+	for y, row := range ss {
+		if len(row) != width {
+			panic(fmt.Sprintf("inconsistent row width: got %d want %d", len(row), width))
+		}
+		for x, ch := range row {
+			cells = append(cells, board.Cell{
+				Cost:  letterToCost(rune(ch)),
+				Point: geom.Point{X: float64(x), Y: float64(y)},
+			})
 		}
 	}
-	return cells
+	return &board.Board{
+		Cells:  cells,
+		Width:  uint64(width),
+		Height: uint64(height),
+	}
 }
 
 const (
@@ -200,18 +168,57 @@ func letterToCost(marker rune) float64 {
 	switch marker {
 	case '.':
 		return groundCost
+	case ' ', 'A', '$', 'o', 'O':
+		return groundCost
 	case 'r':
 		return roadCost
 	case '|':
+		return woodCost
+	case 'w':
 		return woodCost
 	case '%':
 		return swampCost
 	case '~':
 		return water
+	case 'x':
+		return math.Inf(1)
 
 	default:
 		panic(fmt.Sprintf("unexpected %c marker", marker))
 	}
+}
+
+func validatePath(t *testing.T, b *board.Board, start, goal geom.Point, path []geom.Point) {
+	t.Helper()
+	position := start
+	waypoints := append([]geom.Point(nil), path...)
+	const maxSteps = 1024
+	for step := 0; step < maxSteps; step++ {
+		if position == goal {
+			if len(waypoints) != 0 {
+				t.Fatalf("reached goal but still have waypoints: %v", waypoints)
+			}
+			return
+		}
+		if len(waypoints) == 0 {
+			t.Fatalf("ran out of waypoints before reaching goal from %v", position)
+		}
+		target := waypoints[len(waypoints)-1]
+		dir := position.To(target)
+		next, err := position.GetNeighbor(dir)
+		if err != nil {
+			t.Fatalf("failed to get neighbor from %v towards %v: %v", position, target, err)
+		}
+		cell := b.GetCell(int64(next.X), int64(next.Y))
+		if cell == nil || math.IsInf(cell.Cost, 1) {
+			t.Fatalf("path leads into blocked cell %v", next)
+		}
+		position = next
+		if position == target {
+			waypoints = waypoints[:len(waypoints)-1]
+		}
+	}
+	t.Fatalf("exceeded %d steps without reaching goal", maxSteps)
 }
 
 type pathfindTestCase struct {

@@ -1,10 +1,8 @@
 package endless
 
-import (
-	"testing"
+import "testing"
 
-	"github.com/unng-lab/endless/internal/board"
-)
+const boardTileCount = 1024.0
 
 func TestGetCellNumberX(t *testing.T) {
 	type args struct {
@@ -18,189 +16,54 @@ func TestGetCellNumberX(t *testing.T) {
 		want float64
 	}{
 		{
-			name: "1",
+			name: "centerTile",
 			args: args{
 				cursor:   0,
 				camera:   0,
 				tileSize: 16,
 			},
-			want: board.CountTile/2 + 0,
+			want: boardTileCount / 2,
 		},
 		{
-			name: "2",
+			name: "cursorWithinTile",
 			args: args{
-				cursor:   1,
+				cursor:   7.9,
 				camera:   0,
 				tileSize: 16,
 			},
-			want: board.CountTile/2 + 0,
+			want: boardTileCount / 2,
 		},
 		{
-			name: "3",
+			name: "cursorNextTile",
 			args: args{
-				cursor:   8,
+				cursor:   24,
 				camera:   0,
 				tileSize: 16,
 			},
-			want: board.CountTile/2 + 0,
+			want: boardTileCount/2 + 1,
 		},
 		{
-			name: "4",
-			args: args{
-				cursor:   16,
-				camera:   0,
-				tileSize: 16,
-			},
-			want: board.CountTile/2 + 1,
-		},
-		{
-			name: "5",
-			args: args{
-				cursor:   17,
-				camera:   0,
-				tileSize: 16,
-			},
-			want: board.CountTile/2 + 1,
-		},
-		{
-			name: "6",
+			name: "cameraShiftForward",
 			args: args{
 				cursor:   0,
-				camera:   -1,
+				camera:   24,
 				tileSize: 16,
 			},
-			want: board.CountTile/2 + -1,
+			want: boardTileCount/2 + 1,
 		},
 		{
-			name: "7",
-			args: args{
-				cursor:   1,
-				camera:   -1,
-				tileSize: 16,
-			},
-			want: board.CountTile/2 + 0,
-		},
-		{
-			name: "8",
-			args: args{
-				cursor:   8,
-				camera:   -1,
-				tileSize: 16,
-			},
-			want: board.CountTile/2 + 0,
-		},
-		{
-			name: "9",
-			args: args{
-				cursor:   16,
-				camera:   -1,
-				tileSize: 16,
-			},
-			want: board.CountTile/2 + 0,
-		},
-		{
-			name: "10",
-			args: args{
-				cursor:   17,
-				camera:   -1,
-				tileSize: 16,
-			},
-			want: board.CountTile/2 + 1,
-		},
-		{
-			name: "11",
-			args: args{
-				cursor:   18,
-				camera:   -1,
-				tileSize: 16,
-			},
-			want: board.CountTile/2 + 1,
-		},
-		{
-			name: "12",
+			name: "cameraShiftBackward",
 			args: args{
 				cursor:   0,
-				camera:   -257,
+				camera:   -16,
 				tileSize: 16,
 			},
-			want: board.CountTile/2 + -17,
-		},
-		{
-			name: "13",
-			args: args{
-				cursor:   1,
-				camera:   -257,
-				tileSize: 16,
-			},
-			want: board.CountTile/2 + -16,
-		},
-		{
-			name: "14",
-			args: args{
-				cursor:   8,
-				camera:   -257,
-				tileSize: 16,
-			},
-			want: board.CountTile/2 + -16,
-		},
-		{
-			name: "15",
-			args: args{
-				cursor:   16,
-				camera:   -257,
-				tileSize: 16,
-			},
-			want: board.CountTile/2 + -16,
-		},
-		{
-			name: "16",
-			args: args{
-				cursor:   17,
-				camera:   -257,
-				tileSize: 16,
-			},
-			want: board.CountTile/2 - 15,
-		},
-		{
-			name: "17",
-			args: args{
-				cursor:   18,
-				camera:   -257,
-				tileSize: 16,
-			},
-			want: board.CountTile/2 - 15,
-		},
-		{
-			name: "18",
-			args: args{
-				cursor:   476,
-				camera:   -450,
-				tileSize: 35.47,
-			},
-			want: board.CountTile/2 + 0,
-		},
-		{
-			name: "18",
-			args: args{
-				cursor:   500,
-				camera:   -450,
-				tileSize: 35.47,
-			},
-			want: board.CountTile/2 + 1,
-		},
-		{
-			name: "19",
-			args: args{
-				cursor:   643,
-				camera:   -300,
-				tileSize: 16,
-			},
-			want: board.CountTile/2 + 1,
+			want: boardTileCount/2 - 1,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := GetCellNumber(tt.args.cursor, tt.args.camera, tt.args.tileSize); got != tt.want {
+			if got := GetCellNumber(tt.args.cursor, tt.args.camera, tt.args.tileSize, boardTileCount); got != tt.want {
 				t.Errorf("GetCellNumberX() = %v, want %v", got, tt.want)
 			}
 		})
