@@ -34,11 +34,12 @@ func WorldToChunk(pos Vec2, chunkSize int) (ChunkID, Vec2) {
 
 // floorDiv — целочисленное деление с округлением вниз
 func floorDiv(a, b int) int {
-	if a >= 0 {
-		return a / b
+	q := a / b
+	r := a % b
+	if r != 0 && ((a < 0) != (b < 0)) {
+		q--
 	}
-	// negative safe div
-	return -((-a + b - 1) / b)
+	return q
 }
 
 // ChunkID — координаты чанка в логической сетке чанков

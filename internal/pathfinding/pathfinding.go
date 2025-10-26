@@ -48,55 +48,38 @@ func BuildPortalsFromPolySequence(polys []*navmesh.RectPoly) [][2]geom.Vec2 {
 		a := polys[i]
 		b := polys[i+1]
 
-		// Вычисляем пересечение
 		minx := geom.Max(a.Min.X, b.Min.X)
 		maxx := geom.Min(a.Max.X, b.Max.X)
 		miny := geom.Max(a.Min.Y, b.Min.Y)
 		maxy := geom.Min(a.Max.Y, b.Max.Y)
 
-		if minx <= maxx {
-			// Вертикальное пересечение
-			if a.Max.Y < b.Min.Y { // a над b
-				portals = append(portals, [2]geom.Vec2{
-					{minx, a.Max.Y},
-					{maxx, a.Max.Y},
-				})
-			} else if b.Max.Y < a.Min.Y { // b над a
-				portals = append(portals, [2]geom.Vec2{
-					{minx, b.Max.Y},
-					{maxx, b.Max.Y},
-				})
-			} else {
-				// Перекрытие по Y
-				y := geom.Max(a.Min.Y, b.Min.Y)
-				portals = append(portals, [2]geom.Vec2{
-					{minx, y},
-					{maxx, y},
-				})
-			}
-		} else if miny <= maxy {
-			// Горизонтальное пересечение
-			if a.Max.X < b.Min.X { // a слева от b
-				portals = append(portals, [2]geom.Vec2{
-					{a.Max.X, miny},
-					{a.Max.X, maxy},
-				})
-			} else if b.Max.X < a.Min.X { // b слева от a
-				portals = append(portals, [2]geom.Vec2{
-					{b.Max.X, miny},
-					{b.Max.X, maxy},
-				})
-			} else {
-				// Перекрытие по X
-				x := geom.Max(a.Min.X, b.Min.X)
-				portals = append(portals, [2]geom.Vec2{
-					{x, miny},
-					{x, maxy},
-				})
-			}
-		} else {
-			// Резервный вариант: соединяем центроиды
+		if minx > maxx || miny > maxy {
 			portals = append(portals, [2]geom.Vec2{a.Centroid, b.Centroid})
+			continue
+		}
+
+		switch {
+		case minx == maxx && miny == maxy:
+			p := geom.Vec2{minx, miny}
+			portals = append(portals, [2]geom.Vec2{p, p})
+		case minx == maxx:
+			x := minx
+			portals = append(portals, [2]geom.Vec2{
+				{x, miny},
+				{x, maxy},
+			})
+		case miny == maxy:
+			y := miny
+			portals = append(portals, [2]geom.Vec2{
+				{minx, y},
+				{maxx, y},
+			})
+		default:
+			midX := (minx + maxx) / 2
+			portals = append(portals, [2]geom.Vec2{
+				{midX, miny},
+				{midX, maxy},
+			})
 		}
 	}
 	return portals

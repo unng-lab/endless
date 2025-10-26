@@ -66,11 +66,12 @@ func (c *PathCache) moveToFront(e *pathEntry) {
 		return
 	}
 
-	c.remove(e)
+	c.detach(e)
 	c.addFront(e)
 }
 
 func (c *PathCache) addFront(e *pathEntry) {
+	e.prev = nil
 	e.next = c.head
 	if c.head != nil {
 		c.head.prev = e
@@ -88,6 +89,11 @@ func (c *PathCache) removeOldest() {
 }
 
 func (c *PathCache) remove(e *pathEntry) {
+	c.detach(e)
+	delete(c.m, e.key)
+}
+
+func (c *PathCache) detach(e *pathEntry) {
 	if e.prev != nil {
 		e.prev.next = e.next
 	} else {
@@ -98,7 +104,8 @@ func (c *PathCache) remove(e *pathEntry) {
 	} else {
 		c.tail = e.prev
 	}
-	delete(c.m, e.key)
+	e.prev = nil
+	e.next = nil
 }
 
 // PathKey генерирует ключ для кеша на основе старт/целей

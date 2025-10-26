@@ -47,7 +47,7 @@ func New(log *slog.Logger, cfg Config) *Default {
 
 	img, _, err := image.Decode(bytes.NewReader(images.Runner_png))
 	if err != nil {
-		d.log.Error("image.Decode", err)
+		d.log.Error("image.Decode", "err", err)
 	}
 	d.sprite = ebiten.NewImageFromImage(img)
 

@@ -8,6 +8,39 @@ import (
 	"github.com/unng-lab/endless/internal/geom"
 )
 
+func manhattan(a, b geom.Vec2) int {
+	dx := a.X - b.X
+	if dx < 0 {
+		dx = -dx
+	}
+	dy := a.Y - b.Y
+	if dy < 0 {
+		dy = -dy
+	}
+	return dx + dy
+}
+
+func assertDirectionTowardsTarget(t *testing.T, field map[geom.Vec2]geom.Vec2, pos, target, min, max geom.Vec2, blocked map[geom.Vec2]bool) {
+	t.Helper()
+	dir, ok := field[pos]
+	if !ok {
+		t.Fatalf("direction for %v not found", pos)
+	}
+	if dir.X == 0 && dir.Y == 0 {
+		t.Fatalf("direction for %v is zero", pos)
+	}
+	next := pos.Add(dir)
+	if next.X < min.X || next.Y < min.Y || next.X > max.X || next.Y > max.Y {
+		t.Fatalf("direction from %v leads outside bounds to %v", pos, next)
+	}
+	if blocked != nil && blocked[next] {
+		t.Fatalf("direction from %v leads into blocked cell %v", pos, next)
+	}
+	if manhattan(next, target) >= manhattan(pos, target) {
+		t.Fatalf("direction from %v does not move closer to target: next=%v", pos, next)
+	}
+}
+
 func TestBuildFlowField(t *testing.T) {
 	// Создаем простую область 3x3
 	min := geom.Vec2{0, 0}
@@ -29,15 +62,12 @@ func TestBuildFlowField(t *testing.T) {
 	}
 
 	// Проверяем направления к цели (2,2)
-	if dir, ok := field[geom.Vec2{1, 2}]; !ok || dir.X != 1 || dir.Y != 0 {
-		t.Errorf("BuildFlowField failed: wrong direction for (1,2), got %v", dir)
-	}
-	if dir, ok := field[geom.Vec2{2, 1}]; !ok || dir.X != 0 || dir.Y != 1 {
-		t.Errorf("BuildFlowField failed: wrong direction for (2,1), got %v", dir)
-	}
-	if dir, ok := field[geom.Vec2{1, 1}]; !ok || (dir.X != 1 && dir.Y != 1) {
-		t.Errorf("BuildFlowField failed: wrong direction for (1,1), got %v", dir)
-	}
+	target := geom.Vec2{2, 2}
+	minBounds := geom.Vec2{0, 0}
+	maxBounds := geom.Vec2{2, 2}
+	assertDirectionTowardsTarget(t, field, geom.Vec2{1, 2}, target, minBounds, maxBounds, nil)
+	assertDirectionTowardsTarget(t, field, geom.Vec2{2, 1}, target, minBounds, maxBounds, nil)
+	assertDirectionTowardsTarget(t, field, geom.Vec2{1, 1}, target, minBounds, maxBounds, nil)
 }
 
 func TestBuildFlowFieldWithObstacle(t *testing.T) {
@@ -63,10 +93,10 @@ func TestBuildFlowFieldWithObstacle(t *testing.T) {
 	}
 
 	// Проверяем обход препятствия
-	if dir, ok := field[geom.Vec2{1, 0}]; !ok || dir.X != 0 || dir.Y != 1 {
-		t.Errorf("BuildFlowField failed: wrong direction for (1,0), got %v", dir)
-	}
-	if dir, ok := field[geom.Vec2{0, 1}]; !ok || dir.X != 1 || dir.Y != 0 {
-		t.Errorf("BuildFlowField failed: wrong direction for (0,1), got %v", dir)
-	}
+	blocked := map[geom.Vec2]bool{{1, 1}: true}
+	target := geom.Vec2{2, 2}
+	minBounds := geom.Vec2{0, 0}
+	maxBounds := geom.Vec2{2, 2}
+	assertDirectionTowardsTarget(t, field, geom.Vec2{1, 0}, target, minBounds, maxBounds, blocked)
+	assertDirectionTowardsTarget(t, field, geom.Vec2{0, 1}, target, minBounds, maxBounds, blocked)
 }
