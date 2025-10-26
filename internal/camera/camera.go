@@ -112,9 +112,6 @@ func (c *Camera) Prepare() {
 	c.tileSize = c.getTileSize()
 	maxX, maxY := (c.W.GetWidth())/c.tileSize+1, (c.W.GetHeight())/c.tileSize+1
 
-	centerOffsetX := (c.W.GetWidth() / 2) * (1 - c.scaleFactor)
-	centerOffsetY := (c.W.GetHeight() / 2) * (1 - c.scaleFactor)
-
 	var (
 		x, y         float64
 		cellX, cellY float64 = c.cfg.TileCount / 2, c.cfg.TileCount / 2
@@ -150,22 +147,22 @@ func (c *Camera) Prepare() {
 
 	c.AbsolutePixels = geom.Rectangle{
 		Min: geom.Point{
-			X: math.Trunc(c.tileSize*cellX*100)/100 - x - centerOffsetX,
-			Y: math.Trunc(c.tileSize*cellY*100)/100 - y - centerOffsetY,
+			X: math.Trunc(c.tileSize*cellX*100)/100 - x,
+			Y: math.Trunc(c.tileSize*cellY*100)/100 - y,
 		},
 		Max: geom.Point{
-			X: math.Trunc(c.tileSize*(cellX+maxX)*100)/100 - x - centerOffsetX,
-			Y: math.Trunc(c.tileSize*(cellY+maxY)*100)/100 - y - centerOffsetY,
+			X: math.Trunc(c.tileSize*(cellX+maxX)*100)/100 - x,
+			Y: math.Trunc(c.tileSize*(cellY+maxY)*100)/100 - y,
 		},
 	}
 	c.RelativePixels = geom.Rectangle{
 		Min: geom.Point{
-			X: x + centerOffsetX,
-			Y: y + centerOffsetY,
+			X: x,
+			Y: y,
 		},
 		Max: geom.Point{
-			X: x + c.tileSize*maxX + centerOffsetX,
-			Y: y + c.tileSize*maxY + centerOffsetY,
+			X: x + c.tileSize*maxX,
+			Y: y + c.tileSize*maxY,
 		},
 	}
 
