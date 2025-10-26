@@ -37,6 +37,8 @@ type Cell struct {
 	Type           CellType
 	// Стоимость перемещения в зависимости от типа клетки
 	Cost float64
+	// Базовая стоимость клетки без учета временных объектов
+	BaseCost float64
 	// Храним стоимость перемещения в зависимости от временного интервала
 	Costs IntervalTree
 
@@ -107,6 +109,7 @@ func NewCell(cellType CellType, tileSize int, point geom.Point) Cell {
 	default:
 		panic("Неизвестный тип клетки")
 	}
+	cell.BaseCost = cell.Cost
 	cell.UnitList = make([]UnitOnCell, 0)
 	cell.Point = point
 	return cell
@@ -220,7 +223,7 @@ func getRandomElementFromQuadrant(quadrant, N int) (int, error) {
 func (c *Cell) AddUnit(id uint64, index int, cost float64) error {
 	c.UnitListMutex.Lock()
 	defer c.UnitListMutex.Unlock()
-	if math.IsInf(c.Cost, 1) {
+	if math.IsInf(c.BaseCost, 1) || c.hasInfiniteCostUnitLocked() {
 		return errors.New("нельзя добавлять новые юниты, т.к. стоимость уже бесконечна")
 	}
 	c.UnitList = append(c.UnitList, UnitOnCell{
@@ -228,11 +231,7 @@ func (c *Cell) AddUnit(id uint64, index int, cost float64) error {
 		Index: index,
 		Cost:  cost,
 	})
-	if math.IsInf(cost, 1) {
-		c.Cost = math.Inf(1)
-	} else {
-		c.Cost += cost
-	}
+	c.recalculateCostLocked()
 	return nil
 }
 
@@ -242,8 +241,40 @@ func (c *Cell) RemoveUnit(id uint64) error {
 	for i := range c.UnitList {
 		if c.UnitList[i].ID == id {
 			c.UnitList = append(c.UnitList[:i], c.UnitList[i+1:]...)
+			c.recalculateCostLocked()
 			return nil
 		}
 	}
 	return errors.New("не удалось удалить юнит")
+}
+
+func (c *Cell) hasInfiniteCostUnitLocked() bool {
+	for i := range c.UnitList {
+		if math.IsInf(c.UnitList[i].Cost, 1) {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Cell) recalculateCostLocked() {
+	if len(c.UnitList) == 0 {
+		c.Cost = c.BaseCost
+		return
+	}
+
+	if math.IsInf(c.BaseCost, 1) {
+		c.Cost = c.BaseCost
+		return
+	}
+
+	total := c.BaseCost
+	for i := range c.UnitList {
+		if math.IsInf(c.UnitList[i].Cost, 1) {
+			c.Cost = math.Inf(1)
+			return
+		}
+		total += c.UnitList[i].Cost
+	}
+	c.Cost = total
 }
