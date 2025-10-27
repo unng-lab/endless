@@ -16,8 +16,8 @@ func main() {
 	g := game.New(game.Config{
 		ScreenWidth:  1280,
 		ScreenHeight: 720,
-		TileColumns:  256,
-		TileRows:     256,
+		TileColumns:  4096,
+		TileRows:     4096,
 		TileSize:     64,
 		MinZoom:      0.3,
 		MaxZoom:      6,
