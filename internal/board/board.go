@@ -100,9 +100,10 @@ func (b *Board) Draw(screen *ebiten.Image) {
 	// Базовые трансформации
 	baseGeoM := ebiten.GeoM{}
 	baseGeoM.Scale(scale, scale)
+	screenOffset := cam.ScreenOffset()
 	baseGeoM.Translate(
-		cam.RelativePixels.Min.X,
-		cam.RelativePixels.Min.Y,
+		cam.RelativePixels.Min.X+screenOffset.X,
+		cam.RelativePixels.Min.Y+screenOffset.Y,
 	)
 
 	// Оптимизация: кешируем параметры отрисовки

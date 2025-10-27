@@ -40,6 +40,7 @@ type Camera struct {
 	scaleFactor    float64
 	W              window.Window
 	geom           ebiten.GeoM
+	screenOffset   geom.Point
 }
 
 func (c *Camera) TileSize() float64 {
@@ -112,6 +113,11 @@ func (c *Camera) Prepare() {
 	c.tileSize = c.getTileSize()
 	maxX, maxY := (c.W.GetWidth())/c.tileSize+1, (c.W.GetHeight())/c.tileSize+1
 
+	c.screenOffset = geom.Point{
+		X: (c.W.GetWidth() / 2) * (1 - c.scaleFactor),
+		Y: (c.W.GetHeight() / 2) * (1 - c.scaleFactor),
+	}
+
 	var (
 		x, y         float64
 		cellX, cellY float64 = c.cfg.TileCount / 2, c.cfg.TileCount / 2
@@ -177,16 +183,20 @@ func (c *Camera) GetCurrentPixels() geom.Rectangle {
 func (c *Camera) MiddleOfPointInRelativePixels(point geom.Point) geom.Point {
 	distX, distY := c.Coordinates.Min.Distance(point)
 	return geom.Point{
-		X: c.RelativePixels.Min.X + distX*c.tileSize + c.tileSize/2,
-		Y: c.RelativePixels.Min.Y + distY*c.tileSize + c.tileSize/2,
+		X: c.RelativePixels.Min.X + distX*c.tileSize + c.tileSize/2 + c.screenOffset.X,
+		Y: c.RelativePixels.Min.Y + distY*c.tileSize + c.tileSize/2 + c.screenOffset.Y,
 	}
 }
 
 func (c *Camera) PointToCameraPixel(point geom.Point) geom.Point {
 	return geom.Point{
-		X: point.X*c.tileSize - c.AbsolutePixels.Min.X,
-		Y: point.Y*c.tileSize - c.AbsolutePixels.Min.Y,
+		X: point.X*c.tileSize - c.AbsolutePixels.Min.X + c.screenOffset.X,
+		Y: point.Y*c.tileSize - c.AbsolutePixels.Min.Y + c.screenOffset.Y,
 	}
+}
+
+func (c *Camera) ScreenOffset() geom.Point {
+	return c.screenOffset
 }
 
 func New(tileSize float64, tileCount float64) *Camera {
@@ -230,6 +240,10 @@ func New(tileSize float64, tileCount float64) *Camera {
 			},
 		},
 		scaleFactor: 0,
+		screenOffset: geom.Point{
+			X: 0,
+			Y: 0,
+		},
 	}
 }
 
@@ -240,7 +254,7 @@ func (c *Camera) Update() error {
 
 func (c *Camera) WorldMatrix() ebiten.GeoM {
 	c.geom.Reset()
-	c.geom.Translate(c.RelativePixels.Min.X, c.RelativePixels.Min.Y)
+	c.geom.Translate(c.RelativePixels.Min.X+c.screenOffset.X, c.RelativePixels.Min.Y+c.screenOffset.Y)
 	// We want to scale and rotate around center of image / screen
 	c.geom.Translate(-c.W.GetWidth()/2, -c.W.GetHeight()/2)
 	c.geom.Scale(
