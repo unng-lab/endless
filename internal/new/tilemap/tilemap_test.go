@@ -30,3 +30,21 @@ func TestVisibleRangeClampedToMap(t *testing.T) {
 		t.Fatalf("expected %v, got %v", expected, rect)
 	}
 }
+
+func TestWalkableStateCanBeUpdated(t *testing.T) {
+	m := New(Config{Columns: 4, Rows: 4, TileSize: 16})
+
+	if !m.IsWalkable(1, 1) {
+		t.Fatalf("expected tile to be walkable by default")
+	}
+
+	m.SetBlocked(1, 1, true)
+	if m.IsWalkable(1, 1) {
+		t.Fatalf("expected tile to be blocked after SetBlocked")
+	}
+
+	m.SetBlocked(1, 1, false)
+	if !m.IsWalkable(1, 1) {
+		t.Fatalf("expected tile to be walkable after unblock")
+	}
+}
