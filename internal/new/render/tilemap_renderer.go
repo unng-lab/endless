@@ -1,43 +1,40 @@
 package render
 
 import (
-	"image/color"
+	"log"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
+	"github.com/unng-lab/endless/internal/new/assets"
 	"github.com/unng-lab/endless/internal/new/camera"
 	"github.com/unng-lab/endless/internal/new/tilemap"
 )
 
 // TileMapRenderer draws tile maps using ebiten.
 type TileMapRenderer struct {
-	tiles  *tilemap.TileMap
-	colors map[bool]color.Color
-	images map[bool]*ebiten.Image
+	tiles        *tilemap.TileMap
+	atlas        *assets.TileAtlas
+	tileVariants map[bool][]int
 }
 
 // NewTileMapRenderer creates a renderer for the provided tile map.
 func NewTileMapRenderer(m *tilemap.TileMap) *TileMapRenderer {
-	colors := map[bool]color.Color{
-		true:  color.RGBA{R: 65, G: 105, B: 225, A: 255},
-		false: color.RGBA{R: 34, G: 139, B: 34, A: 255},
-	}
-
 	return &TileMapRenderer{
-		tiles:  m,
-		colors: colors,
-		images: make(map[bool]*ebiten.Image),
+		tiles: m,
+		atlas: assets.NewTileAtlas(),
+		tileVariants: map[bool][]int{
+			false: {0, 1, 16, 17},
+			true:  {32, 33, 48, 49},
+		},
 	}
 }
 
-func (r *TileMapRenderer) tileImage(value bool) *ebiten.Image {
-	if img, ok := r.images[value]; ok {
-		return img
+func (r *TileMapRenderer) tileImage(index int, quality assets.Quality) *ebiten.Image {
+	img, err := r.atlas.TileImage(index, quality)
+	if err != nil {
+		log.Printf("failed to get tile image: %v", err)
+		return nil
 	}
-
-	img := ebiten.NewImage(1, 1)
-	img.Fill(r.colors[value])
-	r.images[value] = img
 	return img
 }
 
@@ -49,13 +46,26 @@ func (r *TileMapRenderer) Draw(screen *ebiten.Image, cam *camera.Camera) {
 	camScale := cam.Scale()
 	tileSize := r.tiles.TileSize()
 	tileScreenSize := tileSize * camScale
+	quality := r.atlas.QualityForScreenSize(tileScreenSize)
+	visibleWidth := visible.Dx()
 
 	for y := visible.Min.Y; y < visible.Max.Y; y++ {
 		for x := visible.Min.X; x < visible.Max.X; x++ {
-			img := r.tileImage(r.tiles.TileAt(x, y))
+			value := r.tiles.TileAt(x, y)
+			variants, ok := r.tileVariants[value]
+			if !ok || len(variants) == 0 {
+				continue
+			}
+			index := variants[(x+y*visibleWidth)%len(variants)]
+			img := r.tileImage(index, quality)
+			if img == nil {
+				continue
+			}
+
+			scale := tileScreenSize / float64(img.Bounds().Dx())
 
 			var op ebiten.DrawImageOptions
-			op.GeoM.Scale(tileScreenSize, tileScreenSize)
+			op.GeoM.Scale(scale, scale)
 			op.GeoM.Translate((float64(x)*tileSize-camPos.X)*camScale, (float64(y)*tileSize-camPos.Y)*camScale)
 
 			screen.DrawImage(img, &op)
