@@ -1,6 +1,6 @@
 module github.com/unng-lab/endless
 
-go 1.25.2
+go 1.24.3
 
 require (
 	github.com/brianvoe/gofakeit/v7 v7.8.1
