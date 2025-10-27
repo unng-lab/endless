@@ -47,8 +47,10 @@ func (r *TileMapRenderer) Draw(screen *ebiten.Image, cam *camera.Camera) {
 	tileSize := r.tiles.TileSize()
 	tileScreenSize := tileSize * camScale
 	quality := r.atlas.QualityForScreenSize(tileScreenSize)
-	visibleWidth := visible.Dx()
-
+	columns := r.tiles.Columns()
+	if columns == 0 {
+		return
+	}
 	for y := visible.Min.Y; y < visible.Max.Y; y++ {
 		for x := visible.Min.X; x < visible.Max.X; x++ {
 			value := r.tiles.TileAt(x, y)
@@ -56,7 +58,7 @@ func (r *TileMapRenderer) Draw(screen *ebiten.Image, cam *camera.Camera) {
 			if !ok || len(variants) == 0 {
 				continue
 			}
-			index := variants[(x+y*visibleWidth)%len(variants)]
+			index := variants[(x+y*columns)%len(variants)]
 			img := r.tileImage(index, quality)
 			if img == nil {
 				continue
