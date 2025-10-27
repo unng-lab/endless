@@ -69,15 +69,41 @@ func (c *Camera) Right() {
 }
 
 func (c *Camera) ZoomUp() {
-	if c.zoomFactor < MaxZoom {
-		c.zoomFactor += 10
-	}
+	c.adjustZoom(10)
 }
 
 func (c *Camera) ZoomDown() {
-	if c.zoomFactor > MinZoom {
-		c.zoomFactor += -10
+	c.adjustZoom(-10)
+}
+
+func (c *Camera) adjustZoom(delta float64) {
+	if delta == 0 {
+		return
 	}
+
+	newZoom := c.zoomFactor + delta
+	if newZoom > MaxZoom {
+		newZoom = MaxZoom
+	}
+	if newZoom < MinZoom {
+		newZoom = MinZoom
+	}
+	if newZoom == c.zoomFactor {
+		return
+	}
+
+	cursorX, cursorY := ebiten.CursorPosition()
+	cursor := geom.Point{X: float64(cursorX), Y: float64(cursorY)}
+	worldPoint := c.screenToWorld(cursor)
+
+	half := c.cfg.TileCount / 2
+	newScale := math.Pow(1.01, newZoom)
+	newTileSize := c.cfg.TileSize * newScale
+
+	c.positionX = (worldPoint.X-half)*newTileSize - cursor.X
+	c.positionY = (worldPoint.Y-half)*newTileSize - cursor.Y
+	c.zoomFactor = newZoom
+	c.Cursor = cursor
 }
 func (c *Camera) ScaleFactor() float64 {
 	return c.scaleFactor
@@ -186,6 +212,19 @@ func (c *Camera) PointToCameraPixel(point geom.Point) geom.Point {
 	return geom.Point{
 		X: point.X*c.tileSize - c.AbsolutePixels.Min.X,
 		Y: point.Y*c.tileSize - c.AbsolutePixels.Min.Y,
+	}
+}
+
+func (c *Camera) screenToWorld(point geom.Point) geom.Point {
+	if c.tileSize == 0 {
+		half := c.cfg.TileCount / 2
+		return geom.Point{X: half, Y: half}
+	}
+
+	half := c.cfg.TileCount / 2
+	return geom.Point{
+		X: half + (c.positionX+point.X)/c.tileSize,
+		Y: half + (c.positionY+point.Y)/c.tileSize,
 	}
 }
 
