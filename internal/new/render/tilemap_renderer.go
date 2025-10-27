@@ -29,6 +29,11 @@ func NewTileMapRenderer(m *tilemap.TileMap) *TileMapRenderer {
 	}
 }
 
+// Atlas exposes the sprite atlas used by the renderer.
+func (r *TileMapRenderer) Atlas() *assets.TileAtlas {
+	return r.atlas
+}
+
 func (r *TileMapRenderer) tileImage(index int, quality assets.Quality) *ebiten.Image {
 	img, err := r.atlas.TileImage(index, quality)
 	if err != nil {

@@ -13,6 +13,7 @@ type TileMap struct {
 	rows     int
 	tileSize float64
 	tiles    []bool
+	blocked  map[int]bool
 }
 
 // Config contains map creation parameters.
@@ -51,6 +52,7 @@ func New(cfg Config) *TileMap {
 		rows:     rows,
 		tileSize: tileSize,
 		tiles:    tiles,
+		blocked:  make(map[int]bool),
 	}
 }
 
@@ -75,6 +77,39 @@ func (m *TileMap) TileAt(x, y int) bool {
 		return false
 	}
 	return m.tiles[y*m.columns+x]
+}
+
+// SetTile updates the raw tile value at the provided coordinates.
+func (m *TileMap) SetTile(x, y int, value bool) {
+	if x < 0 || x >= m.columns || y < 0 || y >= m.rows {
+		return
+	}
+	m.tiles[y*m.columns+x] = value
+}
+
+// SetBlocked marks the provided tile as blocked or unblocked for navigation.
+func (m *TileMap) SetBlocked(x, y int, value bool) {
+	if x < 0 || x >= m.columns || y < 0 || y >= m.rows {
+		return
+	}
+	idx := y*m.columns + x
+	if value {
+		m.blocked[idx] = true
+		return
+	}
+	delete(m.blocked, idx)
+}
+
+// IsWalkable reports whether a tile can be traversed by units.
+func (m *TileMap) IsWalkable(x, y int) bool {
+	if x < 0 || x >= m.columns || y < 0 || y >= m.rows {
+		return false
+	}
+	idx := y*m.columns + x
+	if m.blocked[idx] {
+		return false
+	}
+	return true
 }
 
 // VisibleRange calculates tile indices visible for the current camera.
