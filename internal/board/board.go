@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/vector"
 
 	"github.com/unng-lab/endless/internal/geom"
 
@@ -22,6 +23,10 @@ const (
 	gridMultiplier     = 16
 	updatedCellsBuffer = 64
 )
+
+var gridLineColor = color.RGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0x40}
+
+const gridLineWidth = 1
 
 type Board struct {
 	Cells                   []Cell
@@ -82,6 +87,7 @@ func (b *Board) Draw(screen *ebiten.Image) {
 	scale := cam.ScaleFactor()
 	tileSize := cam.TileSize()
 	tileSizeF := float64(tileSize)
+	tileSizeF32 := float32(tileSize)
 	useHD := cam.GetZoomFactor() > hd
 
 	// Рассчитываем границы доски
@@ -116,7 +122,10 @@ func (b *Board) Draw(screen *ebiten.Image) {
 
 		for i := minX; i <= maxX; i++ {
 			// Выбираем изображение для отрисовки
-			var img *ebiten.Image
+			var (
+				img           *ebiten.Image
+				drawGridLines bool
+			)
 			switch {
 			case i < 0 || j < 0 || i > maxXBoard || j > maxYBoard:
 				img = b.ClearTile
@@ -127,12 +136,27 @@ func (b *Board) Draw(screen *ebiten.Image) {
 				} else {
 					img = cell.TileImageSmall
 				}
+				drawGridLines = true
 			}
 
 			// Устанавливаем геометрическую трансформацию
 			drawOpts.GeoM = rowGeoM
 			drawOpts.GeoM.Translate(xOffset, 0)
 			screen.DrawImage(img, drawOpts)
+
+			if drawGridLines {
+				tilePoint := cam.PointToCameraPixel(geom.Point{X: i, Y: j})
+				vector.StrokeRect(
+					screen,
+					float32(tilePoint.X),
+					float32(tilePoint.Y),
+					tileSizeF32,
+					tileSizeF32,
+					gridLineWidth,
+					gridLineColor,
+					false,
+				)
+			}
 
 			xOffset += tileSizeF
 		}
