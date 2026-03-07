@@ -26,6 +26,6 @@ func main() {
 	})
 
 	if err := ebiten.RunGame(g); err != nil {
-		log.Fatalf("1run game: %v", err)
+		log.Fatalf("run game: %v", err)
 	}
 }
