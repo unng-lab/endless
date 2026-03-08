@@ -242,11 +242,26 @@ func (g *Game) drawTileHighlight(
 ) {
 	screenX := (float64(tileX)*g.world.TileSize() - camPos.X) * scale
 	screenY := (float64(tileY)*g.world.TileSize() - camPos.Y) * scale
+	border := math.Max(1, math.Round(scale))
+	left := screenX + offset
+	top := screenY + offset
+	right := left + drawSize
+	bottom := top + drawSize
+
+	g.drawHighlightRect(screen, left, top, drawSize, border)
+	g.drawHighlightRect(screen, left, bottom-border, drawSize, border)
+	g.drawHighlightRect(screen, left, top+border, border, math.Max(bottom-top-border*2, 0))
+	g.drawHighlightRect(screen, right-border, top+border, border, math.Max(bottom-top-border*2, 0))
+}
+
+func (g *Game) drawHighlightRect(screen *ebiten.Image, x float64, y float64, width float64, height float64) {
+	if width <= 0 || height <= 0 {
+		return
+	}
 
 	var op ebiten.DrawImageOptions
-	op.GeoM.Scale(drawSize, drawSize)
-	op.GeoM.Translate(screenX+offset, screenY+offset)
-	op.ColorScale.Scale(1, 1, 1, 0.35)
+	op.GeoM.Scale(width, height)
+	op.GeoM.Translate(x, y)
 
 	screen.DrawImage(g.tile, &op)
 }
