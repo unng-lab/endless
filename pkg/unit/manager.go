@@ -3,6 +3,7 @@ package unit
 import (
 	"fmt"
 	"math"
+	"math/rand/v2"
 	"runtime"
 	"sync"
 
@@ -24,35 +25,48 @@ type Manager struct {
 	units       []Unit
 	projectiles []projectile
 	impacts     []impactEffect
+	occupants   map[tileKey][]int
 	selected    int
 	nextUnitID  int64
 
-	workers  []chan float64
+	workers  []chan updateRequest
 	updateWG sync.WaitGroup
+}
+
+type updateRequest struct {
+	tick  int64
+	delta float64
+}
+
+type tileKey struct {
+	x int
+	y int
 }
 
 func NewManager(gameWorld world.World, units []Unit) *Manager {
 	m := &Manager{
-		world:    gameWorld,
-		renderer: NewRenderer(),
-		units:    append([]Unit(nil), units...),
-		selected: -1,
+		world:     gameWorld,
+		renderer:  NewRenderer(),
+		units:     append([]Unit(nil), units...),
+		occupants: make(map[tileKey][]int),
+		selected:  -1,
 	}
 	m.assignUnitIDs()
+	m.rebuildOccupants()
 	m.startWorkers()
 	return m
 }
 
-func (m *Manager) Update(delta float64) {
+func (m *Manager) Update(gameTick int64, delta float64) {
 	if len(m.units) > 0 {
 		if len(m.workers) == 0 {
 			for i := range m.units {
-				m.units[i].Update(delta, m.tileSpeedMultiplierAt)
+				m.units[i].Tick(gameTick, delta, m.tileSpeedMultiplierAt)
 			}
 		} else {
 			for i := range m.workers {
 				m.updateWG.Add(1)
-				m.workers[i] <- delta
+				m.workers[i] <- updateRequest{tick: gameTick, delta: delta}
 			}
 			m.updateWG.Wait()
 		}
@@ -60,6 +74,7 @@ func (m *Manager) Update(delta float64) {
 
 	m.updateProjectiles(delta)
 	m.updateImpacts(delta)
+	m.rebuildOccupants()
 }
 
 func (m *Manager) SyncVisibility(cam *camera.Camera, screenWidth, screenHeight int) {
@@ -81,18 +96,27 @@ func (m *Manager) SelectAtScreen(cam *camera.Camera, cursor geom.Point, screenWi
 	if m.PointInPanel(cursor, screenWidth, screenHeight) {
 		return
 	}
-
-	for i := len(m.units) - 1; i >= 0; i-- {
-		if !m.units[i].OnScreen {
-			continue
-		}
-		if pointInRect(cursor, ScreenRect(cam, m.world.TileSize(), m.units[i])) {
-			m.selected = i
-			return
-		}
+	if cam == nil {
+		m.selected = -1
+		return
 	}
 
-	m.selected = -1
+	worldPos := cam.ScreenToWorld(cursor)
+	if !m.pointInWorld(worldPos) {
+		m.selected = -1
+		return
+	}
+
+	tileX := int(math.Floor(worldPos.X / m.world.TileSize()))
+	tileY := int(math.Floor(worldPos.Y / m.world.TileSize()))
+	candidates := m.occupants[tileKey{x: tileX, y: tileY}]
+	if len(candidates) == 0 {
+		m.selected = -1
+		return
+	}
+
+	m.selected = candidates[rand.IntN(len(candidates))]
+	m.units[m.selected].Wake()
 }
 
 func (m *Manager) PointInPanel(cursor geom.Point, screenWidth, screenHeight int) bool {
@@ -181,21 +205,21 @@ func (m *Manager) startWorkers() {
 		workerCount = 1
 	}
 
-	m.workers = make([]chan float64, 0, workerCount)
+	m.workers = make([]chan updateRequest, 0, workerCount)
 	for i := range workerCount {
-		ch := make(chan float64, 1)
+		ch := make(chan updateRequest, 1)
 		m.workers = append(m.workers, ch)
 		go m.workerRun(i, workerCount, ch)
 	}
 }
 
-func (m *Manager) workerRun(offset, workerCount int, updates <-chan float64) {
-	for delta := range updates {
-		m.processUpdates(offset, workerCount, delta)
+func (m *Manager) workerRun(offset, workerCount int, updates <-chan updateRequest) {
+	for req := range updates {
+		m.processUpdates(offset, workerCount, req)
 	}
 }
 
-func (m *Manager) processUpdates(offset, workerCount int, delta float64) {
+func (m *Manager) processUpdates(offset, workerCount int, req updateRequest) {
 	defer m.updateWG.Done()
 
 	stride := workerCount * updateBatchSize
@@ -205,7 +229,7 @@ func (m *Manager) processUpdates(offset, workerCount int, delta float64) {
 			if idx >= len(m.units) {
 				break
 			}
-			m.units[idx].Update(delta, m.tileSpeedMultiplierAt)
+			m.units[idx].Tick(req.tick, req.delta, m.tileSpeedMultiplierAt)
 		}
 	}
 }
@@ -248,6 +272,18 @@ func (m *Manager) worldPath(path []pathfinding.Step) []geom.Point {
 	}
 
 	return worldPath
+}
+
+func (m *Manager) rebuildOccupants() {
+	clear(m.occupants)
+	for i := range m.units {
+		if !m.units[i].Alive() {
+			continue
+		}
+		tileX, tileY := m.units[i].TilePosition(m.world.TileSize())
+		key := tileKey{x: tileX, y: tileY}
+		m.occupants[key] = append(m.occupants[key], i)
+	}
 }
 
 func (m *Manager) updateProjectiles(delta float64) {

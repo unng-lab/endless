@@ -45,6 +45,26 @@ func TestManagerSelectAtScreenIgnoresOffScreenUnits(t *testing.T) {
 	}
 }
 
+func TestManagerSelectAtScreenUsesTileHitInsteadOfSpriteRect(t *testing.T) {
+	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
+	m := NewManager(gameWorld, []Unit{
+		NewRunner(geom.Point{X: 24, Y: 24}, false, 0),
+	})
+	cam := camera.New(camera.Config{})
+
+	m.SyncVisibility(cam, 64, 64)
+	m.SelectAtScreen(cam, geom.Point{X: 10, Y: 10}, 64, 64)
+
+	if m.HasSelected() {
+		t.Fatal("expected click in sprite overhang but outside unit tile to be ignored")
+	}
+
+	m.SelectAtScreen(cam, geom.Point{X: 20, Y: 20}, 64, 64)
+	if !m.HasSelected() {
+		t.Fatal("expected click inside occupied tile to select a unit")
+	}
+}
+
 func TestManagerProjectileHitsOnlyWhenPassingThroughUnitPoint(t *testing.T) {
 	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
 	target := NewRunner(geom.Point{X: 48, Y: 24}, false, 0)
@@ -59,7 +79,7 @@ func TestManagerProjectileHitsOnlyWhenPassingThroughUnitPoint(t *testing.T) {
 	}
 
 	initialHealth := m.units[1].Health
-	m.Update(0.2)
+	m.Update(1, 0.2)
 
 	if m.units[1].Health != initialHealth {
 		t.Fatalf("target health = %d, want %d when projectile misses unit point", m.units[1].Health, initialHealth)
@@ -81,7 +101,7 @@ func TestManagerProjectileExpiresAfterMaxRange(t *testing.T) {
 	}
 
 	for range 60 {
-		m.Update(1.0 / 60.0)
+		m.Update(1, 1.0/60.0)
 	}
 
 	if len(m.projectiles) != 0 {
@@ -105,7 +125,7 @@ func TestManagerProjectileRespawnsUnitAtSpawnPoint(t *testing.T) {
 		t.Fatalf("CommandSelectedFire() error = %v", err)
 	}
 
-	m.Update(0.2)
+	m.Update(1, 0.2)
 
 	if m.units[1].Position != target.SpawnPosition {
 		t.Fatalf("target position = %+v, want respawn at %+v", m.units[1].Position, target.SpawnPosition)

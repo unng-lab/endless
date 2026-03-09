@@ -79,8 +79,9 @@ func (r *Renderer) Draw(
 
 		frameBounds := frame.Bounds()
 		frameScale := screenUnitWidth / float64(frameBounds.Dx())
-		screenX := (u.Position.X - camPos.X) * scale
-		screenY := (u.Position.Y - camPos.Y) * scale
+		renderPos := u.RenderPosition()
+		screenX := (renderPos.X - camPos.X) * scale
+		screenY := (renderPos.Y - camPos.Y) * scale
 
 		var op ebiten.DrawImageOptions
 		op.GeoM.Scale(frameScale, frameScale)
@@ -107,8 +108,9 @@ func ScreenRect(cam *camera.Camera, worldTileSize float64, u Unit) geom.Rect {
 	metrics := kindVisualMetrics(u.Kind)
 	screenUnitWidth := worldTileSize * scale * metrics.widthTiles
 	screenUnitHeight := worldTileSize * scale * metrics.heightTiles
-	screenX := (u.Position.X - camPos.X) * scale
-	screenY := (u.Position.Y - camPos.Y) * scale
+	renderPos := u.RenderPosition()
+	screenX := (renderPos.X - camPos.X) * scale
+	screenY := (renderPos.Y - camPos.Y) * scale
 
 	return geom.Rect{
 		Min: geom.Point{
@@ -152,8 +154,9 @@ func kindUsesSprite(kind Kind) bool {
 
 func (r *Renderer) drawStatic(screen *ebiten.Image, camPos geom.Point, scale, worldTileSize float64, u Unit) {
 	metrics := kindVisualMetrics(u.Kind)
-	screenX := (u.Position.X - camPos.X) * scale
-	screenY := (u.Position.Y - camPos.Y) * scale
+	renderPos := u.RenderPosition()
+	screenX := (renderPos.X - camPos.X) * scale
+	screenY := (renderPos.Y - camPos.Y) * scale
 	width := worldTileSize * scale * metrics.widthTiles
 	height := worldTileSize * scale * metrics.heightTiles
 	rect := geom.Rect{

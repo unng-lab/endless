@@ -33,6 +33,18 @@ type Unit struct {
 	elapsed   float64
 	moveSpeed float64
 	path      []geom.Point
+
+	sleepTime      int
+	lastUpdateTick int64
+	travel         travelState
+}
+
+type travelState struct {
+	from      geom.Point
+	to        geom.Point
+	duration  int
+	remaining int
+	active    bool
 }
 
 func NewRunner(position geom.Point, focused bool, phase float64) Unit {
@@ -75,13 +87,25 @@ func NewBarricade(position geom.Point) Unit {
 	}
 }
 
-func (u *Unit) Update(delta float64, speedMultiplier func(geom.Point) float64) {
+func (u *Unit) Tick(gameTick int64, delta float64, speedMultiplier func(geom.Point) float64) {
 	if !u.Alive() {
+		u.travel = travelState{}
 		return
 	}
 
 	u.elapsed += delta
-	u.advance(delta, speedMultiplier)
+	if u.sleepTime > 0 {
+		u.sleepTime--
+		u.travel.remaining = u.sleepTime
+		if u.sleepTime == 0 {
+			u.travel.remaining = 0
+		}
+		return
+	}
+
+	u.lastUpdateTick = gameTick
+	u.sleepTime = u.advance(gameTick, delta, speedMultiplier)
+	u.travel.remaining = u.sleepTime
 }
 
 func (u Unit) Frame() int {
@@ -118,6 +142,7 @@ func (u *Unit) SetPath(path []geom.Point) {
 	}
 
 	u.path = append(u.path[:0], path...)
+	u.sleepTime = 0
 }
 
 func (u Unit) IsMobile() bool {
@@ -175,43 +200,65 @@ func (u *Unit) Respawn() {
 	u.Position = u.SpawnPosition
 	u.Health = u.MaxHealth
 	u.path = u.path[:0]
+	u.sleepTime = 0
+	u.travel = travelState{}
 }
 
 func (u Unit) HasPath() bool {
 	return len(u.path) > 0
 }
 
+func (u Unit) IsMoving() bool {
+	return len(u.path) > 0 || (u.travel.active && u.travel.remaining > 0)
+}
+
 func (u Unit) PathLen() int {
 	return len(u.path)
 }
 
+func (u Unit) SleepTime() int {
+	return u.sleepTime
+}
+
+func (u Unit) LastUpdateTick() int64 {
+	return u.lastUpdateTick
+}
+
 func (u Unit) Destination() (geom.Point, bool) {
 	if len(u.path) == 0 {
+		if u.travel.active {
+			return u.travel.to, true
+		}
 		return geom.Point{}, false
 	}
 
 	return u.path[len(u.path)-1], true
 }
 
-func (u *Unit) advance(delta float64, speedMultiplier func(geom.Point) float64) {
-	if delta <= 0 || len(u.path) == 0 || u.moveSpeed <= 0 {
-		return
+func (u Unit) RenderPosition() geom.Point {
+	if !u.travel.active || u.travel.duration <= 0 {
+		return u.Position
 	}
 
-	remainingTime := delta
-	for remainingTime > 0 && len(u.path) > 0 {
-		currentSpeed := u.moveSpeed
-		if speedMultiplier != nil {
-			multiplier := speedMultiplier(u.Position)
-			if multiplier <= 0 {
-				return
-			}
-			currentSpeed *= multiplier
-		}
-		if currentSpeed <= 0 {
-			return
-		}
+	progress := 1 - float64(u.travel.remaining)/float64(u.travel.duration)
+	progress = geom.ClampFloat(progress, 0, 1)
+	return geom.Point{
+		X: u.travel.from.X + (u.travel.to.X-u.travel.from.X)*progress,
+		Y: u.travel.from.Y + (u.travel.to.Y-u.travel.from.Y)*progress,
+	}
+}
 
+func (u *Unit) Wake() {
+	u.sleepTime = 0
+}
+
+func (u *Unit) advance(_ int64, delta float64, speedMultiplier func(geom.Point) float64) int {
+	if delta <= 0 || len(u.path) == 0 || u.moveSpeed <= 0 {
+		u.travel = travelState{}
+		return 0
+	}
+
+	for len(u.path) > 0 {
 		target := u.path[0]
 		dx := target.X - u.Position.X
 		dy := target.Y - u.Position.Y
@@ -222,18 +269,48 @@ func (u *Unit) advance(delta float64, speedMultiplier func(geom.Point) float64) 
 			continue
 		}
 
-		timeToTarget := distance / currentSpeed
-		if timeToTarget <= remainingTime {
-			u.Position = target
-			u.path = u.path[1:]
-			remainingTime -= timeToTarget
-			continue
+		currentSpeed := u.moveSpeed
+		if speedMultiplier != nil {
+			multiplier := speedMultiplier(u.Position)
+			if multiplier <= 0 {
+				u.travel = travelState{}
+				return 0
+			}
+			currentSpeed *= multiplier
+		}
+		if currentSpeed <= 0 {
+			u.travel = travelState{}
+			return 0
 		}
 
-		distanceToTravel := currentSpeed * remainingTime
-		factor := distanceToTravel / distance
-		u.Position.X += dx * factor
-		u.Position.Y += dy * factor
-		return
+		travelTicks := sleepTicks(distance/currentSpeed, delta)
+		u.travel = travelState{
+			from:      u.RenderPosition(),
+			to:        target,
+			duration:  travelTicks,
+			remaining: travelTicks,
+			active:    true,
+		}
+		u.Position = target
+		u.path = u.path[1:]
+		return travelTicks
 	}
+
+	u.travel = travelState{}
+	return 0
+}
+
+func sleepTicks(duration, delta float64) int {
+	if duration <= 0 {
+		return 0
+	}
+	if delta <= 0 {
+		return 1
+	}
+
+	ticks := int(math.Ceil(duration / delta))
+	if ticks < 1 {
+		return 1
+	}
+	return ticks
 }

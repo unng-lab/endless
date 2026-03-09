@@ -89,7 +89,7 @@ func (m *Manager) drawInfoPanel(screen *ebiten.Image, screenWidth, screenHeight 
 
 	tileX, tileY := selected.TilePosition(m.world.TileSize())
 	infoText := fmt.Sprintf(
-		"Unit #%d: %s\nTile: (%d, %d)  World: (%.1f, %.1f)\nKind: %s  Frame: %d\nHP: %d/%d  Terrain speed: %.0f%%\n%s",
+		"Unit #%d: %s\nTile: (%d, %d)  World: (%.1f, %.1f)\nKind: %s  Frame: %d\nHP: %d/%d  Terrain speed: %.0f%%  Sleep: %d\n%s",
 		m.selected+1,
 		selected.Name(),
 		tileX,
@@ -101,6 +101,7 @@ func (m *Manager) drawInfoPanel(screen *ebiten.Image, screenWidth, screenHeight 
 		selected.Health,
 		selected.MaxHealth,
 		m.world.TileType(tileX, tileY).SpeedMultiplier()*100,
+		selected.SleepTime(),
 		m.statusText(*selected),
 	)
 	ebitenutil.DebugPrintAt(screen, infoText, int(rect.Min.X+16), int(rect.Min.Y+14))
@@ -114,7 +115,7 @@ func (m *Manager) statusText(selected Unit) string {
 		return "State: static obstacle"
 	}
 
-	if !selected.HasPath() {
+	if !selected.IsMoving() {
 		if selected.CanShoot() {
 			return "State: idle  Weapon: ready"
 		}

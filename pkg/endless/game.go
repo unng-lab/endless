@@ -50,6 +50,7 @@ type Game struct {
 	assetErr      error
 	pathErr       error
 	fireErr       error
+	tickCounter   int64
 }
 
 func NewGame() *Game {
@@ -98,7 +99,8 @@ func NewGame() *Game {
 }
 
 func (g *Game) Update() error {
-	g.units.Update(1.0 / tps)
+	g.tickCounter++
+	g.units.Update(g.tickCounter, 1.0/tps)
 
 	_, wheelY := ebiten.Wheel()
 	if wheelY != 0 {
