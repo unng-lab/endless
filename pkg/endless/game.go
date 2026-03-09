@@ -33,11 +33,12 @@ const (
 )
 
 type Game struct {
-	cam   *camera.Camera
-	world world.World
-	atlas *assets.TileAtlas
-	tile  *ebiten.Image
-	units *unit.Manager
+	cam    *camera.Camera
+	world  world.World
+	atlas  *assets.TileAtlas
+	tile   *ebiten.Image
+	units  *unit.Manager
+	stress *stressScenario
 
 	screenWidth  int
 	screenHeight int
@@ -62,6 +63,7 @@ func NewGame() *Game {
 		Rows:     mapRows,
 		TileSize: tileSize,
 	})
+	initialUnits, stress := newStressScenario(gameWorld)
 
 	g := &Game{
 		cam: camera.New(camera.Config{
@@ -72,24 +74,12 @@ func NewGame() *Game {
 		world:        gameWorld,
 		atlas:        assets.NewTileAtlas(),
 		tile:         tile,
+		stress:       stress,
 		screenWidth:  DefaultScreenWidth,
 		screenHeight: DefaultScreenHeight,
 	}
 
-	centerTileX := g.world.Columns() / 2
-	centerTileY := g.world.Rows() / 2
-	g.units = unit.NewManager(g.world, []unit.Unit{
-		unit.NewRunner(cellAnchor(centerTileX-1, centerTileY-1, g.world.TileSize()), false, 0.00),
-		unit.NewRunner(cellAnchor(centerTileX, centerTileY-1, g.world.TileSize()), true, 0.12),
-		unit.NewRunner(cellAnchor(centerTileX-1, centerTileY, g.world.TileSize()), true, 0.24),
-		unit.NewRunner(cellAnchor(centerTileX, centerTileY, g.world.TileSize()), false, 0.36),
-		unit.NewWall(cellAnchor(centerTileX+3, centerTileY-2, g.world.TileSize())),
-		unit.NewWall(cellAnchor(centerTileX+3, centerTileY-1, g.world.TileSize())),
-		unit.NewWall(cellAnchor(centerTileX+3, centerTileY, g.world.TileSize())),
-		unit.NewBarricade(cellAnchor(centerTileX-4, centerTileY+2, g.world.TileSize())),
-		unit.NewBarricade(cellAnchor(centerTileX-3, centerTileY+2, g.world.TileSize())),
-		unit.NewBarricade(cellAnchor(centerTileX-2, centerTileY+2, g.world.TileSize())),
-	})
+	g.units = unit.NewManager(g.world, initialUnits)
 
 	g.centerCamera()
 	g.clampCamera()
@@ -99,6 +89,9 @@ func NewGame() *Game {
 
 func (g *Game) Update() error {
 	g.tickCounter++
+	if g.stress != nil {
+		g.stress.Update(g.tickCounter, g.units)
+	}
 	g.units.Update(g.tickCounter, 1.0/tps)
 	g.updateCameraControls()
 	g.handleGameplayInput()
@@ -423,6 +416,16 @@ func (g *Game) debugText(hoveredTileX, hoveredTileY int, hovered bool) string {
 	}
 	if g.fireErr != nil {
 		debugText += "\nFire command: " + g.fireErr.Error()
+	}
+	if g.stress != nil {
+		debugText += fmt.Sprintf(
+			"\nStress: units %d/%d  static objects %d  jobs completed %d  jobs failed %d",
+			g.stress.SpawnedUnits(),
+			stressUnitCount,
+			g.stress.StaticObjects(),
+			g.stress.JobCompletedCount(),
+			g.stress.JobFailedCount(),
+		)
 	}
 
 	return debugText

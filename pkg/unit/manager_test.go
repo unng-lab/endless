@@ -173,6 +173,71 @@ func TestManagerProjectileCanDamageStaticUnit(t *testing.T) {
 	}
 }
 
+func TestManagerAssignMoveJobReportsCompletion(t *testing.T) {
+	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
+	runner := NewRunner(geom.Point{X: 8, Y: 8}, false, 0)
+	m := NewManager(gameWorld, []Unit{runner})
+
+	err := m.AssignMoveJob(MoveJob{
+		ID:          1,
+		ActorID:     7,
+		UnitID:      runner.UnitID(),
+		TargetTileX: 1,
+		TargetTileY: 0,
+	})
+	if err != nil {
+		t.Fatalf("AssignMoveJob() error = %v", err)
+	}
+
+	for tick := int64(1); tick <= 200; tick++ {
+		m.Update(tick, 1.0/60.0)
+		reports := m.DrainJobReports()
+		if len(reports) == 0 {
+			continue
+		}
+		if len(reports) != 1 {
+			t.Fatalf("DrainJobReports() len = %d, want 1", len(reports))
+		}
+		if reports[0].Status != JobStatusCompleted {
+			t.Fatalf("job status = %v, want %v", reports[0].Status, JobStatusCompleted)
+		}
+		if reports[0].ActorID != 7 || reports[0].UnitID != runner.UnitID() {
+			t.Fatalf("job report = %+v, want actor 7 for unit %d", reports[0], runner.UnitID())
+		}
+		return
+	}
+
+	t.Fatal("expected completed job report within 200 ticks")
+}
+
+func TestManagerAssignMoveJobReportsFailureForImmobileTarget(t *testing.T) {
+	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
+	wall := NewWall(geom.Point{X: 8, Y: 8})
+	m := NewManager(gameWorld, []Unit{wall})
+
+	err := m.AssignMoveJob(MoveJob{
+		ID:          3,
+		ActorID:     11,
+		UnitID:      wall.UnitID(),
+		TargetTileX: 2,
+		TargetTileY: 2,
+	})
+	if err == nil {
+		t.Fatal("AssignMoveJob() error = nil, want immobile-unit error")
+	}
+
+	reports := m.DrainJobReports()
+	if len(reports) != 1 {
+		t.Fatalf("DrainJobReports() len = %d, want 1", len(reports))
+	}
+	if reports[0].Status != JobStatusFailed {
+		t.Fatalf("job status = %v, want %v", reports[0].Status, JobStatusFailed)
+	}
+	if reports[0].ActorID != 11 || reports[0].UnitID != wall.UnitID() {
+		t.Fatalf("job report = %+v, want actor 11 for unit %d", reports[0], wall.UnitID())
+	}
+}
+
 func TestManagerSkipsStaticUnitUpdateUntilExternalWake(t *testing.T) {
 	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
 	target := NewWall(geom.Point{X: 24, Y: 24})

@@ -24,6 +24,7 @@ type Manager struct {
 	units []Unit
 
 	impacts         []impactEffect
+	jobReports      []JobReport
 	tileStacks      map[tileKey]*TileStack
 	registeredTiles map[int64]tileKey
 	unitIndexByID   map[int64]int
@@ -88,6 +89,7 @@ func (m *Manager) Update(gameTick int64, delta float64) {
 	m.updateImpacts(delta)
 	m.rebuildUnitIndex()
 	m.syncTileStacks()
+	m.collectUnitJobReports()
 }
 
 func (m *Manager) Draw(screen *ebiten.Image, cam *camera.Camera, quality assets.Quality) error {
@@ -168,6 +170,39 @@ func (m *Manager) CommandSelectedMove(targetTileX, targetTileY int) error {
 	return nil
 }
 
+// AssignMoveJob resolves a path for the actor-issued job and binds that job to the unit so
+// completion or cancellation can later be reported back through DrainJobReports.
+func (m *Manager) AssignMoveJob(job MoveJob) error {
+	current, ok := m.unitByID(job.UnitID)
+	if !ok {
+		err := fmt.Errorf("unit %d not found", job.UnitID)
+		m.appendJobFailure(job)
+		return err
+	}
+
+	body, ok := current.(*NonStaticUnit)
+	if !ok || !body.IsMobile() {
+		err := fmt.Errorf("unit %d is immobile", job.UnitID)
+		m.appendJobFailure(job)
+		return err
+	}
+
+	startTileX, startTileY := body.Base().TilePosition(m.world.TileSize())
+	grid := worldGrid{world: m.world, blocked: m.blockedTiles(body.UnitID())}
+	path, err := pathfinding.FindPath(
+		grid,
+		pathfinding.Step{X: startTileX, Y: startTileY},
+		pathfinding.Step{X: job.TargetTileX, Y: job.TargetTileY},
+	)
+	if err != nil {
+		m.appendJobFailure(job)
+		return err
+	}
+
+	body.AssignMoveJob(job, m.worldPath(path))
+	return nil
+}
+
 func (m *Manager) CommandSelectedFire(target geom.Point) error {
 	selected, ok := m.selectedNonStatic()
 	if !ok {
@@ -194,6 +229,41 @@ func (m *Manager) CommandSelectedFire(target geom.Point) error {
 
 func (m *Manager) Selected() (Unit, bool) {
 	return m.selectedUnit()
+}
+
+// AddUnit registers a freshly spawned unit in the manager and returns the persistent ID that
+// the caller should use for later commands, selections or job ownership tracking.
+func (m *Manager) AddUnit(body Unit) int64 {
+	if body == nil {
+		return 0
+	}
+
+	if body.UnitID() == 0 {
+		m.nextID++
+		body.SetUnitID(m.nextID)
+	} else if body.UnitID() > m.nextID {
+		m.nextID = body.UnitID()
+	}
+
+	m.units = append(m.units, body)
+	m.rebuildUnitIndex()
+	m.syncTileStacks()
+
+	return body.UnitID()
+}
+
+// DrainJobReports returns all actor-facing status changes emitted since the previous drain.
+// The manager aggregates reports both from job assignment failures and from units that finish
+// or lose ownership of their active move job during simulation.
+func (m *Manager) DrainJobReports() []JobReport {
+	m.collectUnitJobReports()
+	if len(m.jobReports) == 0 {
+		return nil
+	}
+
+	reports := append([]JobReport(nil), m.jobReports...)
+	m.jobReports = m.jobReports[:0]
+	return reports
 }
 
 func (m *Manager) selectedUnit() (Unit, bool) {
@@ -574,6 +644,30 @@ func (m *Manager) updateImpacts(delta float64) {
 		active = append(active, effect)
 	}
 	m.impacts = active
+}
+
+// collectUnitJobReports pulls per-unit job events into the manager-owned queue so the game
+// loop can drain them without reaching into individual unit internals.
+func (m *Manager) collectUnitJobReports() {
+	for _, current := range m.units {
+		reporter, ok := current.(jobReportingUnit)
+		if !ok {
+			continue
+		}
+
+		m.jobReports = append(m.jobReports, reporter.drainJobReports()...)
+	}
+}
+
+func (m *Manager) appendJobFailure(job MoveJob) {
+	m.jobReports = append(m.jobReports, JobReport{
+		JobID:       job.ID,
+		ActorID:     job.ActorID,
+		UnitID:      job.UnitID,
+		Status:      JobStatusFailed,
+		TargetTileX: job.TargetTileX,
+		TargetTileY: job.TargetTileY,
+	})
 }
 
 func (m *Manager) pointInWorld(position geom.Point) bool {

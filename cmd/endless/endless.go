@@ -12,6 +12,7 @@ func main() {
 	ebiten.SetWindowSize(endless.DefaultScreenWidth, endless.DefaultScreenHeight)
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 	ebiten.SetFullscreen(false)
+	ebiten.SetVsyncEnabled(false)
 
 	if err := ebiten.RunGame(endless.NewGame()); err != nil {
 		log.Fatalf("run endless: %v", err)

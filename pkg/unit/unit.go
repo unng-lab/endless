@@ -34,6 +34,8 @@ type NonStaticUnit struct {
 	moveSpeed float64
 
 	queuedMove queuedMoveCommand
+	moveJob    moveJobState
+	jobReports []JobReport
 }
 
 type travelState struct {
@@ -96,6 +98,7 @@ func (u *NonStaticUnit) UnitKind() Kind {
 // This keeps path traversal deterministic while avoiding visible teleportation.
 func (u *NonStaticUnit) Tick(gameTick int64, delta float64, speedMultiplier func(geom.Point) float64) {
 	if !u.Alive() {
+		u.failAssignedMoveJob()
 		u.clearQueuedMove()
 		u.clearTravel()
 		return
@@ -114,6 +117,7 @@ func (u *NonStaticUnit) Tick(gameTick int64, delta float64, speedMultiplier func
 	u.lastUpdateTick = gameTick
 	u.promoteQueuedMoveIfReady()
 	u.sleepTime = u.advance(delta, speedMultiplier)
+	u.completeAssignedMoveJobIfFinished()
 	u.travel.remaining = u.sleepTime
 }
 
@@ -143,14 +147,14 @@ func (u *NonStaticUnit) Name() string {
 // has been accepted, and resetting sleepTime lets the unit react on the next update.
 func (u *NonStaticUnit) SetPath(path []geom.Point) {
 	if !u.IsMobile() {
+		u.failAssignedMoveJob()
 		u.path = u.path[:0]
 		u.clearQueuedMove()
 		return
 	}
 
-	u.path = append(u.path[:0], path...)
-	u.clearQueuedMove()
-	u.sleepTime = 0
+	u.failAssignedMoveJob()
+	u.setPathWithoutJobCancel(path)
 }
 
 // QueueMoveCommand applies a new move order immediately only when the unit is already at the
@@ -158,17 +162,19 @@ func (u *NonStaticUnit) SetPath(path []geom.Point) {
 // route is stored as the single pending command that will replace the old path later.
 func (u *NonStaticUnit) QueueMoveCommand(path []geom.Point) {
 	if !u.IsMobile() {
+		u.failAssignedMoveJob()
 		u.path = u.path[:0]
 		u.clearQueuedMove()
 		return
 	}
 
+	u.failAssignedMoveJob()
 	if u.sleepTime > 0 {
 		u.queueNextMove(path)
 		return
 	}
 
-	u.SetPath(path)
+	u.setPathWithoutJobCancel(path)
 }
 
 func (u *NonStaticUnit) IsMobile() bool {
@@ -222,6 +228,7 @@ func (u *NonStaticUnit) ApplyDamage(amount int) bool {
 }
 
 func (u *NonStaticUnit) Respawn() {
+	u.failAssignedMoveJob()
 	u.Position = u.SpawnPosition
 	u.Health = u.MaxHealth
 	u.path = u.path[:0]
@@ -244,6 +251,15 @@ func (u *NonStaticUnit) LeaveTile(stack *TileStack) {
 
 func (u *NonStaticUnit) Wake() {
 	u.WakeForUpdate()
+	u.sleepTime = 0
+}
+
+// setPathWithoutJobCancel updates the immediate route without touching the current move-job
+// bookkeeping. Job-driven code uses this helper so it can install a path first and report the
+// final status only when the path actually completes or fails later.
+func (u *NonStaticUnit) setPathWithoutJobCancel(path []geom.Point) {
+	u.path = append(u.path[:0], path...)
+	u.clearQueuedMove()
 	u.sleepTime = 0
 }
 
