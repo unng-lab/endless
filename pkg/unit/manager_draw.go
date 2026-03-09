@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	infoPanelHeight   = 110.0
+	infoPanelHeight   = 126.0
 	infoPanelMargin   = 16.0
 	infoPanelMaxWidth = 480.0
 )
@@ -89,7 +89,7 @@ func (m *Manager) drawInfoPanel(screen *ebiten.Image, screenWidth, screenHeight 
 
 	tileX, tileY := selected.TilePosition(m.world.TileSize())
 	infoText := fmt.Sprintf(
-		"Unit #%d: %s\nTile: (%d, %d)  World: (%.1f, %.1f)\nKind: %s  Frame: %d\nTerrain speed: %.0f%%\n%s",
+		"Unit #%d: %s\nTile: (%d, %d)  World: (%.1f, %.1f)\nKind: %s  Frame: %d\nHP: %d/%d  Terrain speed: %.0f%%\n%s",
 		m.selected+1,
 		selected.Name(),
 		tileX,
@@ -98,6 +98,8 @@ func (m *Manager) drawInfoPanel(screen *ebiten.Image, screenWidth, screenHeight 
 		selected.Position.Y,
 		selected.Kind,
 		selected.Frame(),
+		selected.Health,
+		selected.MaxHealth,
 		m.world.TileType(tileX, tileY).SpeedMultiplier()*100,
 		m.statusText(*selected),
 	)
@@ -113,6 +115,9 @@ func (m *Manager) statusText(selected Unit) string {
 	}
 
 	if !selected.HasPath() {
+		if selected.CanShoot() {
+			return "State: idle  Weapon: ready"
+		}
 		return "State: idle"
 	}
 
@@ -123,6 +128,10 @@ func (m *Manager) statusText(selected Unit) string {
 
 	targetTileX := int(math.Floor(destination.X / m.world.TileSize()))
 	targetTileY := int(math.Floor(destination.Y / m.world.TileSize()))
+	if selected.CanShoot() {
+		return fmt.Sprintf("State: moving  Target: (%d, %d)  Waypoints: %d  Weapon: ready", targetTileX, targetTileY, selected.PathLen())
+	}
+
 	return fmt.Sprintf("State: moving  Target: (%d, %d)  Waypoints: %d", targetTileX, targetTileY, selected.PathLen())
 }
 

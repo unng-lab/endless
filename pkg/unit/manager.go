@@ -21,8 +21,11 @@ type Manager struct {
 	world    world.World
 	renderer *Renderer
 
-	units    []Unit
-	selected int
+	units       []Unit
+	projectiles []projectile
+	impacts     []impactEffect
+	selected    int
+	nextUnitID  int64
 
 	workers  []chan float64
 	updateWG sync.WaitGroup
@@ -35,26 +38,28 @@ func NewManager(gameWorld world.World, units []Unit) *Manager {
 		units:    append([]Unit(nil), units...),
 		selected: -1,
 	}
+	m.assignUnitIDs()
 	m.startWorkers()
 	return m
 }
 
 func (m *Manager) Update(delta float64) {
-	if len(m.units) == 0 {
-		return
-	}
-	if len(m.workers) == 0 {
-		for i := range m.units {
-			m.units[i].Update(delta, m.tileSpeedMultiplierAt)
+	if len(m.units) > 0 {
+		if len(m.workers) == 0 {
+			for i := range m.units {
+				m.units[i].Update(delta, m.tileSpeedMultiplierAt)
+			}
+		} else {
+			for i := range m.workers {
+				m.updateWG.Add(1)
+				m.workers[i] <- delta
+			}
+			m.updateWG.Wait()
 		}
-		return
 	}
 
-	for i := range m.workers {
-		m.updateWG.Add(1)
-		m.workers[i] <- delta
-	}
-	m.updateWG.Wait()
+	m.updateProjectiles(delta)
+	m.updateImpacts(delta)
 }
 
 func (m *Manager) SyncVisibility(cam *camera.Camera, screenWidth, screenHeight int) {
@@ -64,7 +69,7 @@ func (m *Manager) SyncVisibility(cam *camera.Camera, screenWidth, screenHeight i
 }
 
 func (m *Manager) Draw(screen *ebiten.Image, cam *camera.Camera, quality assets.Quality) error {
-	return m.renderer.Draw(screen, cam, m.world.TileSize(), quality, m.units)
+	return m.renderer.Draw(screen, cam, m.world.TileSize(), quality, m.units, m.projectiles, m.impacts)
 }
 
 func (m *Manager) HasSelected() bool {
@@ -119,6 +124,24 @@ func (m *Manager) CommandSelectedMove(targetTileX, targetTileY int) error {
 	return nil
 }
 
+func (m *Manager) CommandSelectedFire(target geom.Point) error {
+	selected, ok := m.selectedUnit()
+	if !ok {
+		return nil
+	}
+	if !selected.CanShoot() {
+		return fmt.Errorf("unit %q cannot shoot", selected.Name())
+	}
+
+	shot, err := newProjectile(*selected, target, m.world.TileSize())
+	if err != nil {
+		return err
+	}
+
+	m.projectiles = append(m.projectiles, shot)
+	return nil
+}
+
 func (m *Manager) Selected() (Unit, bool) {
 	selected, ok := m.selectedUnit()
 	if !ok {
@@ -137,6 +160,19 @@ func (m *Manager) selectedUnit() (*Unit, bool) {
 func (m *Manager) selectedOnScreen() bool {
 	selected, ok := m.selectedUnit()
 	return ok && selected.OnScreen
+}
+
+func (m *Manager) assignUnitIDs() {
+	for i := range m.units {
+		if m.units[i].ID == 0 {
+			m.nextUnitID++
+			m.units[i].ID = m.nextUnitID
+			continue
+		}
+		if m.units[i].ID > m.nextUnitID {
+			m.nextUnitID = m.units[i].ID
+		}
+	}
 }
 
 func (m *Manager) startWorkers() {
@@ -212,6 +248,108 @@ func (m *Manager) worldPath(path []pathfinding.Step) []geom.Point {
 	}
 
 	return worldPath
+}
+
+func (m *Manager) updateProjectiles(delta float64) {
+	if delta <= 0 || len(m.projectiles) == 0 {
+		return
+	}
+
+	active := m.projectiles[:0]
+	for _, shot := range m.projectiles {
+		if shot.RemainingRange <= 0 {
+			continue
+		}
+
+		start := shot.Position
+		stepDistance := math.Hypot(shot.Velocity.X, shot.Velocity.Y) * delta
+		if stepDistance <= 0 {
+			continue
+		}
+		if stepDistance > shot.RemainingRange {
+			stepDistance = shot.RemainingRange
+		}
+
+		direction := geom.Point{
+			X: shot.Velocity.X / math.Hypot(shot.Velocity.X, shot.Velocity.Y),
+			Y: shot.Velocity.Y / math.Hypot(shot.Velocity.X, shot.Velocity.Y),
+		}
+		end := geom.Point{
+			X: shot.Position.X + direction.X*stepDistance,
+			Y: shot.Position.Y + direction.Y*stepDistance,
+		}
+
+		if unitIndex, impactPos, ok := m.firstProjectileCollision(start, end, shot.OwnerID); ok {
+			if m.units[unitIndex].ApplyDamage(shot.Damage) {
+				m.units[unitIndex].Respawn()
+			}
+			m.impacts = append(m.impacts, newImpactEffect(impactPos, m.world.TileSize()))
+			continue
+		}
+
+		if !m.pointInWorld(end) {
+			continue
+		}
+
+		shot.Position = end
+		shot.RemainingRange -= stepDistance
+		if shot.RemainingRange <= 0 {
+			continue
+		}
+		active = append(active, shot)
+	}
+
+	m.projectiles = active
+}
+
+func (m *Manager) firstProjectileCollision(start, end geom.Point, ownerID int64) (int, geom.Point, bool) {
+	bestIndex := -1
+	bestT := math.Inf(1)
+	hitRadius := m.world.TileSize() * unitHitRadiusScale
+
+	for i := range m.units {
+		currentUnit := m.units[i]
+		if !currentUnit.Alive() || currentUnit.ID == ownerID {
+			continue
+		}
+
+		t, hit := segmentPointIntersection(start, end, currentUnit.Position, hitRadius)
+		if !hit || t >= bestT {
+			continue
+		}
+
+		bestIndex = i
+		bestT = t
+	}
+
+	if bestIndex < 0 {
+		return 0, geom.Point{}, false
+	}
+
+	return bestIndex, pointAlongSegment(start, end, bestT), true
+}
+
+func (m *Manager) updateImpacts(delta float64) {
+	if delta <= 0 || len(m.impacts) == 0 {
+		return
+	}
+
+	active := m.impacts[:0]
+	for _, effect := range m.impacts {
+		effect.Age += delta
+		if effect.Age >= effect.Duration {
+			continue
+		}
+		active = append(active, effect)
+	}
+	m.impacts = active
+}
+
+func (m *Manager) pointInWorld(position geom.Point) bool {
+	return position.X >= 0 &&
+		position.Y >= 0 &&
+		position.X <= m.world.Width() &&
+		position.Y <= m.world.Height()
 }
 
 type worldGrid struct {

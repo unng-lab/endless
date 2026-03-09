@@ -48,8 +48,10 @@ func (r *Renderer) Draw(
 	worldTileSize float64,
 	quality assets.Quality,
 	units []Unit,
+	projectiles []projectile,
+	impacts []impactEffect,
 ) error {
-	if len(units) == 0 {
+	if len(units) == 0 && len(projectiles) == 0 && len(impacts) == 0 {
 		return nil
 	}
 
@@ -62,6 +64,7 @@ func (r *Renderer) Draw(
 		}
 		if !kindUsesSprite(u.Kind) {
 			r.drawStatic(screen, camPos, scale, worldTileSize, u)
+			r.drawHealthBar(screen, cam, worldTileSize, u)
 			continue
 		}
 
@@ -84,6 +87,15 @@ func (r *Renderer) Draw(
 		op.GeoM.Translate(screenX-screenUnitWidth/2, screenY-screenUnitHeight*metrics.anchorY)
 
 		screen.DrawImage(frame, &op)
+		r.drawHealthBar(screen, cam, worldTileSize, u)
+	}
+
+	for _, shot := range projectiles {
+		r.drawProjectile(screen, camPos, scale, shot)
+	}
+
+	for _, effect := range impacts {
+		r.drawImpact(screen, camPos, scale, effect)
 	}
 
 	return nil
@@ -174,6 +186,7 @@ func (r *Renderer) drawStatic(screen *ebiten.Image, camPos geom.Point, scale, wo
 		r.drawFilledRect(screen, rect.Min.X+width*0.05, rect.Min.Y+height*0.48, width*0.75, height*0.18, highlight)
 		r.drawFilledRect(screen, rect.Min.X+width*0.18, rect.Min.Y+height*0.68, width*0.72, height*0.16, wood)
 	}
+
 }
 
 func (r *Renderer) drawFilledRect(screen *ebiten.Image, x, y, width, height float64, fill color.Color) {
@@ -186,6 +199,85 @@ func (r *Renderer) drawFilledRect(screen *ebiten.Image, x, y, width, height floa
 	op.GeoM.Translate(x, y)
 	op.ColorScale.ScaleWithColor(fill)
 	screen.DrawImage(r.solid, &op)
+}
+
+func (r *Renderer) drawProjectile(screen *ebiten.Image, camPos geom.Point, scale float64, shot projectile) {
+	size := math.Max(2, shot.Radius*2*scale)
+	screenX := (shot.Position.X - camPos.X) * scale
+	screenY := (shot.Position.Y - camPos.Y) * scale
+	glowSize := size * 1.8
+
+	r.drawFilledRect(
+		screen,
+		screenX-glowSize/2,
+		screenY-glowSize/2,
+		glowSize,
+		glowSize,
+		color.NRGBA{R: 255, G: 176, B: 64, A: 110},
+	)
+	r.drawFilledRect(
+		screen,
+		screenX-size/2,
+		screenY-size/2,
+		size,
+		size,
+		color.NRGBA{R: 255, G: 226, B: 168, A: 255},
+	)
+}
+
+func (r *Renderer) drawImpact(screen *ebiten.Image, camPos geom.Point, scale float64, effect impactEffect) {
+	if effect.Duration <= 0 {
+		return
+	}
+
+	progress := geom.ClampFloat(effect.Age/effect.Duration, 0, 1)
+	alpha := uint8(math.Round((1 - progress) * 220))
+	size := effect.Radius * 2 * scale * (1 + progress*0.8)
+	screenX := (effect.Position.X - camPos.X) * scale
+	screenY := (effect.Position.Y - camPos.Y) * scale
+
+	r.drawFilledRect(
+		screen,
+		screenX-size/2,
+		screenY-size/2,
+		size,
+		size,
+		color.NRGBA{R: 255, G: 187, B: 89, A: alpha},
+	)
+	r.drawFilledRect(
+		screen,
+		screenX-size*0.28,
+		screenY-size*0.28,
+		size*0.56,
+		size*0.56,
+		color.NRGBA{R: 255, G: 240, B: 196, A: alpha},
+	)
+}
+
+func (r *Renderer) drawHealthBar(screen *ebiten.Image, cam *camera.Camera, worldTileSize float64, u Unit) {
+	if u.MaxHealth <= 0 || u.Health >= u.MaxHealth {
+		return
+	}
+
+	if cam == nil {
+		return
+	}
+
+	rect := ScreenRect(cam, worldTileSize, u)
+	width := rect.Max.X - rect.Min.X
+	height := math.Max(3, math.Round(cam.Scale()*2))
+	top := rect.Min.Y - height - math.Max(3, cam.Scale())
+	ratio := u.HealthRatio()
+	fillWidth := width * ratio
+	fillColor := color.NRGBA{
+		R: uint8(math.Round(255 * (1 - ratio))),
+		G: uint8(math.Round(208 * ratio)),
+		B: 72,
+		A: 255,
+	}
+
+	r.drawFilledRect(screen, rect.Min.X, top, width, height, color.NRGBA{R: 36, G: 24, B: 24, A: 220})
+	r.drawFilledRect(screen, rect.Min.X, top, fillWidth, height, fillColor)
 }
 
 func (r *Renderer) frameImage(kind Kind, frameIndex int, quality assets.Quality) (*ebiten.Image, error) {

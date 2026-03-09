@@ -49,6 +49,7 @@ type Game struct {
 	renderedTiles int
 	assetErr      error
 	pathErr       error
+	fireErr       error
 }
 
 func NewGame() *Game {
@@ -115,6 +116,7 @@ func (g *Game) Update() error {
 	g.units.SyncVisibility(g.cam, g.screenWidth, g.screenHeight)
 	g.handleUnitSelection()
 	g.handleUnitCommand()
+	g.handleUnitFire()
 
 	return nil
 }
@@ -183,7 +185,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	}
 
 	debugText := fmt.Sprintf(
-		"WASD/Arrows: move  Shift: faster  Space: center  Middle mouse: drag  Wheel: zoom to cursor  Left mouse: select unit  Right mouse: move selected unit\nTPS: %.1f  RPS: %.1f  Zoom: %.2fx  Visible tiles: %d  Camera: (%.0f, %.0f)  %s",
+		"WASD/Arrows: move  Shift: faster  Space: center  Middle mouse: drag  Wheel: zoom to cursor  Left mouse: select unit  Right mouse: move selected unit  F: fire to cursor\nTPS: %.1f  RPS: %.1f  Zoom: %.2fx  Visible tiles: %d  Camera: (%.0f, %.0f)  %s",
 		ebiten.ActualTPS(),
 		ebiten.ActualFPS(),
 		g.cam.Scale(),
@@ -197,6 +199,9 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	}
 	if g.pathErr != nil {
 		debugText += "\nPath command: " + g.pathErr.Error()
+	}
+	if g.fireErr != nil {
+		debugText += "\nFire command: " + g.fireErr.Error()
 	}
 	ebitenutil.DebugPrint(screen, debugText)
 }
@@ -290,6 +295,28 @@ func (g *Game) handleUnitCommand() {
 	}
 
 	g.pathErr = nil
+}
+
+func (g *Game) handleUnitFire() {
+	if !g.units.HasSelected() {
+		return
+	}
+	if !inpututil.IsKeyJustPressed(ebiten.KeyF) {
+		return
+	}
+
+	x, y := ebiten.CursorPosition()
+	cursor := geom.Point{X: float64(x), Y: float64(y)}
+	if g.units.PointInPanel(cursor, g.screenWidth, g.screenHeight) {
+		return
+	}
+
+	if err := g.units.CommandSelectedFire(g.cam.ScreenToWorld(cursor)); err != nil {
+		g.fireErr = err
+		return
+	}
+
+	g.fireErr = nil
 }
 
 func (g *Game) centerCamera() {

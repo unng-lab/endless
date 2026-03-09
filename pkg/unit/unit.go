@@ -21,9 +21,13 @@ var runnerAnimation = Animation{
 }
 
 type Unit struct {
-	Position geom.Point
-	Kind     Kind
-	OnScreen bool
+	ID            int64
+	Position      geom.Point
+	SpawnPosition geom.Point
+	Kind          Kind
+	OnScreen      bool
+	MaxHealth     int
+	Health        int
 
 	animation Animation
 	elapsed   float64
@@ -38,31 +42,44 @@ func NewRunner(position geom.Point, focused bool, phase float64) Unit {
 	}
 
 	return Unit{
-		Position:  position,
-		Kind:      kind,
-		animation: runnerAnimation,
-		elapsed:   phase,
-		moveSpeed: 48,
+		Position:      position,
+		SpawnPosition: position,
+		Kind:          kind,
+		MaxHealth:     3,
+		Health:        3,
+		animation:     runnerAnimation,
+		elapsed:       phase,
+		moveSpeed:     48,
 	}
 }
 
 func NewWall(position geom.Point) Unit {
 	return Unit{
-		Position:  position,
-		Kind:      KindWall,
-		animation: Animation{FrameCount: 1, FrameDuration: 1},
+		Position:      position,
+		SpawnPosition: position,
+		Kind:          KindWall,
+		MaxHealth:     5,
+		Health:        5,
+		animation:     Animation{FrameCount: 1, FrameDuration: 1},
 	}
 }
 
 func NewBarricade(position geom.Point) Unit {
 	return Unit{
-		Position:  position,
-		Kind:      KindBarricade,
-		animation: Animation{FrameCount: 1, FrameDuration: 1},
+		Position:      position,
+		SpawnPosition: position,
+		Kind:          KindBarricade,
+		MaxHealth:     4,
+		Health:        4,
+		animation:     Animation{FrameCount: 1, FrameDuration: 1},
 	}
 }
 
 func (u *Unit) Update(delta float64, speedMultiplier func(geom.Point) float64) {
+	if !u.Alive() {
+		return
+	}
+
 	u.elapsed += delta
 	u.advance(delta, speedMultiplier)
 }
@@ -104,16 +121,60 @@ func (u *Unit) SetPath(path []geom.Point) {
 }
 
 func (u Unit) IsMobile() bool {
-	return u.moveSpeed > 0
+	return u.Alive() && u.moveSpeed > 0
 }
 
 func (u Unit) BlocksMovement() bool {
+	if !u.Alive() {
+		return false
+	}
+
 	switch u.Kind {
 	case KindWall, KindBarricade:
 		return true
 	default:
 		return false
 	}
+}
+
+func (u Unit) CanShoot() bool {
+	if !u.Alive() {
+		return false
+	}
+
+	switch u.Kind {
+	case KindRunner, KindRunnerFocused:
+		return true
+	default:
+		return false
+	}
+}
+
+func (u Unit) Alive() bool {
+	return u.Health > 0
+}
+
+func (u Unit) HealthRatio() float64 {
+	if u.MaxHealth <= 0 {
+		return 0
+	}
+
+	return geom.ClampFloat(float64(u.Health)/float64(u.MaxHealth), 0, 1)
+}
+
+func (u *Unit) ApplyDamage(amount int) bool {
+	if amount <= 0 || !u.Alive() {
+		return false
+	}
+
+	u.Health -= amount
+	return u.Health <= 0
+}
+
+func (u *Unit) Respawn() {
+	u.Position = u.SpawnPosition
+	u.Health = u.MaxHealth
+	u.path = u.path[:0]
 }
 
 func (u Unit) HasPath() bool {
