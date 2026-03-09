@@ -23,6 +23,7 @@ var runnerAnimation = Animation{
 type Unit struct {
 	Position geom.Point
 	Kind     Kind
+	OnScreen bool
 
 	animation Animation
 	elapsed   float64

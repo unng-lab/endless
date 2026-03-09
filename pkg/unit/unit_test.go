@@ -3,6 +3,7 @@ package unit
 import (
 	"testing"
 
+	"github.com/unng-lab/endless/pkg/camera"
 	"github.com/unng-lab/endless/pkg/geom"
 )
 
@@ -47,5 +48,27 @@ func TestStaticUnitIgnoresPath(t *testing.T) {
 	}
 	if u.HasPath() {
 		t.Fatal("expected static unit path to be ignored")
+	}
+}
+
+func TestUpdateOnScreenMarksVisibleUnit(t *testing.T) {
+	cam := camera.New(camera.Config{})
+	u := NewRunner(geom.Point{X: 16, Y: 16}, false, 0)
+
+	UpdateOnScreen(cam, 16, 64, 64, &u)
+
+	if !u.OnScreen {
+		t.Fatal("expected unit to be marked as visible")
+	}
+}
+
+func TestUpdateOnScreenMarksOffscreenUnit(t *testing.T) {
+	cam := camera.New(camera.Config{})
+	u := NewRunner(geom.Point{X: 160, Y: 160}, false, 0)
+
+	UpdateOnScreen(cam, 16, 64, 64, &u)
+
+	if u.OnScreen {
+		t.Fatal("expected unit to be marked as offscreen")
 	}
 }

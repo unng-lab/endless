@@ -12,6 +12,13 @@ type Rect struct {
 	Max Point
 }
 
+func RectsIntersect(a, b Rect) bool {
+	return a.Min.X < b.Max.X &&
+		a.Max.X > b.Min.X &&
+		a.Min.Y < b.Max.Y &&
+		a.Max.Y > b.Min.Y
+}
+
 func ClampFloat(value, min, max float64) float64 {
 	return math.Max(min, math.Min(max, value))
 }

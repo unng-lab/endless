@@ -57,6 +57,9 @@ func (r *Renderer) Draw(
 	scale := cam.Scale()
 
 	for _, u := range units {
+		if !u.OnScreen {
+			continue
+		}
 		if !kindUsesSprite(u.Kind) {
 			r.drawStatic(screen, camPos, scale, worldTileSize, u)
 			continue
