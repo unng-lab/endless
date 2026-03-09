@@ -7,10 +7,12 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
 
 	"github.com/unng-lab/endless/pkg/assets"
 	"github.com/unng-lab/endless/pkg/camera"
 	"github.com/unng-lab/endless/pkg/geom"
+	"github.com/unng-lab/endless/pkg/unit"
 	"github.com/unng-lab/endless/pkg/world"
 )
 
@@ -22,7 +24,7 @@ const (
 	mapRows    = 10000
 	tileSize   = 16.0
 
-	minZoom  = 0.01
+	minZoom  = 0.2
 	maxZoom  = 5.0
 	zoomStep = 0.12
 	panSpeed = 1400.0
@@ -34,6 +36,9 @@ type Game struct {
 	world world.World
 	atlas *assets.TileAtlas
 	tile  *ebiten.Image
+	units []unit.Unit
+
+	unitRenderer *unit.Renderer
 
 	screenWidth  int
 	screenHeight int
@@ -65,24 +70,39 @@ func NewGame() *Game {
 		world:        gameWorld,
 		atlas:        assets.NewTileAtlas(),
 		tile:         tile,
+		unitRenderer: unit.NewRenderer(),
 		screenWidth:  DefaultScreenWidth,
 		screenHeight: DefaultScreenHeight,
 	}
 
-	g.cam.SetPosition(geom.Point{
-		X: g.world.Width()/2 - float64(g.screenWidth)/2,
-		Y: g.world.Height()/2 - float64(g.screenHeight)/2,
-	})
+	centerTileX := g.world.Columns() / 2
+	centerTileY := g.world.Rows() / 2
+	g.units = []unit.Unit{
+		unit.NewRunner(cellAnchor(centerTileX-1, centerTileY-1, g.world.TileSize()), false, 0.00),
+		unit.NewRunner(cellAnchor(centerTileX, centerTileY-1, g.world.TileSize()), true, 0.12),
+		unit.NewRunner(cellAnchor(centerTileX-1, centerTileY, g.world.TileSize()), true, 0.24),
+		unit.NewRunner(cellAnchor(centerTileX, centerTileY, g.world.TileSize()), false, 0.36),
+	}
+
+	g.centerCamera()
 	g.clampCamera()
 
 	return g
 }
 
 func (g *Game) Update() error {
+	for i := range g.units {
+		g.units[i].Update(1.0 / tps)
+	}
+
 	_, wheelY := ebiten.Wheel()
 	if wheelY != 0 {
 		x, y := ebiten.CursorPosition()
 		g.cam.Zoom(wheelY*zoomStep, geom.Point{X: float64(x), Y: float64(y)})
+	}
+
+	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
+		g.centerCamera()
 	}
 
 	g.handleKeyboardPan()
@@ -103,9 +123,8 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	scale := g.cam.Scale()
 	camPos := g.cam.Position()
 	tileScreenSize := g.world.TileSize() * scale
-	gap := world.TileGap(tileScreenSize)
-	drawSize := math.Max(tileScreenSize-gap, 1)
-	offset := gap / 2
+	drawSize := math.Max(tileScreenSize, 1)
+	offset := 0.0
 	quality := g.atlas.QualityForScreenSize(tileScreenSize)
 	cursorX, cursorY := ebiten.CursorPosition()
 	hoveredTileX, hoveredTileY, hovered := g.hoveredTile(cursorX, cursorY)
@@ -132,6 +151,10 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		}
 	}
 
+	if err := g.unitRenderer.Draw(screen, g.cam, g.world.TileSize(), quality, g.units); err != nil && g.assetErr == nil {
+		g.assetErr = err
+	}
+
 	if hovered {
 		g.drawTileHighlight(screen, hoveredTileX, hoveredTileY, drawSize, offset, scale, camPos)
 	}
@@ -142,7 +165,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	}
 
 	debugText := fmt.Sprintf(
-		"WASD/Arrows: move  Shift: faster  Middle mouse: drag  Wheel: zoom to cursor\nTPS: %.1f  RPS: %.1f  Zoom: %.2fx  Visible tiles: %d  Camera: (%.0f, %.0f)  %s",
+		"WASD/Arrows: move  Shift: faster  Space: center  Middle mouse: drag  Wheel: zoom to cursor\nTPS: %.1f  RPS: %.1f  Zoom: %.2fx  Visible tiles: %d  Camera: (%.0f, %.0f)  %s",
 		ebiten.ActualTPS(),
 		ebiten.ActualFPS(),
 		g.cam.Scale(),
@@ -207,6 +230,13 @@ func (g *Game) handleMouseDrag() {
 	g.dragging = false
 	g.lastCursorX = x
 	g.lastCursorY = y
+}
+
+func (g *Game) centerCamera() {
+	g.cam.SetPosition(geom.Point{
+		X: g.world.Width()/2 - float64(g.screenWidth)/2,
+		Y: g.world.Height()/2 - float64(g.screenHeight)/2,
+	})
 }
 
 func (g *Game) clampCamera() {
@@ -281,4 +311,11 @@ func (g *Game) tileImage(x, y int, quality assets.Quality) (*ebiten.Image, float
 	}
 
 	return tileImage, float64(tileSize), true
+}
+
+func cellAnchor(tileX, tileY int, tileSize float64) geom.Point {
+	return geom.Point{
+		X: (float64(tileX) + 0.5) * tileSize,
+		Y: (float64(tileY) + 0.5) * tileSize,
+	}
 }

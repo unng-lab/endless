@@ -1,6 +1,6 @@
 module github.com/unng-lab/endless
 
-go 1.24.3
+go 1.26
 
 require github.com/hajimehoshi/ebiten/v2 v2.9.3
 
