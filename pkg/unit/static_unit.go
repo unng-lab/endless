@@ -120,3 +120,11 @@ func (s *StaticUnit) Respawn() {
 func (s *StaticUnit) Selectable() bool {
 	return s.Alive()
 }
+
+func (s *StaticUnit) EnterTile(stack *TileStack) {
+	stack.AddUnit(s.UnitID())
+}
+
+func (s *StaticUnit) LeaveTile(stack *TileStack) {
+	stack.RemoveUnit(s.UnitID())
+}

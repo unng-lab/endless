@@ -128,6 +128,12 @@ func (p *Projectile) Selectable() bool {
 	return false
 }
 
+func (p *Projectile) EnterTile(_ *TileStack) {
+}
+
+func (p *Projectile) LeaveTile(_ *TileStack) {
+}
+
 func newImpactEffect(position geom.Point, tileSize float64) impactEffect {
 	return impactEffect{
 		Position: position,

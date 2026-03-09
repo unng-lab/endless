@@ -195,6 +195,14 @@ func (u *NonStaticUnit) Selectable() bool {
 	return u.Alive()
 }
 
+func (u *NonStaticUnit) EnterTile(stack *TileStack) {
+	stack.AddUnit(u.UnitID())
+}
+
+func (u *NonStaticUnit) LeaveTile(stack *TileStack) {
+	stack.RemoveUnit(u.UnitID())
+}
+
 func (u *NonStaticUnit) Wake() {
 	u.sleepTime = 0
 }

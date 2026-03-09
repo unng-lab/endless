@@ -58,7 +58,7 @@ func (r *Renderer) Draw(
 	scale := cam.Scale()
 
 	for _, current := range units {
-		if current == nil || !current.Base().OnScreen {
+		if current == nil {
 			continue
 		}
 

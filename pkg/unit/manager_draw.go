@@ -19,16 +19,16 @@ const (
 )
 
 func (m *Manager) DrawOverlay(screen *ebiten.Image, cam *camera.Camera, screenWidth, screenHeight int) {
-	if !m.selectedOnScreen() {
+	if !m.selectedVisible(cam, screenWidth, screenHeight) {
 		return
 	}
 
 	m.drawSelectedHighlight(screen, cam)
-	m.drawInfoPanel(screen, screenWidth, screenHeight)
+	m.drawInfoPanel(screen, cam, screenWidth, screenHeight)
 }
 
-func (m *Manager) PanelRect(screenWidth, screenHeight int) (geom.Rect, bool) {
-	if !m.selectedOnScreen() {
+func (m *Manager) PanelRect(cam *camera.Camera, screenWidth, screenHeight int) (geom.Rect, bool) {
+	if !m.selectedVisible(cam, screenWidth, screenHeight) {
 		return geom.Rect{}, false
 	}
 
@@ -47,7 +47,7 @@ func (m *Manager) PanelRect(screenWidth, screenHeight int) (geom.Rect, bool) {
 
 func (m *Manager) drawSelectedHighlight(screen *ebiten.Image, cam *camera.Camera) {
 	selected, ok := m.selectedUnit()
-	if !ok || !selected.Base().OnScreen {
+	if !ok {
 		return
 	}
 
@@ -72,13 +72,13 @@ func (m *Manager) drawSelectedHighlight(screen *ebiten.Image, cam *camera.Camera
 	m.drawFilledRect(screen, right-border, top+border, border, math.Max(height-border*2, 0), highlight)
 }
 
-func (m *Manager) drawInfoPanel(screen *ebiten.Image, screenWidth, screenHeight int) {
+func (m *Manager) drawInfoPanel(screen *ebiten.Image, cam *camera.Camera, screenWidth, screenHeight int) {
 	selected, ok := m.selectedUnit()
-	if !ok || !selected.Base().OnScreen {
+	if !ok {
 		return
 	}
 
-	rect, ok := m.PanelRect(screenWidth, screenHeight)
+	rect, ok := m.PanelRect(cam, screenWidth, screenHeight)
 	if !ok {
 		return
 	}

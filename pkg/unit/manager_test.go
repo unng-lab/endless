@@ -15,17 +15,15 @@ func TestManagerPanelRectHiddenWhenSelectedUnitOffScreen(t *testing.T) {
 	})
 	cam := camera.New(camera.Config{})
 
-	m.SyncVisibility(cam, 64, 64)
 	m.SelectAtScreen(cam, geom.Point{X: 16, Y: 16}, 64, 64)
 
-	if _, ok := m.PanelRect(64, 64); !ok {
+	if _, ok := m.PanelRect(cam, 64, 64); !ok {
 		t.Fatal("expected panel rect for visible selected unit")
 	}
 
 	cam.SetPosition(geom.Point{X: 128, Y: 128})
-	m.SyncVisibility(cam, 64, 64)
 
-	if _, ok := m.PanelRect(64, 64); ok {
+	if _, ok := m.PanelRect(cam, 64, 64); ok {
 		t.Fatal("expected panel rect to be hidden for offscreen selected unit")
 	}
 }
@@ -37,7 +35,6 @@ func TestManagerSelectAtScreenIgnoresOffScreenUnits(t *testing.T) {
 	})
 	cam := camera.New(camera.Config{})
 
-	m.SyncVisibility(cam, 64, 64)
 	m.SelectAtScreen(cam, geom.Point{X: 16, Y: 16}, 64, 64)
 
 	if m.HasSelected() {
@@ -52,7 +49,6 @@ func TestManagerSelectAtScreenUsesTileHitInsteadOfSpriteRect(t *testing.T) {
 	})
 	cam := camera.New(camera.Config{})
 
-	m.SyncVisibility(cam, 64, 64)
 	m.SelectAtScreen(cam, geom.Point{X: 10, Y: 10}, 64, 64)
 
 	if m.HasSelected() {
@@ -72,7 +68,6 @@ func TestManagerSelectAtScreenCanSelectStaticUnit(t *testing.T) {
 	})
 	cam := camera.New(camera.Config{})
 
-	m.SyncVisibility(cam, 64, 64)
 	m.SelectAtScreen(cam, geom.Point{X: 20, Y: 20}, 64, 64)
 
 	if !m.HasSelected() {
@@ -87,7 +82,7 @@ func TestManagerProjectileHitsUnitOccupyingEnteredTile(t *testing.T) {
 		NewRunner(geom.Point{X: 24, Y: 24}, false, 0),
 		target,
 	})
-	m.selected = 0
+	m.selectedID = m.units[0].UnitID()
 
 	if err := m.CommandSelectedFire(geom.Point{X: 120, Y: 24}); err != nil {
 		t.Fatalf("CommandSelectedFire() error = %v", err)
@@ -109,7 +104,7 @@ func TestManagerProjectileExpiresAfterMaxRange(t *testing.T) {
 	m := NewManager(gameWorld, []Unit{
 		NewRunner(geom.Point{X: 24, Y: 24}, false, 0),
 	})
-	m.selected = 0
+	m.selectedID = m.units[0].UnitID()
 
 	if err := m.CommandSelectedFire(geom.Point{X: 512, Y: 24}); err != nil {
 		t.Fatalf("CommandSelectedFire() error = %v", err)
@@ -134,7 +129,7 @@ func TestManagerProjectileRespawnsUnitAtSpawnPoint(t *testing.T) {
 		NewRunner(geom.Point{X: 24, Y: 24}, false, 0),
 		target,
 	})
-	m.selected = 0
+	m.selectedID = m.units[0].UnitID()
 
 	if err := m.CommandSelectedFire(geom.Point{X: 120, Y: 24}); err != nil {
 		t.Fatalf("CommandSelectedFire() error = %v", err)
@@ -162,7 +157,7 @@ func TestManagerProjectileCanDamageStaticUnit(t *testing.T) {
 		NewRunner(geom.Point{X: 24, Y: 24}, false, 0),
 		target,
 	})
-	m.selected = 0
+	m.selectedID = m.units[0].UnitID()
 
 	if err := m.CommandSelectedFire(geom.Point{X: 120, Y: 24}); err != nil {
 		t.Fatalf("CommandSelectedFire() error = %v", err)
@@ -178,33 +173,29 @@ func TestManagerProjectileCanDamageStaticUnit(t *testing.T) {
 	}
 }
 
-func TestManagerSyncVisibilityUpdatesProjectileOnScreenState(t *testing.T) {
+func TestProjectileVisibilityUsesCurrentCameraState(t *testing.T) {
 	gameWorld := world.New(world.Config{Columns: 64, Rows: 64, TileSize: 16})
 	m := NewManager(gameWorld, []Unit{
 		NewRunner(geom.Point{X: 24, Y: 24}, false, 0),
 	})
-	m.selected = 0
+	m.selectedID = m.units[0].UnitID()
 
 	if err := m.CommandSelectedFire(geom.Point{X: 120, Y: 24}); err != nil {
 		t.Fatalf("CommandSelectedFire() error = %v", err)
 	}
 
 	cam := camera.New(camera.Config{})
-	m.SyncVisibility(cam, 64, 64)
-
 	projectile := firstProjectile(m.units)
 	if projectile == nil {
 		t.Fatal("expected projectile to exist")
 	}
-	if !projectile.Base().OnScreen {
-		t.Fatal("expected projectile to be marked as visible")
+	if !unitVisibleOnScreen(cam, gameWorld.TileSize(), 64, 64, projectile) {
+		t.Fatal("expected projectile to be visible for the default camera")
 	}
 
 	cam.SetPosition(geom.Point{X: 400, Y: 400})
-	m.SyncVisibility(cam, 64, 64)
-
-	if projectile.Base().OnScreen {
-		t.Fatal("expected projectile to be marked as offscreen")
+	if unitVisibleOnScreen(cam, gameWorld.TileSize(), 64, 64, projectile) {
+		t.Fatal("expected projectile to become offscreen after camera move")
 	}
 }
 

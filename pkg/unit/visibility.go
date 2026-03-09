@@ -5,15 +5,12 @@ import (
 	"github.com/unng-lab/endless/pkg/geom"
 )
 
-func UpdateOnScreen(cam *camera.Camera, worldTileSize float64, screenWidth, screenHeight int, unit Unit) {
-	if unit == nil {
-		return
-	}
-
-	base := unit.Base()
-	if cam == nil || worldTileSize <= 0 || screenWidth <= 0 || screenHeight <= 0 {
-		base.OnScreen = false
-		return
+// unitVisibleOnScreen evaluates visibility directly from the current camera state instead of
+// caching a mutable OnScreen flag inside each unit. This keeps draw logic, overlays and tests
+// in sync even when the camera moves multiple times between updates.
+func unitVisibleOnScreen(cam *camera.Camera, worldTileSize float64, screenWidth, screenHeight int, unit Unit) bool {
+	if unit == nil || cam == nil || worldTileSize <= 0 || screenWidth <= 0 || screenHeight <= 0 {
+		return false
 	}
 
 	screenRect := geom.Rect{
@@ -22,9 +19,8 @@ func UpdateOnScreen(cam *camera.Camera, worldTileSize float64, screenWidth, scre
 	}
 	bounds, ok := unitScreenRect(cam, worldTileSize, unit)
 	if !ok {
-		base.OnScreen = false
-		return
+		return false
 	}
 
-	base.OnScreen = geom.RectsIntersect(bounds, screenRect)
+	return geom.RectsIntersect(bounds, screenRect)
 }

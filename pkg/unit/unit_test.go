@@ -52,25 +52,21 @@ func TestUnitAppliesSpeedMultiplierToSleepTicks(t *testing.T) {
 	}
 }
 
-func TestUpdateOnScreenMarksVisibleUnit(t *testing.T) {
+func TestUnitVisibleOnScreenReturnsTrueForVisibleUnit(t *testing.T) {
 	cam := camera.New(camera.Config{})
 	u := NewRunner(geom.Point{X: 16, Y: 16}, false, 0)
 
-	UpdateOnScreen(cam, 16, 64, 64, u)
-
-	if !u.OnScreen {
-		t.Fatal("expected unit to be marked as visible")
+	if !unitVisibleOnScreen(cam, 16, 64, 64, u) {
+		t.Fatal("expected visible unit to intersect the screen rect")
 	}
 }
 
-func TestUpdateOnScreenMarksOffscreenUnit(t *testing.T) {
+func TestUnitVisibleOnScreenReturnsFalseForOffscreenUnit(t *testing.T) {
 	cam := camera.New(camera.Config{})
 	u := NewRunner(geom.Point{X: 160, Y: 160}, false, 0)
 
-	UpdateOnScreen(cam, 16, 64, 64, u)
-
-	if u.OnScreen {
-		t.Fatal("expected unit to be marked as offscreen")
+	if unitVisibleOnScreen(cam, 16, 64, 64, u) {
+		t.Fatal("expected offscreen unit to be rejected")
 	}
 }
 

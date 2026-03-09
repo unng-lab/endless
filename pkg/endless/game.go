@@ -93,7 +93,6 @@ func NewGame() *Game {
 
 	g.centerCamera()
 	g.clampCamera()
-	g.units.SyncVisibility(g.cam, g.screenWidth, g.screenHeight)
 
 	return g
 }
@@ -102,7 +101,6 @@ func (g *Game) Update() error {
 	g.tickCounter++
 	g.units.Update(g.tickCounter, 1.0/tps)
 	g.updateCameraControls()
-	g.syncVisibility()
 	g.handleGameplayInput()
 
 	return nil
@@ -112,7 +110,6 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	screen.Fill(color.NRGBA{R: 17, G: 24, B: 31, A: 255})
 
 	g.updateScreenSize(screen)
-	g.syncVisibility()
 
 	quality, hoveredTileX, hoveredTileY, hovered := g.drawWorld(screen)
 	if err := g.units.Draw(screen, g.cam, quality); err != nil && g.assetErr == nil {
@@ -158,10 +155,6 @@ func (g *Game) updateScreenSize(screen *ebiten.Image) {
 	g.screenHeight = bounds.Dy()
 }
 
-func (g *Game) syncVisibility() {
-	g.units.SyncVisibility(g.cam, g.screenWidth, g.screenHeight)
-}
-
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 	if outsideWidth > 0 {
 		g.screenWidth = outsideWidth
@@ -171,7 +164,6 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 	}
 
 	g.clampCamera()
-	g.syncVisibility()
 
 	return g.screenWidth, g.screenHeight
 }
@@ -302,7 +294,7 @@ func (g *Game) hoveredTile(cursorX, cursorY int) (int, int, bool) {
 func (g *Game) cursorWorldCommandTarget() (int, int, geom.Point, bool) {
 	x, y := ebiten.CursorPosition()
 	cursor := geom.Point{X: float64(x), Y: float64(y)}
-	if g.units.PointInPanel(cursor, g.screenWidth, g.screenHeight) {
+	if g.units.PointInPanel(g.cam, cursor, g.screenWidth, g.screenHeight) {
 		return 0, 0, geom.Point{}, false
 	}
 

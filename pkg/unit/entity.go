@@ -26,6 +26,8 @@ type Unit interface {
 	ApplyDamage(int) bool
 	Respawn()
 	Selectable() bool
+	EnterTile(*TileStack)
+	LeaveTile(*TileStack)
 }
 
 // BaseUnit stores the spatial and tick-based movement state shared by all world units.
@@ -33,7 +35,6 @@ type Unit interface {
 // identical across runners, obstacles and projectiles.
 type BaseUnit struct {
 	Position geom.Point
-	OnScreen bool
 
 	path           []geom.Point
 	sleepTime      int
