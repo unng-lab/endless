@@ -65,38 +65,53 @@ func TestManagerSelectAtScreenUsesTileHitInsteadOfSpriteRect(t *testing.T) {
 	}
 }
 
-func TestManagerProjectileHitsOnlyWhenPassingThroughUnitPoint(t *testing.T) {
+func TestManagerSelectAtScreenCanSelectStaticUnit(t *testing.T) {
 	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
-	target := NewRunner(geom.Point{X: 48, Y: 24}, false, 0)
 	m := NewManager(gameWorld, []Unit{
-		NewRunner(geom.Point{X: 16, Y: 16}, false, 0),
+		NewWall(geom.Point{X: 24, Y: 24}),
+	})
+	cam := camera.New(camera.Config{})
+
+	m.SyncVisibility(cam, 64, 64)
+	m.SelectAtScreen(cam, geom.Point{X: 20, Y: 20}, 64, 64)
+
+	if !m.HasSelected() {
+		t.Fatal("expected click inside static unit tile to select it")
+	}
+}
+
+func TestManagerProjectileHitsUnitOccupyingEnteredTile(t *testing.T) {
+	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
+	target := NewRunner(geom.Point{X: 37, Y: 28}, false, 0)
+	m := NewManager(gameWorld, []Unit{
+		NewRunner(geom.Point{X: 24, Y: 24}, false, 0),
 		target,
 	})
 	m.selected = 0
 
-	if err := m.CommandSelectedFire(geom.Point{X: 80, Y: 16}); err != nil {
+	if err := m.CommandSelectedFire(geom.Point{X: 120, Y: 24}); err != nil {
 		t.Fatalf("CommandSelectedFire() error = %v", err)
 	}
 
-	initialHealth := m.units[1].Health
-	m.Update(1, 0.2)
+	initialHealth := target.Health
+	m.Update(1, 1.0/60.0)
 
-	if m.units[1].Health != initialHealth {
-		t.Fatalf("target health = %d, want %d when projectile misses unit point", m.units[1].Health, initialHealth)
+	if target.Health != initialHealth-1 {
+		t.Fatalf("target health = %d, want %d after projectile enters occupied tile", target.Health, initialHealth-1)
 	}
-	if len(m.projectiles) == 0 {
-		t.Fatal("expected projectile to remain active after missing unit point")
+	if count := countProjectiles(m.units); count != 0 {
+		t.Fatalf("projectiles = %d, want 0 after hit", count)
 	}
 }
 
 func TestManagerProjectileExpiresAfterMaxRange(t *testing.T) {
 	gameWorld := world.New(world.Config{Columns: 64, Rows: 64, TileSize: 16})
 	m := NewManager(gameWorld, []Unit{
-		NewRunner(geom.Point{X: 16, Y: 16}, false, 0),
+		NewRunner(geom.Point{X: 24, Y: 24}, false, 0),
 	})
 	m.selected = 0
 
-	if err := m.CommandSelectedFire(geom.Point{X: 512, Y: 16}); err != nil {
+	if err := m.CommandSelectedFire(geom.Point{X: 512, Y: 24}); err != nil {
 		t.Fatalf("CommandSelectedFire() error = %v", err)
 	}
 
@@ -104,36 +119,110 @@ func TestManagerProjectileExpiresAfterMaxRange(t *testing.T) {
 		m.Update(1, 1.0/60.0)
 	}
 
-	if len(m.projectiles) != 0 {
-		t.Fatalf("projectiles = %d, want projectile removed after max range", len(m.projectiles))
+	if count := countProjectiles(m.units); count != 0 {
+		t.Fatalf("projectiles = %d, want projectile removed after max range", count)
 	}
 }
 
 func TestManagerProjectileRespawnsUnitAtSpawnPoint(t *testing.T) {
 	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
-	target := NewRunner(geom.Point{X: 48, Y: 16}, false, 0)
-	target.SpawnPosition = geom.Point{X: 96, Y: 96}
+	target := NewRunner(geom.Point{X: 37, Y: 28}, false, 0)
+	target.SpawnPosition = geom.Point{X: 104, Y: 104}
 	target.Health = 1
 
 	m := NewManager(gameWorld, []Unit{
-		NewRunner(geom.Point{X: 16, Y: 16}, false, 0),
+		NewRunner(geom.Point{X: 24, Y: 24}, false, 0),
 		target,
 	})
 	m.selected = 0
 
-	if err := m.CommandSelectedFire(geom.Point{X: 80, Y: 16}); err != nil {
+	if err := m.CommandSelectedFire(geom.Point{X: 120, Y: 24}); err != nil {
 		t.Fatalf("CommandSelectedFire() error = %v", err)
 	}
 
-	m.Update(1, 0.2)
+	m.Update(1, 1.0/60.0)
 
-	if m.units[1].Position != target.SpawnPosition {
-		t.Fatalf("target position = %+v, want respawn at %+v", m.units[1].Position, target.SpawnPosition)
+	if target.Position != target.SpawnPosition {
+		t.Fatalf("target position = %+v, want respawn at %+v", target.Position, target.SpawnPosition)
 	}
-	if m.units[1].Health != m.units[1].MaxHealth {
-		t.Fatalf("target health = %d, want full health %d after respawn", m.units[1].Health, m.units[1].MaxHealth)
+	if target.Health != target.MaxHealth {
+		t.Fatalf("target health = %d, want full health %d after respawn", target.Health, target.MaxHealth)
 	}
-	if len(m.projectiles) != 0 {
-		t.Fatalf("projectiles = %d, want projectile consumed on hit", len(m.projectiles))
+	if count := countProjectiles(m.units); count != 0 {
+		t.Fatalf("projectiles = %d, want projectile consumed on hit", count)
 	}
+}
+
+func TestManagerProjectileCanDamageStaticUnit(t *testing.T) {
+	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
+	target := NewWall(geom.Point{X: 37, Y: 28})
+	target.Health = 1
+
+	m := NewManager(gameWorld, []Unit{
+		NewRunner(geom.Point{X: 24, Y: 24}, false, 0),
+		target,
+	})
+	m.selected = 0
+
+	if err := m.CommandSelectedFire(geom.Point{X: 120, Y: 24}); err != nil {
+		t.Fatalf("CommandSelectedFire() error = %v", err)
+	}
+
+	m.Update(1, 1.0/60.0)
+
+	if target.Position != target.SpawnPosition {
+		t.Fatalf("static position = %+v, want respawn at %+v", target.Position, target.SpawnPosition)
+	}
+	if target.Health != target.MaxHealth {
+		t.Fatalf("static health = %d, want full health %d after respawn", target.Health, target.MaxHealth)
+	}
+}
+
+func TestManagerSyncVisibilityUpdatesProjectileOnScreenState(t *testing.T) {
+	gameWorld := world.New(world.Config{Columns: 64, Rows: 64, TileSize: 16})
+	m := NewManager(gameWorld, []Unit{
+		NewRunner(geom.Point{X: 24, Y: 24}, false, 0),
+	})
+	m.selected = 0
+
+	if err := m.CommandSelectedFire(geom.Point{X: 120, Y: 24}); err != nil {
+		t.Fatalf("CommandSelectedFire() error = %v", err)
+	}
+
+	cam := camera.New(camera.Config{})
+	m.SyncVisibility(cam, 64, 64)
+
+	projectile := firstProjectile(m.units)
+	if projectile == nil {
+		t.Fatal("expected projectile to exist")
+	}
+	if !projectile.Base().OnScreen {
+		t.Fatal("expected projectile to be marked as visible")
+	}
+
+	cam.SetPosition(geom.Point{X: 400, Y: 400})
+	m.SyncVisibility(cam, 64, 64)
+
+	if projectile.Base().OnScreen {
+		t.Fatal("expected projectile to be marked as offscreen")
+	}
+}
+
+func firstProjectile(units []Unit) *Projectile {
+	for _, current := range units {
+		if projectile, ok := current.(*Projectile); ok {
+			return projectile
+		}
+	}
+	return nil
+}
+
+func countProjectiles(units []Unit) int {
+	count := 0
+	for _, current := range units {
+		if _, ok := current.(*Projectile); ok {
+			count++
+		}
+	}
+	return count
 }

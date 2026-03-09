@@ -47,11 +47,15 @@ func (m *Manager) PanelRect(screenWidth, screenHeight int) (geom.Rect, bool) {
 
 func (m *Manager) drawSelectedHighlight(screen *ebiten.Image, cam *camera.Camera) {
 	selected, ok := m.selectedUnit()
-	if !ok || !selected.OnScreen {
+	if !ok || !selected.Base().OnScreen {
 		return
 	}
 
-	rect := ScreenRect(cam, m.world.TileSize(), *selected)
+	rect, ok := unitScreenRect(cam, m.world.TileSize(), selected)
+	if !ok {
+		return
+	}
+
 	padding := math.Max(2, math.Round(cam.Scale()))
 	border := math.Max(2, math.Round(cam.Scale()))
 	left := rect.Min.X - padding
@@ -70,7 +74,7 @@ func (m *Manager) drawSelectedHighlight(screen *ebiten.Image, cam *camera.Camera
 
 func (m *Manager) drawInfoPanel(screen *ebiten.Image, screenWidth, screenHeight int) {
 	selected, ok := m.selectedUnit()
-	if !ok || !selected.OnScreen {
+	if !ok || !selected.Base().OnScreen {
 		return
 	}
 
@@ -87,27 +91,29 @@ func (m *Manager) drawInfoPanel(screen *ebiten.Image, screenWidth, screenHeight 
 	m.drawFilledRect(screen, rect.Min.X, rect.Min.Y, rect.Max.X-rect.Min.X, rect.Max.Y-rect.Min.Y, panelColor)
 	m.drawFilledRect(screen, rect.Min.X, rect.Min.Y, rect.Max.X-rect.Min.X, 3, borderColor)
 
-	tileX, tileY := selected.TilePosition(m.world.TileSize())
+	base := selected.Base()
+	tileX, tileY := base.TilePosition(m.world.TileSize())
 	infoText := fmt.Sprintf(
-		"Unit #%d: %s\nTile: (%d, %d)  World: (%.1f, %.1f)\nKind: %s  Frame: %d\nHP: %d/%d  Terrain speed: %.0f%%  Sleep: %d\n%s",
-		m.selected+1,
+		"Object #%d: %s\nTile: (%d, %d)  World: (%.1f, %.1f)\nKind: %s  Frame: %d\nHP: %d/%d  Terrain speed: %.0f%%  Sleep: %d\n%s",
+		selected.UnitID(),
 		selected.Name(),
 		tileX,
 		tileY,
-		selected.Position.X,
-		selected.Position.Y,
-		selected.Kind,
+		base.Position.X,
+		base.Position.Y,
+		selected.UnitKind(),
 		selected.Frame(),
-		selected.Health,
-		selected.MaxHealth,
+		selected.CurrentHealth(),
+		selected.MaxHealthValue(),
 		m.world.TileType(tileX, tileY).SpeedMultiplier()*100,
-		selected.SleepTime(),
-		m.statusText(*selected),
+		base.SleepTime(),
+		m.statusText(selected),
 	)
 	ebitenutil.DebugPrintAt(screen, infoText, int(rect.Min.X+16), int(rect.Min.Y+14))
 }
 
 func (m *Manager) statusText(selected Unit) string {
+	base := selected.Base()
 	if !selected.IsMobile() {
 		if selected.BlocksMovement() {
 			return "State: static obstacle  Blocks movement: yes"
@@ -115,14 +121,14 @@ func (m *Manager) statusText(selected Unit) string {
 		return "State: static obstacle"
 	}
 
-	if !selected.IsMoving() {
+	if !base.IsMoving() {
 		if selected.CanShoot() {
 			return "State: idle  Weapon: ready"
 		}
 		return "State: idle"
 	}
 
-	destination, ok := selected.Destination()
+	destination, ok := base.Destination()
 	if !ok {
 		return "State: idle"
 	}
@@ -130,10 +136,10 @@ func (m *Manager) statusText(selected Unit) string {
 	targetTileX := int(math.Floor(destination.X / m.world.TileSize()))
 	targetTileY := int(math.Floor(destination.Y / m.world.TileSize()))
 	if selected.CanShoot() {
-		return fmt.Sprintf("State: moving  Target: (%d, %d)  Waypoints: %d  Weapon: ready", targetTileX, targetTileY, selected.PathLen())
+		return fmt.Sprintf("State: moving  Target: (%d, %d)  Waypoints: %d  Weapon: ready", targetTileX, targetTileY, base.PathLen())
 	}
 
-	return fmt.Sprintf("State: moving  Target: (%d, %d)  Waypoints: %d", targetTileX, targetTileY, selected.PathLen())
+	return fmt.Sprintf("State: moving  Target: (%d, %d)  Waypoints: %d", targetTileX, targetTileY, base.PathLen())
 }
 
 func (m *Manager) drawFilledRect(screen *ebiten.Image, x, y, width, height float64, fill color.Color) {

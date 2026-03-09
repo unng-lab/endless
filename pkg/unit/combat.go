@@ -5,26 +5,25 @@ import (
 	"math"
 
 	"github.com/unng-lab/endless/pkg/geom"
+	"github.com/unng-lab/endless/pkg/world"
 )
 
 const (
 	projectileSpeed       = 320.0
 	projectileDamage      = 1
 	projectileRadiusScale = 0.16
-	projectileSpawnScale  = 0.48
 	projectileRangeTiles  = 14.0
-	unitHitRadiusScale    = 0.22
+	projectileEntryOffset = 0.05
 	impactDuration        = 0.18
 	impactRadiusScale     = 0.55
 )
 
-type projectile struct {
-	Position       geom.Point
-	Velocity       geom.Point
-	OwnerID        int64
-	Radius         float64
-	Damage         int
-	RemainingRange float64
+type Projectile struct {
+	BaseUnit
+	ID      int64
+	OwnerID int64
+	Radius  float64
+	Damage  int
 }
 
 type impactEffect struct {
@@ -34,33 +33,99 @@ type impactEffect struct {
 	Duration float64
 }
 
-func newProjectile(owner Unit, target geom.Point, tileSize float64) (projectile, error) {
+// newProjectile builds a discrete trajectory that advances from tile to tile in the cursor
+// direction. The projectile keeps the same sleepTime-based cadence as units, so collision is
+// checked only when the logical position enters the next tile on the route.
+func newProjectile(owner *NonStaticUnit, target geom.Point, gameWorld world.World) (*Projectile, error) {
 	dx := target.X - owner.Position.X
 	dy := target.Y - owner.Position.Y
 	length := math.Hypot(dx, dy)
 	if length <= 1e-6 {
-		return projectile{}, fmt.Errorf("cursor is too close to the unit")
+		return nil, fmt.Errorf("cursor is too close to the unit")
 	}
 
 	direction := geom.Point{
 		X: dx / length,
 		Y: dy / length,
 	}
-	spawnOffset := tileSize * projectileSpawnScale
-	return projectile{
-		Position: geom.Point{
-			X: owner.Position.X + direction.X*spawnOffset,
-			Y: owner.Position.Y + direction.Y*spawnOffset,
+	path := buildProjectilePath(owner.Position, direction, gameWorld, gameWorld.TileSize()*projectileRangeTiles)
+	if len(path) == 0 {
+		return nil, fmt.Errorf("shot leaves the world immediately")
+	}
+
+	return &Projectile{
+		BaseUnit: BaseUnit{
+			Position: owner.Position,
+			path:     path,
 		},
-		Velocity: geom.Point{
-			X: direction.X * projectileSpeed,
-			Y: direction.Y * projectileSpeed,
-		},
-		OwnerID:        owner.ID,
-		Radius:         tileSize * projectileRadiusScale,
-		Damage:         projectileDamage,
-		RemainingRange: tileSize * projectileRangeTiles,
+		OwnerID: owner.ID,
+		Radius:  gameWorld.TileSize() * projectileRadiusScale,
+		Damage:  projectileDamage,
 	}, nil
+}
+
+func (p *Projectile) Base() *BaseUnit {
+	return &p.BaseUnit
+}
+
+func (p *Projectile) UnitID() int64 {
+	return p.ID
+}
+
+func (p *Projectile) SetUnitID(id int64) {
+	p.ID = id
+}
+
+func (p *Projectile) UnitKind() Kind {
+	return KindProjectile
+}
+
+func (p *Projectile) Name() string {
+	return "Projectile"
+}
+
+func (p *Projectile) Frame() int {
+	return 0
+}
+
+func (p *Projectile) Alive() bool {
+	return true
+}
+
+func (p *Projectile) IsMobile() bool {
+	return false
+}
+
+func (p *Projectile) BlocksMovement() bool {
+	return false
+}
+
+func (p *Projectile) CanShoot() bool {
+	return false
+}
+
+func (p *Projectile) CurrentHealth() int {
+	return 0
+}
+
+func (p *Projectile) MaxHealthValue() int {
+	return 0
+}
+
+func (p *Projectile) HealthRatio() float64 {
+	return 0
+}
+
+func (p *Projectile) ApplyDamage(_ int) bool {
+	return false
+}
+
+func (p *Projectile) Respawn() {
+	p.clearTravel()
+}
+
+func (p *Projectile) Selectable() bool {
+	return false
 }
 
 func newImpactEffect(position geom.Point, tileSize float64) impactEffect {
@@ -71,31 +136,161 @@ func newImpactEffect(position geom.Point, tileSize float64) impactEffect {
 	}
 }
 
-func segmentPointIntersection(start, end, center geom.Point, hitRadius float64) (float64, bool) {
-	dx := end.X - start.X
-	dy := end.Y - start.Y
-	lengthSq := dx*dx + dy*dy
-	if lengthSq <= 1e-9 {
-		if math.Hypot(start.X-center.X, start.Y-center.Y) <= hitRadius {
-			return 0, true
+// Tick advances the projectile using the same discrete sleepTime model as regular units.
+// The returned flag tells the caller whether the logical position entered a new tile during
+// this simulation tick and therefore needs an interaction check.
+func (p *Projectile) Tick(delta float64) bool {
+	if p.sleepTime > 0 {
+		p.sleepTime--
+		p.travel.remaining = p.sleepTime
+		if p.sleepTime == 0 {
+			p.travel.remaining = 0
 		}
-		return 0, false
+		return false
 	}
 
-	t := ((center.X-start.X)*dx + (center.Y-start.Y)*dy) / lengthSq
-	t = geom.ClampFloat(t, 0, 1)
-
-	closest := pointAlongSegment(start, end, t)
-	if math.Hypot(closest.X-center.X, closest.Y-center.Y) <= hitRadius {
-		return t, true
-	}
-
-	return 0, false
+	p.sleepTime = p.advance(delta)
+	p.travel.remaining = p.sleepTime
+	return p.travel.active
 }
 
-func pointAlongSegment(start, end geom.Point, t float64) geom.Point {
-	return geom.Point{
-		X: start.X + (end.X-start.X)*t,
-		Y: start.Y + (end.Y-start.Y)*t,
+// IsActive reports whether the projectile still has either a future waypoint to traverse or
+// a currently interpolated segment that should remain visible.
+func (p *Projectile) IsActive() bool {
+	return len(p.path) > 0 || p.sleepTime > 0
+}
+
+func (p *Projectile) advance(delta float64) int {
+	if delta <= 0 || len(p.path) == 0 {
+		p.clearTravel()
+		return 0
 	}
+
+	for len(p.path) > 0 {
+		target := p.path[0]
+		if p.consumeReachedWaypoint(target) {
+			continue
+		}
+
+		return p.startTravel(target, delta)
+	}
+
+	p.clearTravel()
+	return 0
+}
+
+func (p *Projectile) startTravel(target geom.Point, delta float64) int {
+	dx := target.X - p.Position.X
+	dy := target.Y - p.Position.Y
+	distance := math.Hypot(dx, dy)
+	travelTicks := sleepTicks(distance/projectileSpeed, delta)
+
+	p.travel = travelState{
+		from:      p.RenderPosition(),
+		to:        target,
+		duration:  travelTicks,
+		remaining: travelTicks,
+		active:    true,
+	}
+	p.Position = target
+	p.path = p.path[1:]
+
+	return travelTicks
+}
+
+// buildProjectilePath performs a grid traversal in the normalized fire direction and emits
+// points just inside each newly entered tile. This keeps the trajectory perfectly straight
+// while still guaranteeing that every crossed tile produces a logical interaction point.
+func buildProjectilePath(start geom.Point, direction geom.Point, gameWorld world.World, maxDistance float64) []geom.Point {
+	tileSize := gameWorld.TileSize()
+	if tileSize <= 0 || maxDistance <= 0 {
+		return nil
+	}
+
+	currentTileX := int(math.Floor(start.X / tileSize))
+	currentTileY := int(math.Floor(start.Y / tileSize))
+	if !gameWorld.InBounds(currentTileX, currentTileY) {
+		return nil
+	}
+
+	stepX, tMaxX, tDeltaX := projectileAxisTraversal(start.X, direction.X, tileSize, currentTileX)
+	stepY, tMaxY, tDeltaY := projectileAxisTraversal(start.Y, direction.Y, tileSize, currentTileY)
+	entryOffset := math.Min(tileSize*projectileEntryOffset, tileSize*0.25)
+	path := make([]geom.Point, 0, int(math.Ceil(projectileRangeTiles)))
+
+	for {
+		boundaryDistance := 0.0
+		moveX := false
+		moveY := false
+
+		switch {
+		case tMaxX < tMaxY:
+			boundaryDistance = tMaxX
+			moveX = true
+		case tMaxY < tMaxX:
+			boundaryDistance = tMaxY
+			moveY = true
+		default:
+			boundaryDistance = tMaxX
+			moveX = true
+			moveY = true
+		}
+
+		sampleDistance := boundaryDistance + entryOffset
+		if sampleDistance > maxDistance+1e-6 {
+			break
+		}
+
+		if moveX {
+			currentTileX += stepX
+			tMaxX += tDeltaX
+		}
+		if moveY {
+			currentTileY += stepY
+			tMaxY += tDeltaY
+		}
+
+		if !gameWorld.InBounds(currentTileX, currentTileY) {
+			break
+		}
+
+		path = append(path, pointAlongRay(start, direction, sampleDistance))
+	}
+
+	finalPoint := pointAlongRay(start, direction, maxDistance)
+	if pointInsideWorld(finalPoint, gameWorld) {
+		if len(path) == 0 || math.Hypot(path[len(path)-1].X-finalPoint.X, path[len(path)-1].Y-finalPoint.Y) > 1e-6 {
+			path = append(path, finalPoint)
+		}
+	}
+
+	return path
+}
+
+func projectileAxisTraversal(startCoord, directionCoord, tileSize float64, currentTile int) (int, float64, float64) {
+	if math.Abs(directionCoord) <= 1e-9 {
+		return 0, math.Inf(1), math.Inf(1)
+	}
+
+	if directionCoord > 0 {
+		nextBoundary := float64(currentTile+1) * tileSize
+		return 1, (nextBoundary - startCoord) / directionCoord, tileSize / directionCoord
+	}
+
+	nextBoundary := float64(currentTile) * tileSize
+	return -1, (nextBoundary - startCoord) / directionCoord, -tileSize / directionCoord
+}
+
+func pointAlongRay(start, direction geom.Point, distance float64) geom.Point {
+	return geom.Point{
+		X: start.X + direction.X*distance,
+		Y: start.Y + direction.Y*distance,
+	}
+}
+
+func pointInsideWorld(point geom.Point, gameWorld world.World) bool {
+	return point.X >= 0 &&
+		point.Y >= 0 &&
+		point.X < gameWorld.Width() &&
+		point.Y < gameWorld.Height()
 }

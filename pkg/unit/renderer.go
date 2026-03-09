@@ -48,51 +48,38 @@ func (r *Renderer) Draw(
 	worldTileSize float64,
 	quality assets.Quality,
 	units []Unit,
-	projectiles []projectile,
 	impacts []impactEffect,
 ) error {
-	if len(units) == 0 && len(projectiles) == 0 && len(impacts) == 0 {
+	if len(units) == 0 && len(impacts) == 0 {
 		return nil
 	}
 
 	camPos := cam.Position()
 	scale := cam.Scale()
 
-	for _, u := range units {
-		if !u.OnScreen {
-			continue
-		}
-		if !kindUsesSprite(u.Kind) {
-			r.drawStatic(screen, camPos, scale, worldTileSize, u)
-			r.drawHealthBar(screen, cam, worldTileSize, u)
+	for _, current := range units {
+		if current == nil || !current.Base().OnScreen {
 			continue
 		}
 
-		metrics := kindVisualMetrics(u.Kind)
-		screenUnitWidth := worldTileSize * scale * metrics.widthTiles
-		screenUnitHeight := worldTileSize * scale * metrics.heightTiles
-
-		frame, err := r.frameImage(u.Kind, u.Frame(), quality)
-		if err != nil {
-			return err
+		switch body := current.(type) {
+		case *NonStaticUnit:
+			if !kindUsesSprite(body.UnitKind()) {
+				r.drawStatic(screen, camPos, scale, worldTileSize, body.UnitKind(), body.Base().RenderPosition())
+			} else {
+				if err := r.drawAnimatedUnit(screen, camPos, scale, worldTileSize, quality, body); err != nil {
+					return err
+				}
+			}
+			r.drawHealthBar(screen, bodyScreenRect(cam, worldTileSize, body.UnitKind(), body.Base().RenderPosition()), body.CurrentHealth(), body.MaxHealthValue())
+		case *StaticUnit:
+			r.drawStatic(screen, camPos, scale, worldTileSize, body.UnitKind(), body.Base().RenderPosition())
+			r.drawHealthBar(screen, bodyScreenRect(cam, worldTileSize, body.UnitKind(), body.Base().RenderPosition()), body.CurrentHealth(), body.MaxHealthValue())
+		case *Projectile:
+			r.drawProjectile(screen, camPos, scale, body)
+		default:
+			return fmt.Errorf("unsupported unit type %T", current)
 		}
-
-		frameBounds := frame.Bounds()
-		frameScale := screenUnitWidth / float64(frameBounds.Dx())
-		renderPos := u.RenderPosition()
-		screenX := (renderPos.X - camPos.X) * scale
-		screenY := (renderPos.Y - camPos.Y) * scale
-
-		var op ebiten.DrawImageOptions
-		op.GeoM.Scale(frameScale, frameScale)
-		op.GeoM.Translate(screenX-screenUnitWidth/2, screenY-screenUnitHeight*metrics.anchorY)
-
-		screen.DrawImage(frame, &op)
-		r.drawHealthBar(screen, cam, worldTileSize, u)
-	}
-
-	for _, shot := range projectiles {
-		r.drawProjectile(screen, camPos, scale, shot)
 	}
 
 	for _, effect := range impacts {
@@ -102,13 +89,46 @@ func (r *Renderer) Draw(
 	return nil
 }
 
-func ScreenRect(cam *camera.Camera, worldTileSize float64, u Unit) geom.Rect {
-	camPos := cam.Position()
-	scale := cam.Scale()
-	metrics := kindVisualMetrics(u.Kind)
+func (r *Renderer) drawAnimatedUnit(
+	screen *ebiten.Image,
+	camPos geom.Point,
+	scale float64,
+	worldTileSize float64,
+	quality assets.Quality,
+	body *NonStaticUnit,
+) error {
+	metrics := kindVisualMetrics(body.UnitKind())
 	screenUnitWidth := worldTileSize * scale * metrics.widthTiles
 	screenUnitHeight := worldTileSize * scale * metrics.heightTiles
-	renderPos := u.RenderPosition()
+
+	frame, err := r.frameImage(body.UnitKind(), body.Frame(), quality)
+	if err != nil {
+		return err
+	}
+
+	frameBounds := frame.Bounds()
+	frameScale := screenUnitWidth / float64(frameBounds.Dx())
+	renderPos := body.Base().RenderPosition()
+	screenX := (renderPos.X - camPos.X) * scale
+	screenY := (renderPos.Y - camPos.Y) * scale
+
+	var op ebiten.DrawImageOptions
+	op.GeoM.Scale(frameScale, frameScale)
+	op.GeoM.Translate(screenX-screenUnitWidth/2, screenY-screenUnitHeight*metrics.anchorY)
+	screen.DrawImage(frame, &op)
+	return nil
+}
+
+func ScreenRect(cam *camera.Camera, worldTileSize float64, unit Unit) geom.Rect {
+	return bodyScreenRect(cam, worldTileSize, unit.UnitKind(), unit.Base().RenderPosition())
+}
+
+func bodyScreenRect(cam *camera.Camera, worldTileSize float64, kind Kind, renderPos geom.Point) geom.Rect {
+	camPos := cam.Position()
+	scale := cam.Scale()
+	metrics := kindVisualMetrics(kind)
+	screenUnitWidth := worldTileSize * scale * metrics.widthTiles
+	screenUnitHeight := worldTileSize * scale * metrics.heightTiles
 	screenX := (renderPos.X - camPos.X) * scale
 	screenY := (renderPos.Y - camPos.Y) * scale
 
@@ -121,6 +141,34 @@ func ScreenRect(cam *camera.Camera, worldTileSize float64, u Unit) geom.Rect {
 			X: screenX + screenUnitWidth/2,
 			Y: screenY + screenUnitHeight*(1-metrics.anchorY),
 		},
+	}
+}
+
+func unitScreenRect(cam *camera.Camera, worldTileSize float64, unit Unit) (geom.Rect, bool) {
+	switch body := unit.(type) {
+	case *NonStaticUnit, *StaticUnit:
+		return ScreenRect(cam, worldTileSize, unit), true
+	case *Projectile:
+		return ProjectileScreenRect(cam, body), true
+	default:
+		return geom.Rect{}, false
+	}
+}
+
+// ProjectileScreenRect converts the projectile's current interpolated world position into a
+// screen-space rectangle large enough for both its core and glow. Using the glow size here
+// keeps visibility consistent with the detailed rendering footprint.
+func ProjectileScreenRect(cam *camera.Camera, shot *Projectile) geom.Rect {
+	camPos := cam.Position()
+	scale := cam.Scale()
+	renderPos := shot.Base().RenderPosition()
+	glowRadius := math.Max(1, shot.Radius*scale*0.9)
+	screenX := (renderPos.X - camPos.X) * scale
+	screenY := (renderPos.Y - camPos.Y) * scale
+
+	return geom.Rect{
+		Min: geom.Point{X: screenX - glowRadius, Y: screenY - glowRadius},
+		Max: geom.Point{X: screenX + glowRadius, Y: screenY + glowRadius},
 	}
 }
 
@@ -152,9 +200,8 @@ func kindUsesSprite(kind Kind) bool {
 	}
 }
 
-func (r *Renderer) drawStatic(screen *ebiten.Image, camPos geom.Point, scale, worldTileSize float64, u Unit) {
-	metrics := kindVisualMetrics(u.Kind)
-	renderPos := u.RenderPosition()
+func (r *Renderer) drawStatic(screen *ebiten.Image, camPos geom.Point, scale, worldTileSize float64, kind Kind, renderPos geom.Point) {
+	metrics := kindVisualMetrics(kind)
 	screenX := (renderPos.X - camPos.X) * scale
 	screenY := (renderPos.Y - camPos.Y) * scale
 	width := worldTileSize * scale * metrics.widthTiles
@@ -164,7 +211,7 @@ func (r *Renderer) drawStatic(screen *ebiten.Image, camPos geom.Point, scale, wo
 		Max: geom.Point{X: screenX + width/2, Y: screenY + height*(1-metrics.anchorY)},
 	}
 
-	switch u.Kind {
+	switch kind {
 	case KindWall:
 		base := color.NRGBA{R: 106, G: 112, B: 122, A: 255}
 		top := color.NRGBA{R: 147, G: 154, B: 167, A: 255}
@@ -189,7 +236,6 @@ func (r *Renderer) drawStatic(screen *ebiten.Image, camPos geom.Point, scale, wo
 		r.drawFilledRect(screen, rect.Min.X+width*0.05, rect.Min.Y+height*0.48, width*0.75, height*0.18, highlight)
 		r.drawFilledRect(screen, rect.Min.X+width*0.18, rect.Min.Y+height*0.68, width*0.72, height*0.16, wood)
 	}
-
 }
 
 func (r *Renderer) drawFilledRect(screen *ebiten.Image, x, y, width, height float64, fill color.Color) {
@@ -204,28 +250,15 @@ func (r *Renderer) drawFilledRect(screen *ebiten.Image, x, y, width, height floa
 	screen.DrawImage(r.solid, &op)
 }
 
-func (r *Renderer) drawProjectile(screen *ebiten.Image, camPos geom.Point, scale float64, shot projectile) {
+func (r *Renderer) drawProjectile(screen *ebiten.Image, camPos geom.Point, scale float64, shot *Projectile) {
 	size := math.Max(2, shot.Radius*2*scale)
-	screenX := (shot.Position.X - camPos.X) * scale
-	screenY := (shot.Position.Y - camPos.Y) * scale
+	renderPos := shot.Base().RenderPosition()
+	screenX := (renderPos.X - camPos.X) * scale
+	screenY := (renderPos.Y - camPos.Y) * scale
 	glowSize := size * 1.8
 
-	r.drawFilledRect(
-		screen,
-		screenX-glowSize/2,
-		screenY-glowSize/2,
-		glowSize,
-		glowSize,
-		color.NRGBA{R: 255, G: 176, B: 64, A: 110},
-	)
-	r.drawFilledRect(
-		screen,
-		screenX-size/2,
-		screenY-size/2,
-		size,
-		size,
-		color.NRGBA{R: 255, G: 226, B: 168, A: 255},
-	)
+	r.drawFilledRect(screen, screenX-glowSize/2, screenY-glowSize/2, glowSize, glowSize, color.NRGBA{R: 255, G: 176, B: 64, A: 110})
+	r.drawFilledRect(screen, screenX-size/2, screenY-size/2, size, size, color.NRGBA{R: 255, G: 226, B: 168, A: 255})
 }
 
 func (r *Renderer) drawImpact(screen *ebiten.Image, camPos geom.Point, scale float64, effect impactEffect) {
@@ -239,38 +272,19 @@ func (r *Renderer) drawImpact(screen *ebiten.Image, camPos geom.Point, scale flo
 	screenX := (effect.Position.X - camPos.X) * scale
 	screenY := (effect.Position.Y - camPos.Y) * scale
 
-	r.drawFilledRect(
-		screen,
-		screenX-size/2,
-		screenY-size/2,
-		size,
-		size,
-		color.NRGBA{R: 255, G: 187, B: 89, A: alpha},
-	)
-	r.drawFilledRect(
-		screen,
-		screenX-size*0.28,
-		screenY-size*0.28,
-		size*0.56,
-		size*0.56,
-		color.NRGBA{R: 255, G: 240, B: 196, A: alpha},
-	)
+	r.drawFilledRect(screen, screenX-size/2, screenY-size/2, size, size, color.NRGBA{R: 255, G: 187, B: 89, A: alpha})
+	r.drawFilledRect(screen, screenX-size*0.28, screenY-size*0.28, size*0.56, size*0.56, color.NRGBA{R: 255, G: 240, B: 196, A: alpha})
 }
 
-func (r *Renderer) drawHealthBar(screen *ebiten.Image, cam *camera.Camera, worldTileSize float64, u Unit) {
-	if u.MaxHealth <= 0 || u.Health >= u.MaxHealth {
+func (r *Renderer) drawHealthBar(screen *ebiten.Image, rect geom.Rect, health, maxHealth int) {
+	if maxHealth <= 0 || health >= maxHealth {
 		return
 	}
 
-	if cam == nil {
-		return
-	}
-
-	rect := ScreenRect(cam, worldTileSize, u)
 	width := rect.Max.X - rect.Min.X
-	height := math.Max(3, math.Round(cam.Scale()*2))
-	top := rect.Min.Y - height - math.Max(3, cam.Scale())
-	ratio := u.HealthRatio()
+	height := math.Max(3, math.Round(width*0.08))
+	top := rect.Min.Y - height - math.Max(3, height)
+	ratio := geom.ClampFloat(float64(health)/float64(maxHealth), 0, 1)
 	fillWidth := width * ratio
 	fillColor := color.NRGBA{
 		R: uint8(math.Round(255 * (1 - ratio))),

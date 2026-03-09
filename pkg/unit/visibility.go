@@ -5,12 +5,14 @@ import (
 	"github.com/unng-lab/endless/pkg/geom"
 )
 
-func UpdateOnScreen(cam *camera.Camera, worldTileSize float64, screenWidth, screenHeight int, u *Unit) {
-	if u == nil {
+func UpdateOnScreen(cam *camera.Camera, worldTileSize float64, screenWidth, screenHeight int, unit Unit) {
+	if unit == nil {
 		return
 	}
+
+	base := unit.Base()
 	if cam == nil || worldTileSize <= 0 || screenWidth <= 0 || screenHeight <= 0 {
-		u.OnScreen = false
+		base.OnScreen = false
 		return
 	}
 
@@ -18,5 +20,11 @@ func UpdateOnScreen(cam *camera.Camera, worldTileSize float64, screenWidth, scre
 		Min: geom.Point{},
 		Max: geom.Point{X: float64(screenWidth), Y: float64(screenHeight)},
 	}
-	u.OnScreen = geom.RectsIntersect(ScreenRect(cam, worldTileSize, *u), screenRect)
+	bounds, ok := unitScreenRect(cam, worldTileSize, unit)
+	if !ok {
+		base.OnScreen = false
+		return
+	}
+
+	base.OnScreen = geom.RectsIntersect(bounds, screenRect)
 }

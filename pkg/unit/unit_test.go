@@ -56,7 +56,7 @@ func TestUpdateOnScreenMarksVisibleUnit(t *testing.T) {
 	cam := camera.New(camera.Config{})
 	u := NewRunner(geom.Point{X: 16, Y: 16}, false, 0)
 
-	UpdateOnScreen(cam, 16, 64, 64, &u)
+	UpdateOnScreen(cam, 16, 64, 64, u)
 
 	if !u.OnScreen {
 		t.Fatal("expected unit to be marked as visible")
@@ -67,23 +67,21 @@ func TestUpdateOnScreenMarksOffscreenUnit(t *testing.T) {
 	cam := camera.New(camera.Config{})
 	u := NewRunner(geom.Point{X: 160, Y: 160}, false, 0)
 
-	UpdateOnScreen(cam, 16, 64, 64, &u)
+	UpdateOnScreen(cam, 16, 64, 64, u)
 
 	if u.OnScreen {
 		t.Fatal("expected unit to be marked as offscreen")
 	}
 }
 
-func TestStaticUnitIgnoresPath(t *testing.T) {
+func TestStaticUnitIsAlwaysImmobile(t *testing.T) {
 	u := NewWall(geom.Point{X: 8, Y: 8})
-	u.SetPath([]geom.Point{{X: 24, Y: 8}})
-	u.Tick(1, 1.0/60.0, nil)
 
-	if u.Position != (geom.Point{X: 8, Y: 8}) {
-		t.Fatalf("position = %+v, want %+v", u.Position, geom.Point{X: 8, Y: 8})
+	if u.IsMobile() {
+		t.Fatal("expected wall to remain immobile")
 	}
-	if u.HasPath() {
-		t.Fatal("expected static unit path to be ignored")
+	if !u.BlocksMovement() {
+		t.Fatal("expected wall to block movement")
 	}
 }
 

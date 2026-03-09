@@ -13,6 +13,7 @@ const (
 	KindRunnerFocused Kind = "runnerfocused"
 	KindWall          Kind = "wall"
 	KindBarricade     Kind = "barricade"
+	KindProjectile    Kind = "projectile"
 )
 
 var runnerAnimation = Animation{
@@ -20,28 +21,17 @@ var runnerAnimation = Animation{
 	FrameDuration: 0.1,
 }
 
-var staticAnimation = Animation{
-	FrameCount:    1,
-	FrameDuration: 1,
-}
-
-type Unit struct {
+type NonStaticUnit struct {
+	BaseUnit
 	ID            int64
-	Position      geom.Point
 	SpawnPosition geom.Point
 	Kind          Kind
-	OnScreen      bool
 	MaxHealth     int
 	Health        int
 
 	animation Animation
 	elapsed   float64
 	moveSpeed float64
-	path      []geom.Point
-
-	sleepTime      int
-	lastUpdateTick int64
-	travel         travelState
 }
 
 type travelState struct {
@@ -52,14 +42,16 @@ type travelState struct {
 	active    bool
 }
 
-func NewRunner(position geom.Point, focused bool, phase float64) Unit {
+func NewRunner(position geom.Point, focused bool, phase float64) *NonStaticUnit {
 	kind := KindRunner
 	if focused {
 		kind = KindRunnerFocused
 	}
 
-	return Unit{
-		Position:      position,
+	return &NonStaticUnit{
+		BaseUnit: BaseUnit{
+			Position: position,
+		},
 		SpawnPosition: position,
 		Kind:          kind,
 		MaxHealth:     3,
@@ -70,23 +62,20 @@ func NewRunner(position geom.Point, focused bool, phase float64) Unit {
 	}
 }
 
-func NewWall(position geom.Point) Unit {
-	return newStaticUnit(KindWall, position, 5)
+func (u *NonStaticUnit) Base() *BaseUnit {
+	return &u.BaseUnit
 }
 
-func NewBarricade(position geom.Point) Unit {
-	return newStaticUnit(KindBarricade, position, 4)
+func (u *NonStaticUnit) UnitID() int64 {
+	return u.ID
 }
 
-func newStaticUnit(kind Kind, position geom.Point, maxHealth int) Unit {
-	return Unit{
-		Position:      position,
-		SpawnPosition: position,
-		Kind:          kind,
-		MaxHealth:     maxHealth,
-		Health:        maxHealth,
-		animation:     staticAnimation,
-	}
+func (u *NonStaticUnit) SetUnitID(id int64) {
+	u.ID = id
+}
+
+func (u *NonStaticUnit) UnitKind() Kind {
+	return u.Kind
 }
 
 // Tick advances unit state by one game tick.
@@ -95,7 +84,7 @@ func newStaticUnit(kind Kind, position geom.Point, maxHealth int) Unit {
 //   - visual movement is reconstructed from travel so rendering can interpolate smoothly.
 //
 // This keeps path traversal deterministic while avoiding visible teleportation.
-func (u *Unit) Tick(gameTick int64, delta float64, speedMultiplier func(geom.Point) float64) {
+func (u *NonStaticUnit) Tick(gameTick int64, delta float64, speedMultiplier func(geom.Point) float64) {
 	if !u.Alive() {
 		u.clearTravel()
 		return
@@ -112,41 +101,29 @@ func (u *Unit) Tick(gameTick int64, delta float64, speedMultiplier func(geom.Poi
 	}
 
 	u.lastUpdateTick = gameTick
-	u.sleepTime = u.advance(gameTick, delta, speedMultiplier)
+	u.sleepTime = u.advance(delta, speedMultiplier)
 	u.travel.remaining = u.sleepTime
 }
 
-func (u Unit) Frame() int {
+func (u *NonStaticUnit) Frame() int {
 	return u.animation.frameAt(u.elapsed)
 }
 
-func (u Unit) Name() string {
+func (u *NonStaticUnit) Name() string {
 	switch u.Kind {
 	case KindRunner:
 		return "Runner"
 	case KindRunnerFocused:
 		return "Runner Focused"
-	case KindWall:
-		return "Wall"
-	case KindBarricade:
-		return "Barricade"
 	default:
 		return string(u.Kind)
 	}
 }
 
-func (u Unit) TilePosition(tileSize float64) (int, int) {
-	if tileSize <= 0 {
-		return 0, 0
-	}
-
-	return int(math.Floor(u.Position.X / tileSize)), int(math.Floor(u.Position.Y / tileSize))
-}
-
 // SetPath replaces the current route with a copy of the provided path.
 // Copying here prevents external code from mutating the active route after the command
 // has been accepted, and resetting sleepTime lets the unit react on the next update.
-func (u *Unit) SetPath(path []geom.Point) {
+func (u *NonStaticUnit) SetPath(path []geom.Point) {
 	if !u.IsMobile() {
 		u.path = u.path[:0]
 		return
@@ -156,24 +133,15 @@ func (u *Unit) SetPath(path []geom.Point) {
 	u.sleepTime = 0
 }
 
-func (u Unit) IsMobile() bool {
+func (u *NonStaticUnit) IsMobile() bool {
 	return u.Alive() && u.moveSpeed > 0
 }
 
-func (u Unit) BlocksMovement() bool {
-	if !u.Alive() {
-		return false
-	}
-
-	switch u.Kind {
-	case KindWall, KindBarricade:
-		return true
-	default:
-		return false
-	}
+func (u *NonStaticUnit) BlocksMovement() bool {
+	return false
 }
 
-func (u Unit) CanShoot() bool {
+func (u *NonStaticUnit) CanShoot() bool {
 	if !u.Alive() {
 		return false
 	}
@@ -186,11 +154,19 @@ func (u Unit) CanShoot() bool {
 	}
 }
 
-func (u Unit) Alive() bool {
+func (u *NonStaticUnit) Alive() bool {
 	return u.Health > 0
 }
 
-func (u Unit) HealthRatio() float64 {
+func (u *NonStaticUnit) CurrentHealth() int {
+	return u.Health
+}
+
+func (u *NonStaticUnit) MaxHealthValue() int {
+	return u.MaxHealth
+}
+
+func (u *NonStaticUnit) HealthRatio() float64 {
 	if u.MaxHealth <= 0 {
 		return 0
 	}
@@ -198,7 +174,7 @@ func (u Unit) HealthRatio() float64 {
 	return geom.ClampFloat(float64(u.Health)/float64(u.MaxHealth), 0, 1)
 }
 
-func (u *Unit) ApplyDamage(amount int) bool {
+func (u *NonStaticUnit) ApplyDamage(amount int) bool {
 	if amount <= 0 || !u.Alive() {
 		return false
 	}
@@ -207,7 +183,7 @@ func (u *Unit) ApplyDamage(amount int) bool {
 	return u.Health <= 0
 }
 
-func (u *Unit) Respawn() {
+func (u *NonStaticUnit) Respawn() {
 	u.Position = u.SpawnPosition
 	u.Health = u.MaxHealth
 	u.path = u.path[:0]
@@ -215,63 +191,18 @@ func (u *Unit) Respawn() {
 	u.clearTravel()
 }
 
-func (u Unit) HasPath() bool {
-	return len(u.path) > 0
+func (u *NonStaticUnit) Selectable() bool {
+	return u.Alive()
 }
 
-func (u Unit) IsMoving() bool {
-	return len(u.path) > 0 || (u.travel.active && u.travel.remaining > 0)
-}
-
-func (u Unit) PathLen() int {
-	return len(u.path)
-}
-
-func (u Unit) SleepTime() int {
-	return u.sleepTime
-}
-
-func (u Unit) LastUpdateTick() int64 {
-	return u.lastUpdateTick
-}
-
-func (u Unit) Destination() (geom.Point, bool) {
-	if len(u.path) == 0 {
-		if u.travel.active {
-			return u.travel.to, true
-		}
-		return geom.Point{}, false
-	}
-
-	return u.path[len(u.path)-1], true
-}
-
-// RenderPosition reconstructs the in-between position for the current move segment.
-// The gameplay state snaps Position straight to the next waypoint when travel starts, so
-// collision, occupancy and path progression all operate on discrete tile centers. During
-// rendering we interpolate back from the segment origin to the destination using the
-// remaining tick budget stored in travel.
-func (u Unit) RenderPosition() geom.Point {
-	if !u.travel.active || u.travel.duration <= 0 {
-		return u.Position
-	}
-
-	progress := 1 - float64(u.travel.remaining)/float64(u.travel.duration)
-	progress = geom.ClampFloat(progress, 0, 1)
-	return geom.Point{
-		X: u.travel.from.X + (u.travel.to.X-u.travel.from.X)*progress,
-		Y: u.travel.from.Y + (u.travel.to.Y-u.travel.from.Y)*progress,
-	}
-}
-
-func (u *Unit) Wake() {
+func (u *NonStaticUnit) Wake() {
 	u.sleepTime = 0
 }
 
 // advance schedules movement to the next reachable waypoint and returns how many ticks the
 // unit should stay asleep before the next logical update. Returning a sleep budget instead
 // of applying continuous movement each frame keeps all units aligned to the fixed game tick.
-func (u *Unit) advance(_ int64, delta float64, speedMultiplier func(geom.Point) float64) int {
+func (u *NonStaticUnit) advance(delta float64, speedMultiplier func(geom.Point) float64) int {
 	if delta <= 0 || len(u.path) == 0 || u.moveSpeed <= 0 {
 		u.clearTravel()
 		return 0
@@ -296,22 +227,10 @@ func (u *Unit) advance(_ int64, delta float64, speedMultiplier func(geom.Point) 
 	return 0
 }
 
-func (u *Unit) consumeReachedWaypoint(target geom.Point) bool {
-	dx := target.X - u.Position.X
-	dy := target.Y - u.Position.Y
-	if math.Hypot(dx, dy) > 1e-6 {
-		return false
-	}
-
-	u.Position = target
-	u.path = u.path[1:]
-	return true
-}
-
 // moveSpeedAtCurrentTile resolves the effective movement speed for the tile the unit is
 // currently standing on. Terrain modifiers are applied here once so advance can stay focused
 // on route progression and travel scheduling.
-func (u Unit) moveSpeedAtCurrentTile(speedMultiplier func(geom.Point) float64) (float64, bool) {
+func (u *NonStaticUnit) moveSpeedAtCurrentTile(speedMultiplier func(geom.Point) float64) (float64, bool) {
 	currentSpeed := u.moveSpeed
 	if speedMultiplier == nil {
 		return currentSpeed, currentSpeed > 0
@@ -329,7 +248,7 @@ func (u Unit) moveSpeedAtCurrentTile(speedMultiplier func(geom.Point) float64) (
 // startTravel snapshots the segment that render interpolation should visualize, then moves
 // the logical position directly to the next waypoint. This split lets pathfinding and tile
 // occupancy observe the new cell immediately while drawing still shows continuous motion.
-func (u *Unit) startTravel(target geom.Point, currentSpeed, delta float64) int {
+func (u *NonStaticUnit) startTravel(target geom.Point, currentSpeed, delta float64) int {
 	dx := target.X - u.Position.X
 	dy := target.Y - u.Position.Y
 	distance := math.Hypot(dx, dy)
@@ -346,10 +265,6 @@ func (u *Unit) startTravel(target geom.Point, currentSpeed, delta float64) int {
 	u.path = u.path[1:]
 
 	return travelTicks
-}
-
-func (u *Unit) clearTravel() {
-	u.travel = travelState{}
 }
 
 // sleepTicks converts a continuous duration into a minimum number of simulation ticks.

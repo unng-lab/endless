@@ -22,12 +22,11 @@ type Manager struct {
 	world    world.World
 	renderer *Renderer
 
-	units       []Unit
-	projectiles []projectile
-	impacts     []impactEffect
-	occupants   map[tileKey][]int
-	selected    int
-	nextUnitID  int64
+	units     []Unit
+	impacts   []impactEffect
+	occupants map[tileKey][]int
+	selected  int
+	nextID    int64
 
 	workers  []chan updateRequest
 	updateWG sync.WaitGroup
@@ -61,7 +60,7 @@ func (m *Manager) Update(gameTick int64, delta float64) {
 	if len(m.units) > 0 {
 		if len(m.workers) == 0 {
 			for i := range m.units {
-				m.units[i].Tick(gameTick, delta, m.tileSpeedMultiplierAt)
+				m.tickUnit(m.units[i], gameTick, delta)
 			}
 		} else {
 			for i := range m.workers {
@@ -79,12 +78,12 @@ func (m *Manager) Update(gameTick int64, delta float64) {
 
 func (m *Manager) SyncVisibility(cam *camera.Camera, screenWidth, screenHeight int) {
 	for i := range m.units {
-		UpdateOnScreen(cam, m.world.TileSize(), screenWidth, screenHeight, &m.units[i])
+		UpdateOnScreen(cam, m.world.TileSize(), screenWidth, screenHeight, m.units[i])
 	}
 }
 
 func (m *Manager) Draw(screen *ebiten.Image, cam *camera.Camera, quality assets.Quality) error {
-	return m.renderer.Draw(screen, cam, m.world.TileSize(), quality, m.units, m.projectiles, m.impacts)
+	return m.renderer.Draw(screen, cam, m.world.TileSize(), quality, m.units, m.impacts)
 }
 
 func (m *Manager) HasSelected() bool {
@@ -116,7 +115,9 @@ func (m *Manager) SelectAtScreen(cam *camera.Camera, cursor geom.Point, screenWi
 	}
 
 	m.selected = candidates[rand.IntN(len(candidates))]
-	m.units[m.selected].Wake()
+	if selected, ok := m.selectedNonStatic(); ok {
+		selected.Wake()
+	}
 }
 
 func (m *Manager) PointInPanel(cursor geom.Point, screenWidth, screenHeight int) bool {
@@ -125,15 +126,18 @@ func (m *Manager) PointInPanel(cursor geom.Point, screenWidth, screenHeight int)
 }
 
 func (m *Manager) CommandSelectedMove(targetTileX, targetTileY int) error {
-	selected, ok := m.selectedUnit()
+	selected, ok := m.selectedNonStatic()
 	if !ok {
+		if m.HasSelected() {
+			return fmt.Errorf("selected object is immobile")
+		}
 		return nil
 	}
 	if !selected.IsMobile() {
 		return fmt.Errorf("unit %q is immobile", selected.Name())
 	}
 
-	startTileX, startTileY := selected.TilePosition(m.world.TileSize())
+	startTileX, startTileY := selected.Base().TilePosition(m.world.TileSize())
 	grid := worldGrid{world: m.world, blocked: m.blockedTiles(m.selected)}
 	path, err := pathfinding.FindPath(
 		grid,
@@ -149,52 +153,62 @@ func (m *Manager) CommandSelectedMove(targetTileX, targetTileY int) error {
 }
 
 func (m *Manager) CommandSelectedFire(target geom.Point) error {
-	selected, ok := m.selectedUnit()
+	selected, ok := m.selectedNonStatic()
 	if !ok {
+		if m.HasSelected() {
+			return fmt.Errorf("selected object cannot shoot")
+		}
 		return nil
 	}
 	if !selected.CanShoot() {
 		return fmt.Errorf("unit %q cannot shoot", selected.Name())
 	}
 
-	shot, err := newProjectile(*selected, target, m.world.TileSize())
+	shot, err := newProjectile(selected, target, m.world)
 	if err != nil {
 		return err
 	}
 
-	m.projectiles = append(m.projectiles, shot)
+	m.nextID++
+	shot.SetUnitID(m.nextID)
+	m.units = append(m.units, shot)
 	return nil
 }
 
 func (m *Manager) Selected() (Unit, bool) {
-	selected, ok := m.selectedUnit()
-	if !ok {
-		return Unit{}, false
-	}
-	return *selected, true
+	return m.selectedUnit()
 }
 
-func (m *Manager) selectedUnit() (*Unit, bool) {
+func (m *Manager) selectedUnit() (Unit, bool) {
 	if m.selected < 0 || m.selected >= len(m.units) {
 		return nil, false
 	}
-	return &m.units[m.selected], true
+	return m.units[m.selected], true
+}
+
+func (m *Manager) selectedNonStatic() (*NonStaticUnit, bool) {
+	selected, ok := m.selectedUnit()
+	if !ok {
+		return nil, false
+	}
+	body, ok := selected.(*NonStaticUnit)
+	return body, ok
 }
 
 func (m *Manager) selectedOnScreen() bool {
 	selected, ok := m.selectedUnit()
-	return ok && selected.OnScreen
+	return ok && selected.Base().OnScreen
 }
 
 func (m *Manager) assignUnitIDs() {
 	for i := range m.units {
-		if m.units[i].ID == 0 {
-			m.nextUnitID++
-			m.units[i].ID = m.nextUnitID
+		if m.units[i].UnitID() == 0 {
+			m.nextID++
+			m.units[i].SetUnitID(m.nextID)
 			continue
 		}
-		if m.units[i].ID > m.nextUnitID {
-			m.nextUnitID = m.units[i].ID
+		if m.units[i].UnitID() > m.nextID {
+			m.nextID = m.units[i].UnitID()
 		}
 	}
 }
@@ -229,9 +243,18 @@ func (m *Manager) processUpdates(offset, workerCount int, req updateRequest) {
 			if idx >= len(m.units) {
 				break
 			}
-			m.units[idx].Tick(req.tick, req.delta, m.tileSpeedMultiplierAt)
+			m.tickUnit(m.units[idx], req.tick, req.delta)
 		}
 	}
+}
+
+func (m *Manager) tickUnit(unit Unit, gameTick int64, delta float64) {
+	body, ok := unit.(*NonStaticUnit)
+	if !ok {
+		return
+	}
+
+	body.Tick(gameTick, delta, m.tileSpeedMultiplierAt)
 }
 
 func (m *Manager) tileSpeedMultiplierAt(position geom.Point) float64 {
@@ -247,11 +270,11 @@ func (m *Manager) tileSpeedMultiplierAt(position geom.Point) float64 {
 func (m *Manager) blockedTiles(excludedUnit int) map[pathfinding.Step]struct{} {
 	blocked := make(map[pathfinding.Step]struct{})
 	for index, currentUnit := range m.units {
-		if index == excludedUnit || !currentUnit.BlocksMovement() {
+		if index == excludedUnit || !currentUnit.BlocksMovement() || !currentUnit.Alive() {
 			continue
 		}
 
-		tileX, tileY := currentUnit.TilePosition(m.world.TileSize())
+		tileX, tileY := currentUnit.Base().TilePosition(m.world.TileSize())
 		blocked[pathfinding.Step{X: tileX, Y: tileY}] = struct{}{}
 	}
 
@@ -277,92 +300,75 @@ func (m *Manager) worldPath(path []pathfinding.Step) []geom.Point {
 func (m *Manager) rebuildOccupants() {
 	clear(m.occupants)
 	for i := range m.units {
-		if !m.units[i].Alive() {
+		current := m.units[i]
+		if !current.Alive() || !current.Selectable() {
 			continue
 		}
-		tileX, tileY := m.units[i].TilePosition(m.world.TileSize())
+
+		tileX, tileY := current.Base().TilePosition(m.world.TileSize())
 		key := tileKey{x: tileX, y: tileY}
 		m.occupants[key] = append(m.occupants[key], i)
 	}
 }
 
 func (m *Manager) updateProjectiles(delta float64) {
-	if delta <= 0 || len(m.projectiles) == 0 {
+	if delta <= 0 || len(m.units) == 0 {
 		return
 	}
 
-	active := m.projectiles[:0]
-	for _, shot := range m.projectiles {
-		if shot.RemainingRange <= 0 {
+	active := m.units[:0]
+	for _, current := range m.units {
+		shot, ok := current.(*Projectile)
+		if !ok {
+			active = append(active, current)
 			continue
 		}
 
-		start := shot.Position
-		stepDistance := math.Hypot(shot.Velocity.X, shot.Velocity.Y) * delta
-		if stepDistance <= 0 {
-			continue
-		}
-		if stepDistance > shot.RemainingRange {
-			stepDistance = shot.RemainingRange
-		}
-
-		direction := geom.Point{
-			X: shot.Velocity.X / math.Hypot(shot.Velocity.X, shot.Velocity.Y),
-			Y: shot.Velocity.Y / math.Hypot(shot.Velocity.X, shot.Velocity.Y),
-		}
-		end := geom.Point{
-			X: shot.Position.X + direction.X*stepDistance,
-			Y: shot.Position.Y + direction.Y*stepDistance,
-		}
-
-		if unitIndex, impactPos, ok := m.firstProjectileCollision(start, end, shot.OwnerID); ok {
-			if m.units[unitIndex].ApplyDamage(shot.Damage) {
-				m.units[unitIndex].Respawn()
+		moved := shot.Tick(delta)
+		if moved {
+			if unitIndex, hit := m.firstProjectileOccupant(shot, shot.OwnerID); hit {
+				impactPos := shot.Position
+				if m.units[unitIndex].ApplyDamage(shot.Damage) {
+					m.units[unitIndex].Respawn()
+				}
+				m.impacts = append(m.impacts, newImpactEffect(impactPos, m.world.TileSize()))
+				continue
 			}
-			m.impacts = append(m.impacts, newImpactEffect(impactPos, m.world.TileSize()))
+		}
+
+		if !shot.IsActive() {
 			continue
 		}
 
-		if !m.pointInWorld(end) {
-			continue
-		}
-
-		shot.Position = end
-		shot.RemainingRange -= stepDistance
-		if shot.RemainingRange <= 0 {
-			continue
-		}
 		active = append(active, shot)
 	}
 
-	m.projectiles = active
+	m.units = active
+	if m.selected >= len(m.units) {
+		m.selected = -1
+	}
 }
 
-func (m *Manager) firstProjectileCollision(start, end geom.Point, ownerID int64) (int, geom.Point, bool) {
-	bestIndex := -1
-	bestT := math.Inf(1)
-	hitRadius := m.world.TileSize() * unitHitRadiusScale
-
+// firstProjectileOccupant resolves which unit, if any, occupies the projectile's current
+// logical tile. Scanning units directly keeps the answer consistent even when an earlier hit
+// in the same tick respawns a unit and changes tile occupancy immediately.
+func (m *Manager) firstProjectileOccupant(shot *Projectile, ownerID int64) (int, bool) {
+	shotTileX, shotTileY := shot.Base().TilePosition(m.world.TileSize())
 	for i := range m.units {
 		currentUnit := m.units[i]
-		if !currentUnit.Alive() || currentUnit.ID == ownerID {
+		if !currentUnit.Alive() || !currentUnit.Selectable() || currentUnit.UnitID() == ownerID {
 			continue
 		}
 
-		t, hit := segmentPointIntersection(start, end, currentUnit.Position, hitRadius)
-		if !hit || t >= bestT {
+		tileX, tileY := currentUnit.Base().TilePosition(m.world.TileSize())
+		if tileX != shotTileX || tileY != shotTileY {
 			continue
 		}
 
-		bestIndex = i
-		bestT = t
+		return i, true
 	}
 
-	if bestIndex < 0 {
-		return 0, geom.Point{}, false
-	}
-
-	return bestIndex, pointAlongSegment(start, end, bestT), true
+	return 0, false
 }
 
 func (m *Manager) updateImpacts(delta float64) {
