@@ -12,6 +12,7 @@ import (
 	"github.com/unng-lab/endless/pkg/assets"
 	"github.com/unng-lab/endless/pkg/camera"
 	"github.com/unng-lab/endless/pkg/geom"
+	"github.com/unng-lab/endless/pkg/pathfinding"
 	"github.com/unng-lab/endless/pkg/unit"
 	"github.com/unng-lab/endless/pkg/world"
 )
@@ -29,6 +30,10 @@ const (
 	zoomStep = 0.12
 	panSpeed = 1400.0
 	tps      = 60.0
+
+	unitInfoPanelHeight   = 110.0
+	unitInfoPanelMargin   = 16.0
+	unitInfoPanelMaxWidth = 480.0
 )
 
 type Game struct {
@@ -39,6 +44,7 @@ type Game struct {
 	units []unit.Unit
 
 	unitRenderer *unit.Renderer
+	selectedUnit int
 
 	screenWidth  int
 	screenHeight int
@@ -49,6 +55,7 @@ type Game struct {
 
 	renderedTiles int
 	assetErr      error
+	pathErr       error
 }
 
 func NewGame() *Game {
@@ -71,6 +78,7 @@ func NewGame() *Game {
 		atlas:        assets.NewTileAtlas(),
 		tile:         tile,
 		unitRenderer: unit.NewRenderer(),
+		selectedUnit: -1,
 		screenWidth:  DefaultScreenWidth,
 		screenHeight: DefaultScreenHeight,
 	}
@@ -107,6 +115,8 @@ func (g *Game) Update() error {
 
 	g.handleKeyboardPan()
 	g.handleMouseDrag()
+	g.handleUnitSelection()
+	g.handleUnitCommand()
 	g.clampCamera()
 
 	return nil
@@ -158,6 +168,10 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	if hovered {
 		g.drawTileHighlight(screen, hoveredTileX, hoveredTileY, drawSize, offset, scale, camPos)
 	}
+	if g.selectedUnit >= 0 && g.selectedUnit < len(g.units) {
+		g.drawSelectedUnitHighlight(screen, g.selectedUnit)
+		g.drawUnitInfoPanel(screen, g.units[g.selectedUnit], g.selectedUnit)
+	}
 
 	hoveredTileText := "Hovered tile: outside world"
 	if hovered {
@@ -165,7 +179,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	}
 
 	debugText := fmt.Sprintf(
-		"WASD/Arrows: move  Shift: faster  Space: center  Middle mouse: drag  Wheel: zoom to cursor\nTPS: %.1f  RPS: %.1f  Zoom: %.2fx  Visible tiles: %d  Camera: (%.0f, %.0f)  %s",
+		"WASD/Arrows: move  Shift: faster  Space: center  Middle mouse: drag  Wheel: zoom to cursor  Left mouse: select unit  Right mouse: move selected unit\nTPS: %.1f  RPS: %.1f  Zoom: %.2fx  Visible tiles: %d  Camera: (%.0f, %.0f)  %s",
 		ebiten.ActualTPS(),
 		ebiten.ActualFPS(),
 		g.cam.Scale(),
@@ -176,6 +190,9 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	)
 	if g.assetErr != nil {
 		debugText += "\nAssets fallback: " + g.assetErr.Error()
+	}
+	if g.pathErr != nil {
+		debugText += "\nPath command: " + g.pathErr.Error()
 	}
 	ebitenutil.DebugPrint(screen, debugText)
 }
@@ -232,6 +249,56 @@ func (g *Game) handleMouseDrag() {
 	g.lastCursorY = y
 }
 
+func (g *Game) handleUnitSelection() {
+	if !inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+		return
+	}
+
+	x, y := ebiten.CursorPosition()
+	cursor := geom.Point{X: float64(x), Y: float64(y)}
+	if panelRect, ok := g.unitPanelRect(); ok && pointInRect(cursor, panelRect) {
+		return
+	}
+
+	if idx, ok := g.unitIndexAtScreen(cursor); ok {
+		g.selectedUnit = idx
+		return
+	}
+
+	g.selectedUnit = -1
+}
+
+func (g *Game) handleUnitCommand() {
+	if g.selectedUnit < 0 || g.selectedUnit >= len(g.units) {
+		return
+	}
+	if !inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight) {
+		return
+	}
+
+	x, y := ebiten.CursorPosition()
+	cursor := geom.Point{X: float64(x), Y: float64(y)}
+	if panelRect, ok := g.unitPanelRect(); ok && pointInRect(cursor, panelRect) {
+		return
+	}
+
+	targetTileX, targetTileY, ok := g.hoveredTile(x, y)
+	if !ok {
+		g.pathErr = pathfinding.ErrNoPath
+		return
+	}
+
+	startTileX, startTileY := g.units[g.selectedUnit].TilePosition(g.world.TileSize())
+	path, err := pathfinding.FindPath(worldGrid{world: g.world}, pathfinding.Step{X: startTileX, Y: startTileY}, pathfinding.Step{X: targetTileX, Y: targetTileY})
+	if err != nil {
+		g.pathErr = err
+		return
+	}
+
+	g.units[g.selectedUnit].SetPath(g.worldPath(path))
+	g.pathErr = nil
+}
+
 func (g *Game) centerCamera() {
 	g.cam.SetPosition(geom.Point{
 		X: g.world.Width()/2 - float64(g.screenWidth)/2,
@@ -284,7 +351,59 @@ func (g *Game) drawTileHighlight(
 	g.drawHighlightRect(screen, right-border, top+border, border, math.Max(bottom-top-border*2, 0))
 }
 
+func (g *Game) drawSelectedUnitHighlight(screen *ebiten.Image, unitIndex int) {
+	rect := unit.ScreenRect(g.cam, g.world.TileSize(), g.units[unitIndex])
+	padding := math.Max(2, math.Round(g.cam.Scale()))
+	border := math.Max(2, math.Round(g.cam.Scale()))
+	left := rect.Min.X - padding
+	top := rect.Min.Y - padding
+	width := (rect.Max.X - rect.Min.X) + padding*2
+	height := (rect.Max.Y - rect.Min.Y) + padding*2
+	right := left + width
+	bottom := top + height
+	highlight := color.NRGBA{R: 255, G: 214, B: 102, A: 255}
+
+	g.drawFilledRect(screen, left, top, width, border, highlight)
+	g.drawFilledRect(screen, left, bottom-border, width, border, highlight)
+	g.drawFilledRect(screen, left, top+border, border, math.Max(height-border*2, 0), highlight)
+	g.drawFilledRect(screen, right-border, top+border, border, math.Max(height-border*2, 0), highlight)
+}
+
+func (g *Game) drawUnitInfoPanel(screen *ebiten.Image, selected unit.Unit, unitIndex int) {
+	rect, ok := g.unitPanelRect()
+	if !ok {
+		return
+	}
+
+	panelColor := color.NRGBA{R: 19, G: 23, B: 30, A: 230}
+	borderColor := color.NRGBA{R: 255, G: 214, B: 102, A: 255}
+	shadowColor := color.NRGBA{R: 0, G: 0, B: 0, A: 90}
+
+	g.drawFilledRect(screen, rect.Min.X+4, rect.Min.Y+4, rect.Max.X-rect.Min.X, rect.Max.Y-rect.Min.Y, shadowColor)
+	g.drawFilledRect(screen, rect.Min.X, rect.Min.Y, rect.Max.X-rect.Min.X, rect.Max.Y-rect.Min.Y, panelColor)
+	g.drawFilledRect(screen, rect.Min.X, rect.Min.Y, rect.Max.X-rect.Min.X, 3, borderColor)
+
+	tileX, tileY := selected.TilePosition(g.world.TileSize())
+	infoText := fmt.Sprintf(
+		"Unit #%d: %s\nTile: (%d, %d)  World: (%.1f, %.1f)\nKind: %s  Frame: %d\n%s",
+		unitIndex+1,
+		selected.Name(),
+		tileX,
+		tileY,
+		selected.Position.X,
+		selected.Position.Y,
+		selected.Kind,
+		selected.Frame(),
+		g.unitStatusText(selected),
+	)
+	ebitenutil.DebugPrintAt(screen, infoText, int(rect.Min.X+16), int(rect.Min.Y+14))
+}
+
 func (g *Game) drawHighlightRect(screen *ebiten.Image, x float64, y float64, width float64, height float64) {
+	g.drawFilledRect(screen, x, y, width, height, color.White)
+}
+
+func (g *Game) drawFilledRect(screen *ebiten.Image, x float64, y float64, width float64, height float64, fill color.Color) {
 	if width <= 0 || height <= 0 {
 		return
 	}
@@ -292,6 +411,7 @@ func (g *Game) drawHighlightRect(screen *ebiten.Image, x float64, y float64, wid
 	var op ebiten.DrawImageOptions
 	op.GeoM.Scale(width, height)
 	op.GeoM.Translate(x, y)
+	op.ColorScale.ScaleWithColor(fill)
 
 	screen.DrawImage(g.tile, &op)
 }
@@ -318,4 +438,84 @@ func cellAnchor(tileX, tileY int, tileSize float64) geom.Point {
 		X: (float64(tileX) + 0.5) * tileSize,
 		Y: (float64(tileY) + 0.5) * tileSize,
 	}
+}
+
+func (g *Game) unitIndexAtScreen(cursor geom.Point) (int, bool) {
+	for i := len(g.units) - 1; i >= 0; i-- {
+		rect := unit.ScreenRect(g.cam, g.world.TileSize(), g.units[i])
+		if pointInRect(cursor, rect) {
+			return i, true
+		}
+	}
+
+	return 0, false
+}
+
+func (g *Game) unitPanelRect() (geom.Rect, bool) {
+	if g.selectedUnit < 0 || g.selectedUnit >= len(g.units) {
+		return geom.Rect{}, false
+	}
+
+	width := math.Min(float64(g.screenWidth)-unitInfoPanelMargin*2, unitInfoPanelMaxWidth)
+	if width <= 0 {
+		return geom.Rect{}, false
+	}
+
+	left := (float64(g.screenWidth) - width) / 2
+	top := math.Max(float64(g.screenHeight)-unitInfoPanelHeight-unitInfoPanelMargin, unitInfoPanelMargin)
+	return geom.Rect{
+		Min: geom.Point{X: left, Y: top},
+		Max: geom.Point{X: left + width, Y: top + unitInfoPanelHeight},
+	}, true
+}
+
+func pointInRect(point geom.Point, rect geom.Rect) bool {
+	return point.X >= rect.Min.X &&
+		point.X <= rect.Max.X &&
+		point.Y >= rect.Min.Y &&
+		point.Y <= rect.Max.Y
+}
+
+func (g *Game) unitStatusText(selected unit.Unit) string {
+	if !selected.HasPath() {
+		return "State: idle"
+	}
+
+	destination, ok := selected.Destination()
+	if !ok {
+		return "State: idle"
+	}
+
+	targetTileX := int(math.Floor(destination.X / g.world.TileSize()))
+	targetTileY := int(math.Floor(destination.Y / g.world.TileSize()))
+	return fmt.Sprintf("State: moving  Target: (%d, %d)  Waypoints: %d", targetTileX, targetTileY, selected.PathLen())
+}
+
+func (g *Game) worldPath(path []pathfinding.Step) []geom.Point {
+	if len(path) == 0 {
+		return nil
+	}
+
+	worldPath := make([]geom.Point, 0, len(path))
+	for _, step := range path {
+		worldPath = append(worldPath, cellAnchor(step.X, step.Y, g.world.TileSize()))
+	}
+
+	return worldPath
+}
+
+type worldGrid struct {
+	world world.World
+}
+
+func (g worldGrid) InBounds(x, y int) bool {
+	return x >= 0 && x < g.world.Columns() && y >= 0 && y < g.world.Rows()
+}
+
+func (g worldGrid) Cost(x, y int) float64 {
+	if !g.InBounds(x, y) {
+		return 0
+	}
+
+	return 1
 }
