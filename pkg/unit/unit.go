@@ -11,6 +11,8 @@ type Kind string
 const (
 	KindRunner        Kind = "runner"
 	KindRunnerFocused Kind = "runnerfocused"
+	KindWall          Kind = "wall"
+	KindBarricade     Kind = "barricade"
 )
 
 var runnerAnimation = Animation{
@@ -43,9 +45,25 @@ func NewRunner(position geom.Point, focused bool, phase float64) Unit {
 	}
 }
 
-func (u *Unit) Update(delta float64) {
+func NewWall(position geom.Point) Unit {
+	return Unit{
+		Position:  position,
+		Kind:      KindWall,
+		animation: Animation{FrameCount: 1, FrameDuration: 1},
+	}
+}
+
+func NewBarricade(position geom.Point) Unit {
+	return Unit{
+		Position:  position,
+		Kind:      KindBarricade,
+		animation: Animation{FrameCount: 1, FrameDuration: 1},
+	}
+}
+
+func (u *Unit) Update(delta float64, speedMultiplier func(geom.Point) float64) {
 	u.elapsed += delta
-	u.advance(delta)
+	u.advance(delta, speedMultiplier)
 }
 
 func (u Unit) Frame() int {
@@ -58,6 +76,10 @@ func (u Unit) Name() string {
 		return "Runner"
 	case KindRunnerFocused:
 		return "Runner Focused"
+	case KindWall:
+		return "Wall"
+	case KindBarricade:
+		return "Barricade"
 	default:
 		return string(u.Kind)
 	}
@@ -72,7 +94,25 @@ func (u Unit) TilePosition(tileSize float64) (int, int) {
 }
 
 func (u *Unit) SetPath(path []geom.Point) {
+	if !u.IsMobile() {
+		u.path = u.path[:0]
+		return
+	}
+
 	u.path = append(u.path[:0], path...)
+}
+
+func (u Unit) IsMobile() bool {
+	return u.moveSpeed > 0
+}
+
+func (u Unit) BlocksMovement() bool {
+	switch u.Kind {
+	case KindWall, KindBarricade:
+		return true
+	default:
+		return false
+	}
 }
 
 func (u Unit) HasPath() bool {
@@ -91,13 +131,25 @@ func (u Unit) Destination() (geom.Point, bool) {
 	return u.path[len(u.path)-1], true
 }
 
-func (u *Unit) advance(delta float64) {
+func (u *Unit) advance(delta float64, speedMultiplier func(geom.Point) float64) {
 	if delta <= 0 || len(u.path) == 0 || u.moveSpeed <= 0 {
 		return
 	}
 
-	remaining := u.moveSpeed * delta
-	for remaining > 0 && len(u.path) > 0 {
+	remainingTime := delta
+	for remainingTime > 0 && len(u.path) > 0 {
+		currentSpeed := u.moveSpeed
+		if speedMultiplier != nil {
+			multiplier := speedMultiplier(u.Position)
+			if multiplier <= 0 {
+				return
+			}
+			currentSpeed *= multiplier
+		}
+		if currentSpeed <= 0 {
+			return
+		}
+
 		target := u.path[0]
 		dx := target.X - u.Position.X
 		dy := target.Y - u.Position.Y
@@ -107,14 +159,17 @@ func (u *Unit) advance(delta float64) {
 			u.path = u.path[1:]
 			continue
 		}
-		if distance <= remaining {
+
+		timeToTarget := distance / currentSpeed
+		if timeToTarget <= remainingTime {
 			u.Position = target
 			u.path = u.path[1:]
-			remaining -= distance
+			remainingTime -= timeToTarget
 			continue
 		}
 
-		factor := remaining / distance
+		distanceToTravel := currentSpeed * remainingTime
+		factor := distanceToTravel / distance
 		u.Position.X += dx * factor
 		u.Position.Y += dy * factor
 		return

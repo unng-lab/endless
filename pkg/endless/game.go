@@ -90,6 +90,12 @@ func NewGame() *Game {
 		unit.NewRunner(cellAnchor(centerTileX, centerTileY-1, g.world.TileSize()), true, 0.12),
 		unit.NewRunner(cellAnchor(centerTileX-1, centerTileY, g.world.TileSize()), true, 0.24),
 		unit.NewRunner(cellAnchor(centerTileX, centerTileY, g.world.TileSize()), false, 0.36),
+		unit.NewWall(cellAnchor(centerTileX+3, centerTileY-2, g.world.TileSize())),
+		unit.NewWall(cellAnchor(centerTileX+3, centerTileY-1, g.world.TileSize())),
+		unit.NewWall(cellAnchor(centerTileX+3, centerTileY, g.world.TileSize())),
+		unit.NewBarricade(cellAnchor(centerTileX-4, centerTileY+2, g.world.TileSize())),
+		unit.NewBarricade(cellAnchor(centerTileX-3, centerTileY+2, g.world.TileSize())),
+		unit.NewBarricade(cellAnchor(centerTileX-2, centerTileY+2, g.world.TileSize())),
 	}
 
 	g.centerCamera()
@@ -100,7 +106,7 @@ func NewGame() *Game {
 
 func (g *Game) Update() error {
 	for i := range g.units {
-		g.units[i].Update(1.0 / tps)
+		g.units[i].Update(1.0/tps, g.tileSpeedMultiplierAt)
 	}
 
 	_, wheelY := ebiten.Wheel()
@@ -144,15 +150,17 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		for x := visible.Min.X; x < visible.Max.X; x++ {
 			screenX := (float64(x)*g.world.TileSize() - camPos.X) * scale
 			screenY := (float64(y)*g.world.TileSize() - camPos.Y) * scale
+			tileTint := g.world.TileTint(x, y)
 
 			var op ebiten.DrawImageOptions
 			tileImage := g.tile
 			if atlasTile, atlasTileSize, ok := g.tileImage(x, y, quality); ok {
 				tileImage = atlasTile
 				op.GeoM.Scale(drawSize/atlasTileSize, drawSize/atlasTileSize)
+				op.ColorScale.ScaleWithColor(tileTint)
 			} else {
 				op.GeoM.Scale(drawSize, drawSize)
-				op.ColorScale.ScaleWithColor(world.TileColor(x, y))
+				op.ColorScale.ScaleWithColor(g.world.TileColor(x, y))
 			}
 			op.GeoM.Translate(screenX+offset, screenY+offset)
 
@@ -175,7 +183,14 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	hoveredTileText := "Hovered tile: outside world"
 	if hovered {
-		hoveredTileText = fmt.Sprintf("Hovered tile: (%d, %d)", hoveredTileX, hoveredTileY)
+		tileType := g.world.TileType(hoveredTileX, hoveredTileY)
+		hoveredTileText = fmt.Sprintf(
+			"Hovered tile: (%d, %d)  Type: %s  Speed: %.0f%%",
+			hoveredTileX,
+			hoveredTileY,
+			tileType,
+			tileType.SpeedMultiplier()*100,
+		)
 	}
 
 	debugText := fmt.Sprintf(
@@ -275,6 +290,10 @@ func (g *Game) handleUnitCommand() {
 	if !inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight) {
 		return
 	}
+	if !g.units[g.selectedUnit].IsMobile() {
+		g.pathErr = fmt.Errorf("unit %q is immobile", g.units[g.selectedUnit].Name())
+		return
+	}
 
 	x, y := ebiten.CursorPosition()
 	cursor := geom.Point{X: float64(x), Y: float64(y)}
@@ -289,7 +308,8 @@ func (g *Game) handleUnitCommand() {
 	}
 
 	startTileX, startTileY := g.units[g.selectedUnit].TilePosition(g.world.TileSize())
-	path, err := pathfinding.FindPath(worldGrid{world: g.world}, pathfinding.Step{X: startTileX, Y: startTileY}, pathfinding.Step{X: targetTileX, Y: targetTileY})
+	grid := worldGrid{world: g.world, blocked: g.blockedTiles(g.selectedUnit)}
+	path, err := pathfinding.FindPath(grid, pathfinding.Step{X: startTileX, Y: startTileY}, pathfinding.Step{X: targetTileX, Y: targetTileY})
 	if err != nil {
 		g.pathErr = err
 		return
@@ -385,7 +405,7 @@ func (g *Game) drawUnitInfoPanel(screen *ebiten.Image, selected unit.Unit, unitI
 
 	tileX, tileY := selected.TilePosition(g.world.TileSize())
 	infoText := fmt.Sprintf(
-		"Unit #%d: %s\nTile: (%d, %d)  World: (%.1f, %.1f)\nKind: %s  Frame: %d\n%s",
+		"Unit #%d: %s\nTile: (%d, %d)  World: (%.1f, %.1f)\nKind: %s  Frame: %d\nTerrain speed: %.0f%%\n%s",
 		unitIndex+1,
 		selected.Name(),
 		tileX,
@@ -394,6 +414,7 @@ func (g *Game) drawUnitInfoPanel(screen *ebiten.Image, selected unit.Unit, unitI
 		selected.Position.Y,
 		selected.Kind,
 		selected.Frame(),
+		g.world.TileType(tileX, tileY).SpeedMultiplier()*100,
 		g.unitStatusText(selected),
 	)
 	ebitenutil.DebugPrintAt(screen, infoText, int(rect.Min.X+16), int(rect.Min.Y+14))
@@ -422,7 +443,7 @@ func (g *Game) tileImage(x, y int, quality assets.Quality) (*ebiten.Image, float
 		return nil, 0, false
 	}
 
-	tileImage, err := g.atlas.TileImage(world.TileIndex(x, y), quality)
+	tileImage, err := g.atlas.TileImage(g.world.TileIndex(x, y), quality)
 	if err != nil {
 		if g.assetErr == nil {
 			g.assetErr = err
@@ -477,6 +498,13 @@ func pointInRect(point geom.Point, rect geom.Rect) bool {
 }
 
 func (g *Game) unitStatusText(selected unit.Unit) string {
+	if !selected.IsMobile() {
+		if selected.BlocksMovement() {
+			return "State: static obstacle  Blocks movement: yes"
+		}
+		return "State: static obstacle"
+	}
+
 	if !selected.HasPath() {
 		return "State: idle"
 	}
@@ -504,18 +532,46 @@ func (g *Game) worldPath(path []pathfinding.Step) []geom.Point {
 	return worldPath
 }
 
+func (g *Game) tileSpeedMultiplierAt(position geom.Point) float64 {
+	tileX := int(math.Floor(position.X / g.world.TileSize()))
+	tileY := int(math.Floor(position.Y / g.world.TileSize()))
+	if !g.world.InBounds(tileX, tileY) {
+		return 0
+	}
+
+	return g.world.TileType(tileX, tileY).SpeedMultiplier()
+}
+
+func (g *Game) blockedTiles(excludedUnit int) map[pathfinding.Step]struct{} {
+	blocked := make(map[pathfinding.Step]struct{})
+	for index, currentUnit := range g.units {
+		if index == excludedUnit || !currentUnit.BlocksMovement() {
+			continue
+		}
+
+		tileX, tileY := currentUnit.TilePosition(g.world.TileSize())
+		blocked[pathfinding.Step{X: tileX, Y: tileY}] = struct{}{}
+	}
+
+	return blocked
+}
+
 type worldGrid struct {
-	world world.World
+	world   world.World
+	blocked map[pathfinding.Step]struct{}
 }
 
 func (g worldGrid) InBounds(x, y int) bool {
-	return x >= 0 && x < g.world.Columns() && y >= 0 && y < g.world.Rows()
+	return g.world.InBounds(x, y)
 }
 
 func (g worldGrid) Cost(x, y int) float64 {
 	if !g.InBounds(x, y) {
 		return 0
 	}
+	if _, blocked := g.blocked[pathfinding.Step{X: x, Y: y}]; blocked {
+		return 0
+	}
 
-	return 1
+	return g.world.TileType(x, y).MovementCost()
 }

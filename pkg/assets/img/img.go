@@ -88,7 +88,7 @@ func buildResizedAsset(assetName string, width, height int) (image.Image, error)
 	return resizeNearest(src, width, height), nil
 }
 
-func persistResizedAsset(filePath string, img image.Image) error {
+func persistResizedAsset(filePath string, img image.Image) (err error) {
 	if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
 		return fmt.Errorf("create asset cache directory: %w", err)
 	}
@@ -97,7 +97,11 @@ func persistResizedAsset(filePath string, img image.Image) error {
 	if err != nil {
 		return fmt.Errorf("create cached asset %q: %w", filePath, err)
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); err == nil && closeErr != nil {
+			err = fmt.Errorf("close cached asset %q: %w", filePath, closeErr)
+		}
+	}()
 
 	if err := png.Encode(file, img); err != nil {
 		return fmt.Errorf("encode cached asset %q: %w", filePath, err)
@@ -106,12 +110,16 @@ func persistResizedAsset(filePath string, img image.Image) error {
 	return nil
 }
 
-func loadImage(filePath string) (*ebiten.Image, error) {
+func loadImage(filePath string) (_ *ebiten.Image, err error) {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); err == nil && closeErr != nil {
+			err = fmt.Errorf("close cached asset %q: %w", filePath, closeErr)
+		}
+	}()
 
 	decoded, _, err := image.Decode(file)
 	if err != nil {
