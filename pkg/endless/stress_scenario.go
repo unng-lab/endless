@@ -31,21 +31,33 @@ type stressScenario struct {
 	staticObjects      int
 }
 
-// newStressScenario prepares the heavy-load scene requested for manual profiling: a large
-// amount of static blockers is created immediately while mobile runners are deferred so the
-// user can watch the system ramp up over time instead of paying one huge spawn spike.
-func newStressScenario(gameWorld world.World) ([]unit.Unit, *stressScenario) {
+// newStressScenario prepares the heavy-load scene requested for manual profiling. Static
+// blockers are still planned up front, but they are now injected through Manager.AddUnit so the
+// manager boot path never bypasses its normal registration logic.
+func newStressScenario(gameWorld world.World) *stressScenario {
 	centerTileX := gameWorld.Columns() / 2
 	centerTileY := gameWorld.Rows() / 2
 	blockedTiles := make(map[int64]struct{}, stressStaticObjectCount)
-	staticUnits := buildStressStaticUnits(gameWorld, centerTileX, centerTileY, blockedTiles)
 
-	return staticUnits, &stressScenario{
+	return &stressScenario{
 		actor:              newStressActor(gameWorld, centerTileX, centerTileY, blockedTiles),
 		pendingSpawnPoints: buildStressSpawnPoints(gameWorld, centerTileX, centerTileY),
 		nextSpawnTick:      spawnIntervalTicks(),
 		spawnedUnits:       0,
-		staticObjects:      len(staticUnits),
+		staticObjects:      stressStaticObjectCount,
+	}
+}
+
+// SeedStaticUnits creates the stress harness obstacle field through the public manager API so
+// the manager constructor can stay empty and every static body still gets normal tile-stack
+// registration and ID assignment.
+func (s *stressScenario) SeedStaticUnits(manager *unit.Manager) {
+	if s == nil || manager == nil {
+		return
+	}
+
+	for _, current := range buildStressStaticUnits(s.actor.world, s.actor.centerTileX, s.actor.centerTileY, s.actor.blocked) {
+		manager.AddUnit(current)
 	}
 }
 

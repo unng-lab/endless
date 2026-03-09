@@ -1,12 +1,19 @@
 package unit
 
 // orderedUnitMap keeps units addressable by their stable ID while preserving insertion order
-// for deterministic update, draw and collision passes. The manager uses this structure instead
-// of a raw slice so lookups by ID stay O(1) without rebuilding a parallel index map.
+// for deterministic update, draw and collision passes. The map points to entry objects and the
+// ordered slice stores pointers to those same entries, so both views stay connected without
+// duplicating the unit payload or resolving an intermediate ID on every ordered lookup.
+type orderedUnitEntry struct {
+	unit Unit
+}
+
+// orderedUnitMap keeps the pointer-linked ordered view and direct-ID lookup in one structure.
+// The manager uses this structure instead of a raw slice so lookups by ID stay O(1) without
+// rebuilding a parallel index map.
 type orderedUnitMap struct {
-	order          []int64
-	unitsByID      map[int64]Unit
-	orderIndexByID map[int64]int
+	order   []*orderedUnitEntry
+	entries map[int64]*orderedUnitEntry
 }
 
 // newOrderedUnitMap allocates the ordered lookup once so the manager can add units without
@@ -17,9 +24,8 @@ func newOrderedUnitMap(capacity int) *orderedUnitMap {
 	}
 
 	return &orderedUnitMap{
-		order:          make([]int64, 0, capacity),
-		unitsByID:      make(map[int64]Unit, capacity),
-		orderIndexByID: make(map[int64]int, capacity),
+		order:   make([]*orderedUnitEntry, 0, capacity),
+		entries: make(map[int64]*orderedUnitEntry, capacity),
 	}
 }
 
@@ -40,11 +46,13 @@ func (m *orderedUnitMap) Set(unit Unit) {
 	}
 
 	unitID := unit.UnitID()
-	if _, exists := m.orderIndexByID[unitID]; !exists {
-		m.orderIndexByID[unitID] = len(m.order)
-		m.order = append(m.order, unitID)
+	entry, exists := m.entries[unitID]
+	if !exists {
+		entry = &orderedUnitEntry{}
+		m.entries[unitID] = entry
+		m.order = append(m.order, entry)
 	}
-	m.unitsByID[unitID] = unit
+	entry.unit = unit
 }
 
 // Get resolves a unit by its stable ID in constant time.
@@ -53,8 +61,12 @@ func (m *orderedUnitMap) Get(unitID int64) (Unit, bool) {
 		return nil, false
 	}
 
-	unit, ok := m.unitsByID[unitID]
-	return unit, ok
+	entry, ok := m.entries[unitID]
+	if !ok || entry == nil || entry.unit == nil {
+		return nil, false
+	}
+
+	return entry.unit, true
 }
 
 // At returns the unit at the given insertion-order position. Worker batches use this method to
@@ -64,9 +76,12 @@ func (m *orderedUnitMap) At(index int) (Unit, bool) {
 		return nil, false
 	}
 
-	unitID := m.order[index]
-	unit, ok := m.unitsByID[unitID]
-	return unit, ok
+	entry := m.order[index]
+	if entry == nil || entry.unit == nil {
+		return nil, false
+	}
+
+	return entry.unit, true
 }
 
 // Range walks the ordered map in insertion order until the visitor returns false or every unit
@@ -76,28 +91,12 @@ func (m *orderedUnitMap) Range(visitor func(Unit) bool) {
 		return
 	}
 
-	for _, unitID := range m.order {
-		unit, ok := m.unitsByID[unitID]
-		if !ok {
+	for _, entry := range m.order {
+		if entry == nil || entry.unit == nil {
 			continue
 		}
-		if !visitor(unit) {
+		if !visitor(entry.unit) {
 			return
 		}
 	}
-}
-
-// Snapshot materializes the current ordered contents as a slice for APIs that still expect a
-// linear collection, such as the renderer and some tests.
-func (m *orderedUnitMap) Snapshot() []Unit {
-	if m == nil || len(m.order) == 0 {
-		return nil
-	}
-
-	units := make([]Unit, 0, len(m.order))
-	m.Range(func(unit Unit) bool {
-		units = append(units, unit)
-		return true
-	})
-	return units
 }

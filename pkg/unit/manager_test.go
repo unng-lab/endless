@@ -1,6 +1,7 @@
 package unit
 
 import (
+	"image"
 	"testing"
 
 	"github.com/unng-lab/endless/pkg/camera"
@@ -10,9 +11,9 @@ import (
 
 func TestManagerPanelRectHiddenWhenSelectedUnitOffScreen(t *testing.T) {
 	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
-	m := NewManager(gameWorld, []Unit{
+	m := newTestManager(gameWorld,
 		NewRunner(geom.Point{X: 16, Y: 16}, false, 0),
-	})
+	)
 	cam := camera.New(camera.Config{})
 
 	m.SelectAtScreen(cam, geom.Point{X: 16, Y: 16}, 64, 64)
@@ -30,9 +31,9 @@ func TestManagerPanelRectHiddenWhenSelectedUnitOffScreen(t *testing.T) {
 
 func TestManagerSelectAtScreenIgnoresOffScreenUnits(t *testing.T) {
 	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
-	m := NewManager(gameWorld, []Unit{
+	m := newTestManager(gameWorld,
 		NewRunner(geom.Point{X: 160, Y: 160}, false, 0),
-	})
+	)
 	cam := camera.New(camera.Config{})
 
 	m.SelectAtScreen(cam, geom.Point{X: 16, Y: 16}, 64, 64)
@@ -44,9 +45,9 @@ func TestManagerSelectAtScreenIgnoresOffScreenUnits(t *testing.T) {
 
 func TestManagerSelectAtScreenUsesTileHitInsteadOfSpriteRect(t *testing.T) {
 	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
-	m := NewManager(gameWorld, []Unit{
+	m := newTestManager(gameWorld,
 		NewRunner(geom.Point{X: 24, Y: 24}, false, 0),
-	})
+	)
 	cam := camera.New(camera.Config{})
 
 	m.SelectAtScreen(cam, geom.Point{X: 10, Y: 10}, 64, 64)
@@ -63,9 +64,9 @@ func TestManagerSelectAtScreenUsesTileHitInsteadOfSpriteRect(t *testing.T) {
 
 func TestManagerSelectAtScreenCanSelectStaticUnit(t *testing.T) {
 	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
-	m := NewManager(gameWorld, []Unit{
+	m := newTestManager(gameWorld,
 		NewWall(geom.Point{X: 24, Y: 24}),
-	})
+	)
 	cam := camera.New(camera.Config{})
 
 	m.SelectAtScreen(cam, geom.Point{X: 20, Y: 20}, 64, 64)
@@ -78,7 +79,7 @@ func TestManagerSelectAtScreenCanSelectStaticUnit(t *testing.T) {
 func TestManagerMovesUnitBetweenTileStacksDuringUpdate(t *testing.T) {
 	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
 	runner := NewRunner(geom.Point{X: 8, Y: 8}, false, 0)
-	m := NewManager(gameWorld, []Unit{runner})
+	m := newTestManager(gameWorld, runner)
 
 	startKey := tileKey{x: 0, y: 0}
 	if stack := m.tileStacks[startKey]; stack == nil || len(stack.UnitIDs()) != 1 {
@@ -105,13 +106,36 @@ func TestManagerMovesUnitBetweenTileStacksDuringUpdate(t *testing.T) {
 	}
 }
 
+func TestManagerVisibleTileUnitsFollowVisibleTileAndTileStackOrder(t *testing.T) {
+	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
+	firstInLowerTile := NewRunner(geom.Point{X: 8, Y: 24}, false, 0)
+	secondInLowerTile := NewWall(geom.Point{X: 8, Y: 24})
+	upperTileUnit := NewWall(geom.Point{X: 24, Y: 8})
+	m := newTestManager(gameWorld, firstInLowerTile, secondInLowerTile, upperTileUnit)
+
+	visibleUnits := m.visibleTileUnits(image.Rect(0, 0, 2, 2))
+	if len(visibleUnits) != 3 {
+		t.Fatalf("visibleTileUnits() len = %d, want 3", len(visibleUnits))
+	}
+
+	if visibleUnits[0].UnitID() != upperTileUnit.UnitID() {
+		t.Fatalf("visible unit[0] = %d, want upper tile unit %d", visibleUnits[0].UnitID(), upperTileUnit.UnitID())
+	}
+	if visibleUnits[1].UnitID() != firstInLowerTile.UnitID() {
+		t.Fatalf("visible unit[1] = %d, want first lower tile unit %d", visibleUnits[1].UnitID(), firstInLowerTile.UnitID())
+	}
+	if visibleUnits[2].UnitID() != secondInLowerTile.UnitID() {
+		t.Fatalf("visible unit[2] = %d, want second lower tile unit %d", visibleUnits[2].UnitID(), secondInLowerTile.UnitID())
+	}
+}
+
 func TestManagerProjectileHitsUnitOccupyingEnteredTile(t *testing.T) {
 	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
 	target := NewRunner(geom.Point{X: 37, Y: 28}, false, 0)
-	m := NewManager(gameWorld, []Unit{
+	m := newTestManager(gameWorld,
 		NewRunner(geom.Point{X: 24, Y: 24}, false, 0),
 		target,
-	})
+	)
 	m.selectedID = firstOrderedUnitID(t, m.units)
 
 	if err := m.CommandSelectedFire(geom.Point{X: 120, Y: 24}); err != nil {
@@ -124,16 +148,23 @@ func TestManagerProjectileHitsUnitOccupyingEnteredTile(t *testing.T) {
 	if target.Health != initialHealth-1 {
 		t.Fatalf("target health = %d, want %d after projectile enters occupied tile", target.Health, initialHealth-1)
 	}
-	if count := countProjectiles(m.units.Snapshot()); count != 0 {
-		t.Fatalf("projectiles = %d, want 0 after hit", count)
+	projectileCount := 0
+	m.units.Range(func(unit Unit) bool {
+		if _, ok := unit.(*Projectile); ok {
+			projectileCount++
+		}
+		return true
+	})
+	if projectileCount != 0 {
+		t.Fatalf("projectiles = %d, want 0 after hit", projectileCount)
 	}
 }
 
 func TestManagerProjectileExpiresAfterMaxRange(t *testing.T) {
 	gameWorld := world.New(world.Config{Columns: 64, Rows: 64, TileSize: 16})
-	m := NewManager(gameWorld, []Unit{
+	m := newTestManager(gameWorld,
 		NewRunner(geom.Point{X: 24, Y: 24}, false, 0),
-	})
+	)
 	m.selectedID = firstOrderedUnitID(t, m.units)
 
 	if err := m.CommandSelectedFire(geom.Point{X: 512, Y: 24}); err != nil {
@@ -144,8 +175,15 @@ func TestManagerProjectileExpiresAfterMaxRange(t *testing.T) {
 		m.Update(1, 1.0/60.0)
 	}
 
-	if count := countProjectiles(m.units.Snapshot()); count != 0 {
-		t.Fatalf("projectiles = %d, want projectile removed after max range", count)
+	projectileCount := 0
+	m.units.Range(func(unit Unit) bool {
+		if _, ok := unit.(*Projectile); ok {
+			projectileCount++
+		}
+		return true
+	})
+	if projectileCount != 0 {
+		t.Fatalf("projectiles = %d, want projectile removed after max range", projectileCount)
 	}
 }
 
@@ -155,10 +193,10 @@ func TestManagerProjectileRespawnsUnitAtSpawnPoint(t *testing.T) {
 	target.SpawnPosition = geom.Point{X: 104, Y: 104}
 	target.Health = 1
 
-	m := NewManager(gameWorld, []Unit{
+	m := newTestManager(gameWorld,
 		NewRunner(geom.Point{X: 24, Y: 24}, false, 0),
 		target,
-	})
+	)
 	m.selectedID = firstOrderedUnitID(t, m.units)
 
 	if err := m.CommandSelectedFire(geom.Point{X: 120, Y: 24}); err != nil {
@@ -173,8 +211,15 @@ func TestManagerProjectileRespawnsUnitAtSpawnPoint(t *testing.T) {
 	if target.Health != target.MaxHealth {
 		t.Fatalf("target health = %d, want full health %d after respawn", target.Health, target.MaxHealth)
 	}
-	if count := countProjectiles(m.units.Snapshot()); count != 0 {
-		t.Fatalf("projectiles = %d, want projectile consumed on hit", count)
+	projectileCount := 0
+	m.units.Range(func(unit Unit) bool {
+		if _, ok := unit.(*Projectile); ok {
+			projectileCount++
+		}
+		return true
+	})
+	if projectileCount != 0 {
+		t.Fatalf("projectiles = %d, want projectile consumed on hit", projectileCount)
 	}
 }
 
@@ -183,10 +228,10 @@ func TestManagerProjectileCanDamageStaticUnit(t *testing.T) {
 	target := NewWall(geom.Point{X: 37, Y: 28})
 	target.Health = 1
 
-	m := NewManager(gameWorld, []Unit{
+	m := newTestManager(gameWorld,
 		NewRunner(geom.Point{X: 24, Y: 24}, false, 0),
 		target,
-	})
+	)
 	m.selectedID = firstOrderedUnitID(t, m.units)
 
 	if err := m.CommandSelectedFire(geom.Point{X: 120, Y: 24}); err != nil {
@@ -206,7 +251,7 @@ func TestManagerProjectileCanDamageStaticUnit(t *testing.T) {
 func TestManagerAssignMoveJobReportsCompletion(t *testing.T) {
 	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
 	runner := NewRunner(geom.Point{X: 8, Y: 8}, false, 0)
-	m := NewManager(gameWorld, []Unit{runner})
+	m := newTestManager(gameWorld, runner)
 
 	err := m.AssignMoveJob(MoveJob{
 		ID:          1,
@@ -243,7 +288,7 @@ func TestManagerAssignMoveJobReportsCompletion(t *testing.T) {
 func TestManagerAssignMoveJobReportsFailureForImmobileTarget(t *testing.T) {
 	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
 	wall := NewWall(geom.Point{X: 8, Y: 8})
-	m := NewManager(gameWorld, []Unit{wall})
+	m := newTestManager(gameWorld, wall)
 
 	err := m.AssignMoveJob(MoveJob{
 		ID:          3,
@@ -271,7 +316,7 @@ func TestManagerAssignMoveJobReportsFailureForImmobileTarget(t *testing.T) {
 func TestManagerSkipsStaticUnitUpdateUntilExternalWake(t *testing.T) {
 	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
 	target := NewWall(geom.Point{X: 24, Y: 24})
-	m := NewManager(gameWorld, []Unit{target})
+	m := newTestManager(gameWorld, target)
 
 	m.Update(1, 1.0/60.0)
 	if target.LastUpdateTick() != 0 {
@@ -293,7 +338,7 @@ func TestManagerSkipsStaticUnitUpdateUntilExternalWake(t *testing.T) {
 func TestManagerCommandSelectedMoveQueuesLatestCommandWhileUnitTravels(t *testing.T) {
 	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
 	runner := NewRunner(geom.Point{X: 8, Y: 8}, false, 0)
-	m := NewManager(gameWorld, []Unit{runner})
+	m := newTestManager(gameWorld, runner)
 	m.selectedID = runner.UnitID()
 
 	if err := m.CommandSelectedMove(2, 0); err != nil {
@@ -327,9 +372,9 @@ func TestManagerCommandSelectedMoveQueuesLatestCommandWhileUnitTravels(t *testin
 
 func TestProjectileVisibilityUsesCurrentCameraState(t *testing.T) {
 	gameWorld := world.New(world.Config{Columns: 64, Rows: 64, TileSize: 16})
-	m := NewManager(gameWorld, []Unit{
+	m := newTestManager(gameWorld,
 		NewRunner(geom.Point{X: 24, Y: 24}, false, 0),
-	})
+	)
 	m.selectedID = firstOrderedUnitID(t, m.units)
 
 	if err := m.CommandSelectedFire(geom.Point{X: 120, Y: 24}); err != nil {
@@ -337,7 +382,15 @@ func TestProjectileVisibilityUsesCurrentCameraState(t *testing.T) {
 	}
 
 	cam := camera.New(camera.Config{})
-	projectile := firstProjectile(m.units.Snapshot())
+	var projectile *Projectile
+	m.units.Range(func(unit Unit) bool {
+		currentProjectile, ok := unit.(*Projectile)
+		if !ok {
+			return true
+		}
+		projectile = currentProjectile
+		return false
+	})
 	if projectile == nil {
 		t.Fatal("expected projectile to exist")
 	}
@@ -351,25 +404,6 @@ func TestProjectileVisibilityUsesCurrentCameraState(t *testing.T) {
 	}
 }
 
-func firstProjectile(units []Unit) *Projectile {
-	for _, current := range units {
-		if projectile, ok := current.(*Projectile); ok {
-			return projectile
-		}
-	}
-	return nil
-}
-
-func countProjectiles(units []Unit) int {
-	count := 0
-	for _, current := range units {
-		if _, ok := current.(*Projectile); ok {
-			count++
-		}
-	}
-	return count
-}
-
 func firstOrderedUnitID(t *testing.T, units *orderedUnitMap) int64 {
 	t.Helper()
 
@@ -379,4 +413,12 @@ func firstOrderedUnitID(t *testing.T, units *orderedUnitMap) int64 {
 	}
 
 	return first.UnitID()
+}
+
+func newTestManager(gameWorld world.World, units ...Unit) *Manager {
+	manager := NewManager(gameWorld)
+	for _, current := range units {
+		manager.AddUnit(current)
+	}
+	return manager
 }

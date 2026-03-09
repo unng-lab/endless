@@ -42,51 +42,61 @@ func NewRenderer() *Renderer {
 	}
 }
 
-func (r *Renderer) Draw(
+// DrawUnit renders exactly one gameplay body. The manager drives the traversal order so tile
+// stacks can be walked in visible-tile order while projectiles remain on their own pass.
+func (r *Renderer) DrawUnit(
 	screen *ebiten.Image,
 	cam *camera.Camera,
 	worldTileSize float64,
 	quality assets.Quality,
-	units []Unit,
-	impacts []impactEffect,
+	current Unit,
 ) error {
-	if len(units) == 0 && len(impacts) == 0 {
+	if current == nil {
 		return nil
 	}
 
 	camPos := cam.Position()
 	scale := cam.Scale()
 
-	for _, current := range units {
-		if current == nil {
-			continue
-		}
-
-		switch body := current.(type) {
-		case *NonStaticUnit:
-			if !kindUsesSprite(body.UnitKind()) {
-				r.drawStatic(screen, camPos, scale, worldTileSize, body.UnitKind(), body.Base().RenderPosition())
-			} else {
-				if err := r.drawAnimatedUnit(screen, camPos, scale, worldTileSize, quality, body); err != nil {
-					return err
-				}
-			}
-			r.drawHealthBar(screen, bodyScreenRect(cam, worldTileSize, body.UnitKind(), body.Base().RenderPosition()), body.CurrentHealth(), body.MaxHealthValue())
-		case *StaticUnit:
+	switch body := current.(type) {
+	case *NonStaticUnit:
+		if !kindUsesSprite(body.UnitKind()) {
 			r.drawStatic(screen, camPos, scale, worldTileSize, body.UnitKind(), body.Base().RenderPosition())
-			r.drawHealthBar(screen, bodyScreenRect(cam, worldTileSize, body.UnitKind(), body.Base().RenderPosition()), body.CurrentHealth(), body.MaxHealthValue())
-		case *Projectile:
-			r.drawProjectile(screen, camPos, scale, body)
-		default:
-			return fmt.Errorf("unsupported unit type %T", current)
+		} else {
+			if err := r.drawAnimatedUnit(screen, camPos, scale, worldTileSize, quality, body); err != nil {
+				return err
+			}
 		}
+		r.drawHealthBar(screen, bodyScreenRect(cam, worldTileSize, body.UnitKind(), body.Base().RenderPosition()), body.CurrentHealth(), body.MaxHealthValue())
+	case *StaticUnit:
+		r.drawStatic(screen, camPos, scale, worldTileSize, body.UnitKind(), body.Base().RenderPosition())
+		r.drawHealthBar(screen, bodyScreenRect(cam, worldTileSize, body.UnitKind(), body.Base().RenderPosition()), body.CurrentHealth(), body.MaxHealthValue())
+	case *Projectile:
+		r.drawProjectile(screen, camPos, scale, body)
+	default:
+		return fmt.Errorf("unsupported unit type %T", current)
 	}
+
+	return nil
+}
+
+// DrawImpacts renders the transient hit flashes after unit bodies so combat feedback stays on
+// top of the main world layer regardless of how units were gathered for the frame.
+func (r *Renderer) DrawImpacts(
+	screen *ebiten.Image,
+	cam *camera.Camera,
+	impacts []impactEffect,
+) {
+	if len(impacts) == 0 {
+		return
+	}
+
+	camPos := cam.Position()
+	scale := cam.Scale()
 
 	for _, effect := range impacts {
 		r.drawImpact(screen, camPos, scale, effect)
 	}
-
-	return nil
 }
 
 func (r *Renderer) drawAnimatedUnit(

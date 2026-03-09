@@ -2,6 +2,7 @@ package endless
 
 import (
 	"fmt"
+	"image"
 	"image/color"
 	"math"
 
@@ -63,7 +64,7 @@ func NewGame() *Game {
 		Rows:     mapRows,
 		TileSize: tileSize,
 	})
-	initialUnits, stress := newStressScenario(gameWorld)
+	stress := newStressScenario(gameWorld)
 
 	g := &Game{
 		cam: camera.New(camera.Config{
@@ -79,7 +80,10 @@ func NewGame() *Game {
 		screenHeight: DefaultScreenHeight,
 	}
 
-	g.units = unit.NewManager(g.world, initialUnits)
+	g.units = unit.NewManager(g.world)
+	if g.stress != nil {
+		g.stress.SeedStaticUnits(g.units)
+	}
 
 	g.centerCamera()
 	g.clampCamera()
@@ -104,8 +108,8 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	g.updateScreenSize(screen)
 
-	quality, hoveredTileX, hoveredTileY, hovered := g.drawWorld(screen)
-	if err := g.units.Draw(screen, g.cam, quality); err != nil && g.assetErr == nil {
+	visible, quality, hoveredTileX, hoveredTileY, hovered := g.drawWorld(screen)
+	if err := g.units.Draw(screen, g.cam, quality, visible); err != nil && g.assetErr == nil {
 		g.assetErr = err
 	}
 
@@ -294,10 +298,10 @@ func (g *Game) cursorWorldCommandTarget() (int, int, geom.Point, bool) {
 	return x, y, cursor, true
 }
 
-// drawWorld renders the visible tile slice and returns enough context for later overlay
-// drawing. Keeping this as a single pass ensures hover info, tile quality and render count
-// are all derived from the same camera state used for the frame.
-func (g *Game) drawWorld(screen *ebiten.Image) (assets.Quality, int, int, bool) {
+// drawWorld renders the visible tile slice and returns the exact tile rectangle that was just
+// drawn. The caller reuses that same rectangle for the unit pass so terrain and tile-stack
+// bodies stay perfectly aligned in both coverage and traversal order.
+func (g *Game) drawWorld(screen *ebiten.Image) (image.Rectangle, assets.Quality, int, int, bool) {
 	visible := g.world.VisibleRange(g.cam.ViewRect(float64(g.screenWidth), float64(g.screenHeight)))
 	scale := g.cam.Scale()
 	camPos := g.cam.Position()
@@ -315,7 +319,7 @@ func (g *Game) drawWorld(screen *ebiten.Image) (assets.Quality, int, int, bool) 
 		}
 	}
 
-	return quality, hoveredTileX, hoveredTileY, hovered
+	return visible, quality, hoveredTileX, hoveredTileY, hovered
 }
 
 func (g *Game) drawTile(
