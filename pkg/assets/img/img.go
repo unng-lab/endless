@@ -27,6 +27,12 @@ var (
 	storage = make(map[string]*ebiten.Image)
 )
 
+// Img returns an image resized to the requested dimensions.
+// The loader uses a two-level cache:
+//   - in-memory cache avoids repeated decode/upload work during the current run;
+//   - disk cache stores resized PNGs so the next launch can skip resizing embedded assets.
+//
+// The function keeps the cache key stable by normalizing the asset name first.
 func Img(name string, w, h uint64) (*ebiten.Image, error) {
 	assetName, err := normalizeAssetName(name)
 	if err != nil {
@@ -38,36 +44,28 @@ func Img(name string, w, h uint64) (*ebiten.Image, error) {
 
 	key := cacheKey(assetName, w, h)
 
-	mu.RLock()
-	if cached := storage[key]; cached != nil {
-		mu.RUnlock()
+	if cached := lookup(key); cached != nil {
 		return cached, nil
 	}
-	mu.RUnlock()
 
 	cachePath, err := cacheFilePath(assetName, w, h)
 	if err != nil {
 		return nil, err
 	}
 
-	if cached, err := loadImage(cachePath); err == nil {
+	if cached, err := loadCachedAsset(cachePath); err == nil {
 		store(key, cached)
 		return cached, nil
 	} else if !os.IsNotExist(err) {
 		return nil, fmt.Errorf("load cached asset %q: %w", assetName, err)
 	}
 
-	resized, err := buildResizedAsset(assetName, int(w), int(h))
+	built, err := buildCachedAsset(assetName, cachePath, int(w), int(h))
 	if err != nil {
 		return nil, err
 	}
-	if err := persistResizedAsset(cachePath, resized); err != nil {
-		return nil, err
-	}
-
-	cached := ebiten.NewImageFromImage(resized)
-	store(key, cached)
-	return cached, nil
+	store(key, built)
+	return built, nil
 }
 
 func buildResizedAsset(assetName string, width, height int) (image.Image, error) {
@@ -86,6 +84,18 @@ func buildResizedAsset(assetName string, width, height int) (image.Image, error)
 	}
 
 	return resizeNearest(src, width, height), nil
+}
+
+func buildCachedAsset(assetName, cachePath string, width, height int) (*ebiten.Image, error) {
+	resized, err := buildResizedAsset(assetName, width, height)
+	if err != nil {
+		return nil, err
+	}
+	if err := persistResizedAsset(cachePath, resized); err != nil {
+		return nil, err
+	}
+
+	return ebiten.NewImageFromImage(resized), nil
 }
 
 func persistResizedAsset(filePath string, img image.Image) (err error) {
@@ -110,7 +120,7 @@ func persistResizedAsset(filePath string, img image.Image) (err error) {
 	return nil
 }
 
-func loadImage(filePath string) (_ *ebiten.Image, err error) {
+func loadCachedAsset(filePath string) (_ *ebiten.Image, err error) {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return nil, err
@@ -138,6 +148,9 @@ func cacheFilePath(assetName string, w, h uint64) (string, error) {
 	return filepath.Join(root, assetDirName(assetName), dimensionFileName(w, h)), nil
 }
 
+// cacheRoot resolves where resized PNGs should be stored.
+// An explicit environment override is useful for tests and packaging; otherwise the cache is
+// kept next to the package so local development can inspect and clear generated assets easily.
 func cacheRoot() (string, error) {
 	if root := strings.TrimSpace(os.Getenv("ENDLESS_ASSET_CACHE_DIR")); root != "" {
 		return root, nil
@@ -173,21 +186,29 @@ func dimensionFileName(w, h uint64) string {
 	return fmt.Sprintf("%dx%d.png", w, h)
 }
 
+// resizeNearest keeps pixel-art assets crisp by sampling the nearest source pixel for each
+// destination pixel. A smoother filter would blur sprite edges and break the intended look.
 func resizeNearest(src image.Image, width, height int) image.Image {
 	dst := image.NewRGBA(image.Rect(0, 0, width, height))
 	srcBounds := src.Bounds()
 	srcWidth := srcBounds.Dx()
 	srcHeight := srcBounds.Dy()
 
-	for y := range height {
+	for y := 0; y < height; y++ {
 		srcY := srcBounds.Min.Y + y*srcHeight/height
-		for x := range width {
+		for x := 0; x < width; x++ {
 			srcX := srcBounds.Min.X + x*srcWidth/width
 			dst.Set(x, y, src.At(srcX, srcY))
 		}
 	}
 
 	return dst
+}
+
+func lookup(key string) *ebiten.Image {
+	mu.RLock()
+	defer mu.RUnlock()
+	return storage[key]
 }
 
 func store(key string, img *ebiten.Image) {

@@ -20,6 +20,11 @@ var runnerAnimation = Animation{
 	FrameDuration: 0.1,
 }
 
+var staticAnimation = Animation{
+	FrameCount:    1,
+	FrameDuration: 1,
+}
+
 type Unit struct {
 	ID            int64
 	Position      geom.Point
@@ -66,30 +71,33 @@ func NewRunner(position geom.Point, focused bool, phase float64) Unit {
 }
 
 func NewWall(position geom.Point) Unit {
-	return Unit{
-		Position:      position,
-		SpawnPosition: position,
-		Kind:          KindWall,
-		MaxHealth:     5,
-		Health:        5,
-		animation:     Animation{FrameCount: 1, FrameDuration: 1},
-	}
+	return newStaticUnit(KindWall, position, 5)
 }
 
 func NewBarricade(position geom.Point) Unit {
+	return newStaticUnit(KindBarricade, position, 4)
+}
+
+func newStaticUnit(kind Kind, position geom.Point, maxHealth int) Unit {
 	return Unit{
 		Position:      position,
 		SpawnPosition: position,
-		Kind:          KindBarricade,
-		MaxHealth:     4,
-		Health:        4,
-		animation:     Animation{FrameCount: 1, FrameDuration: 1},
+		Kind:          kind,
+		MaxHealth:     maxHealth,
+		Health:        maxHealth,
+		animation:     staticAnimation,
 	}
 }
 
+// Tick advances unit state by one game tick.
+// Movement is intentionally split into two layers:
+//   - logical movement jumps between tile anchors and is scheduled through sleepTime;
+//   - visual movement is reconstructed from travel so rendering can interpolate smoothly.
+//
+// This keeps path traversal deterministic while avoiding visible teleportation.
 func (u *Unit) Tick(gameTick int64, delta float64, speedMultiplier func(geom.Point) float64) {
 	if !u.Alive() {
-		u.travel = travelState{}
+		u.clearTravel()
 		return
 	}
 
@@ -135,6 +143,9 @@ func (u Unit) TilePosition(tileSize float64) (int, int) {
 	return int(math.Floor(u.Position.X / tileSize)), int(math.Floor(u.Position.Y / tileSize))
 }
 
+// SetPath replaces the current route with a copy of the provided path.
+// Copying here prevents external code from mutating the active route after the command
+// has been accepted, and resetting sleepTime lets the unit react on the next update.
 func (u *Unit) SetPath(path []geom.Point) {
 	if !u.IsMobile() {
 		u.path = u.path[:0]
@@ -201,7 +212,7 @@ func (u *Unit) Respawn() {
 	u.Health = u.MaxHealth
 	u.path = u.path[:0]
 	u.sleepTime = 0
-	u.travel = travelState{}
+	u.clearTravel()
 }
 
 func (u Unit) HasPath() bool {
@@ -235,6 +246,11 @@ func (u Unit) Destination() (geom.Point, bool) {
 	return u.path[len(u.path)-1], true
 }
 
+// RenderPosition reconstructs the in-between position for the current move segment.
+// The gameplay state snaps Position straight to the next waypoint when travel starts, so
+// collision, occupancy and path progression all operate on discrete tile centers. During
+// rendering we interpolate back from the segment origin to the destination using the
+// remaining tick budget stored in travel.
 func (u Unit) RenderPosition() geom.Point {
 	if !u.travel.active || u.travel.duration <= 0 {
 		return u.Position
@@ -252,54 +268,93 @@ func (u *Unit) Wake() {
 	u.sleepTime = 0
 }
 
+// advance schedules movement to the next reachable waypoint and returns how many ticks the
+// unit should stay asleep before the next logical update. Returning a sleep budget instead
+// of applying continuous movement each frame keeps all units aligned to the fixed game tick.
 func (u *Unit) advance(_ int64, delta float64, speedMultiplier func(geom.Point) float64) int {
 	if delta <= 0 || len(u.path) == 0 || u.moveSpeed <= 0 {
-		u.travel = travelState{}
+		u.clearTravel()
 		return 0
 	}
 
 	for len(u.path) > 0 {
 		target := u.path[0]
-		dx := target.X - u.Position.X
-		dy := target.Y - u.Position.Y
-		distance := math.Hypot(dx, dy)
-		if distance <= 1e-6 {
-			u.Position = target
-			u.path = u.path[1:]
+		if u.consumeReachedWaypoint(target) {
 			continue
 		}
 
-		currentSpeed := u.moveSpeed
-		if speedMultiplier != nil {
-			multiplier := speedMultiplier(u.Position)
-			if multiplier <= 0 {
-				u.travel = travelState{}
-				return 0
-			}
-			currentSpeed *= multiplier
-		}
-		if currentSpeed <= 0 {
-			u.travel = travelState{}
+		currentSpeed, ok := u.moveSpeedAtCurrentTile(speedMultiplier)
+		if !ok {
+			u.clearTravel()
 			return 0
 		}
 
-		travelTicks := sleepTicks(distance/currentSpeed, delta)
-		u.travel = travelState{
-			from:      u.RenderPosition(),
-			to:        target,
-			duration:  travelTicks,
-			remaining: travelTicks,
-			active:    true,
-		}
-		u.Position = target
-		u.path = u.path[1:]
-		return travelTicks
+		return u.startTravel(target, currentSpeed, delta)
 	}
 
-	u.travel = travelState{}
+	u.clearTravel()
 	return 0
 }
 
+func (u *Unit) consumeReachedWaypoint(target geom.Point) bool {
+	dx := target.X - u.Position.X
+	dy := target.Y - u.Position.Y
+	if math.Hypot(dx, dy) > 1e-6 {
+		return false
+	}
+
+	u.Position = target
+	u.path = u.path[1:]
+	return true
+}
+
+// moveSpeedAtCurrentTile resolves the effective movement speed for the tile the unit is
+// currently standing on. Terrain modifiers are applied here once so advance can stay focused
+// on route progression and travel scheduling.
+func (u Unit) moveSpeedAtCurrentTile(speedMultiplier func(geom.Point) float64) (float64, bool) {
+	currentSpeed := u.moveSpeed
+	if speedMultiplier == nil {
+		return currentSpeed, currentSpeed > 0
+	}
+
+	multiplier := speedMultiplier(u.Position)
+	if multiplier <= 0 {
+		return 0, false
+	}
+
+	currentSpeed *= multiplier
+	return currentSpeed, currentSpeed > 0
+}
+
+// startTravel snapshots the segment that render interpolation should visualize, then moves
+// the logical position directly to the next waypoint. This split lets pathfinding and tile
+// occupancy observe the new cell immediately while drawing still shows continuous motion.
+func (u *Unit) startTravel(target geom.Point, currentSpeed, delta float64) int {
+	dx := target.X - u.Position.X
+	dy := target.Y - u.Position.Y
+	distance := math.Hypot(dx, dy)
+	travelTicks := sleepTicks(distance/currentSpeed, delta)
+
+	u.travel = travelState{
+		from:      u.RenderPosition(),
+		to:        target,
+		duration:  travelTicks,
+		remaining: travelTicks,
+		active:    true,
+	}
+	u.Position = target
+	u.path = u.path[1:]
+
+	return travelTicks
+}
+
+func (u *Unit) clearTravel() {
+	u.travel = travelState{}
+}
+
+// sleepTicks converts a continuous duration into a minimum number of simulation ticks.
+// Ceil is important here: when travel does not divide evenly by delta, we must reserve the
+// extra partial tick so render interpolation never finishes before the logical move does.
 func sleepTicks(duration, delta float64) int {
 	if duration <= 0 {
 		return 0

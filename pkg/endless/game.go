@@ -101,24 +101,9 @@ func NewGame() *Game {
 func (g *Game) Update() error {
 	g.tickCounter++
 	g.units.Update(g.tickCounter, 1.0/tps)
-
-	_, wheelY := ebiten.Wheel()
-	if wheelY != 0 {
-		x, y := ebiten.CursorPosition()
-		g.cam.Zoom(wheelY*zoomStep, geom.Point{X: float64(x), Y: float64(y)})
-	}
-
-	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
-		g.centerCamera()
-	}
-
-	g.handleKeyboardPan()
-	g.handleMouseDrag()
-	g.clampCamera()
-	g.units.SyncVisibility(g.cam, g.screenWidth, g.screenHeight)
-	g.handleUnitSelection()
-	g.handleUnitCommand()
-	g.handleUnitFire()
+	g.updateCameraControls()
+	g.syncVisibility()
+	g.handleGameplayInput()
 
 	return nil
 }
@@ -126,86 +111,55 @@ func (g *Game) Update() error {
 func (g *Game) Draw(screen *ebiten.Image) {
 	screen.Fill(color.NRGBA{R: 17, G: 24, B: 31, A: 255})
 
-	bounds := screen.Bounds()
-	g.screenWidth = bounds.Dx()
-	g.screenHeight = bounds.Dy()
-	g.units.SyncVisibility(g.cam, g.screenWidth, g.screenHeight)
+	g.updateScreenSize(screen)
+	g.syncVisibility()
 
-	visible := g.world.VisibleRange(g.cam.ViewRect(float64(bounds.Dx()), float64(bounds.Dy())))
-	scale := g.cam.Scale()
-	camPos := g.cam.Position()
-	tileScreenSize := g.world.TileSize() * scale
-	drawSize := math.Max(tileScreenSize, 1)
-	offset := 0.0
-	quality := g.atlas.QualityForScreenSize(tileScreenSize)
-	cursorX, cursorY := ebiten.CursorPosition()
-	hoveredTileX, hoveredTileY, hovered := g.hoveredTile(cursorX, cursorY)
-
-	g.renderedTiles = 0
-	for y := visible.Min.Y; y < visible.Max.Y; y++ {
-		for x := visible.Min.X; x < visible.Max.X; x++ {
-			screenX := (float64(x)*g.world.TileSize() - camPos.X) * scale
-			screenY := (float64(y)*g.world.TileSize() - camPos.Y) * scale
-			tileTint := g.world.TileTint(x, y)
-
-			var op ebiten.DrawImageOptions
-			tileImage := g.tile
-			if atlasTile, atlasTileSize, ok := g.tileImage(x, y, quality); ok {
-				tileImage = atlasTile
-				op.GeoM.Scale(drawSize/atlasTileSize, drawSize/atlasTileSize)
-				op.ColorScale.ScaleWithColor(tileTint)
-			} else {
-				op.GeoM.Scale(drawSize, drawSize)
-				op.ColorScale.ScaleWithColor(g.world.TileColor(x, y))
-			}
-			op.GeoM.Translate(screenX+offset, screenY+offset)
-
-			screen.DrawImage(tileImage, &op)
-			g.renderedTiles++
-		}
-	}
-
+	quality, hoveredTileX, hoveredTileY, hovered := g.drawWorld(screen)
 	if err := g.units.Draw(screen, g.cam, quality); err != nil && g.assetErr == nil {
 		g.assetErr = err
 	}
 
 	if hovered {
-		g.drawTileHighlight(screen, hoveredTileX, hoveredTileY, drawSize, offset, scale, camPos)
+		g.drawTileHighlight(screen, hoveredTileX, hoveredTileY)
 	}
 	g.units.DrawOverlay(screen, g.cam, g.screenWidth, g.screenHeight)
+	ebitenutil.DebugPrint(screen, g.debugText(hoveredTileX, hoveredTileY, hovered))
+}
 
-	hoveredTileText := "Hovered tile: outside world"
-	if hovered {
-		tileType := g.world.TileType(hoveredTileX, hoveredTileY)
-		hoveredTileText = fmt.Sprintf(
-			"Hovered tile: (%d, %d)  Type: %s  Speed: %.0f%%",
-			hoveredTileX,
-			hoveredTileY,
-			tileType,
-			tileType.SpeedMultiplier()*100,
-		)
+func (g *Game) updateCameraControls() {
+	g.applyZoomInput()
+	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
+		g.centerCamera()
+	}
+	g.handleKeyboardPan()
+	g.handleMouseDrag()
+	g.clampCamera()
+}
+
+func (g *Game) applyZoomInput() {
+	_, wheelY := ebiten.Wheel()
+	if wheelY == 0 {
+		return
 	}
 
-	debugText := fmt.Sprintf(
-		"WASD/Arrows: move  Shift: faster  Space: center  Middle mouse: drag  Wheel: zoom to cursor  Left mouse: select unit  Right mouse: move selected unit  F: fire to cursor\nTPS: %.1f  RPS: %.1f  Zoom: %.2fx  Visible tiles: %d  Camera: (%.0f, %.0f)  %s",
-		ebiten.ActualTPS(),
-		ebiten.ActualFPS(),
-		g.cam.Scale(),
-		g.renderedTiles,
-		g.cam.Position().X,
-		g.cam.Position().Y,
-		hoveredTileText,
-	)
-	if g.assetErr != nil {
-		debugText += "\nAssets fallback: " + g.assetErr.Error()
-	}
-	if g.pathErr != nil {
-		debugText += "\nPath command: " + g.pathErr.Error()
-	}
-	if g.fireErr != nil {
-		debugText += "\nFire command: " + g.fireErr.Error()
-	}
-	ebitenutil.DebugPrint(screen, debugText)
+	x, y := ebiten.CursorPosition()
+	g.cam.Zoom(wheelY*zoomStep, geom.Point{X: float64(x), Y: float64(y)})
+}
+
+func (g *Game) handleGameplayInput() {
+	g.handleUnitSelection()
+	g.handleUnitCommand()
+	g.handleUnitFire()
+}
+
+func (g *Game) updateScreenSize(screen *ebiten.Image) {
+	bounds := screen.Bounds()
+	g.screenWidth = bounds.Dx()
+	g.screenHeight = bounds.Dy()
+}
+
+func (g *Game) syncVisibility() {
+	g.units.SyncVisibility(g.cam, g.screenWidth, g.screenHeight)
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
@@ -217,7 +171,7 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 	}
 
 	g.clampCamera()
-	g.units.SyncVisibility(g.cam, g.screenWidth, g.screenHeight)
+	g.syncVisibility()
 
 	return g.screenWidth, g.screenHeight
 }
@@ -272,16 +226,12 @@ func (g *Game) handleUnitSelection() {
 }
 
 func (g *Game) handleUnitCommand() {
-	if !g.units.HasSelected() {
-		return
-	}
-	if !inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight) {
+	if !g.units.HasSelected() || !inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight) {
 		return
 	}
 
-	x, y := ebiten.CursorPosition()
-	cursor := geom.Point{X: float64(x), Y: float64(y)}
-	if g.units.PointInPanel(cursor, g.screenWidth, g.screenHeight) {
+	x, y, _, ok := g.cursorWorldCommandTarget()
+	if !ok {
 		return
 	}
 
@@ -300,16 +250,12 @@ func (g *Game) handleUnitCommand() {
 }
 
 func (g *Game) handleUnitFire() {
-	if !g.units.HasSelected() {
-		return
-	}
-	if !inpututil.IsKeyJustPressed(ebiten.KeyF) {
+	if !g.units.HasSelected() || !inpututil.IsKeyJustPressed(ebiten.KeyF) {
 		return
 	}
 
-	x, y := ebiten.CursorPosition()
-	cursor := geom.Point{X: float64(x), Y: float64(y)}
-	if g.units.PointInPanel(cursor, g.screenWidth, g.screenHeight) {
+	_, _, cursor, ok := g.cursorWorldCommandTarget()
+	if !ok {
 		return
 	}
 
@@ -332,6 +278,9 @@ func (g *Game) clampCamera() {
 	g.cam.SetPosition(g.world.ClampCamera(g.cam.Position(), g.cam.Scale(), g.screenWidth, g.screenHeight))
 }
 
+// hoveredTile converts the current cursor position from screen space into the tile grid and
+// rejects points outside the procedural world. Keeping this in one helper avoids scattering
+// float-to-tile boundary checks across input handling and debug rendering.
 func (g *Game) hoveredTile(cursorX, cursorY int) (int, int, bool) {
 	worldPos := g.cam.ScreenToWorld(geom.Point{
 		X: float64(cursorX),
@@ -350,20 +299,74 @@ func (g *Game) hoveredTile(cursorX, cursorY int) (int, int, bool) {
 	return tileX, tileY, true
 }
 
-func (g *Game) drawTileHighlight(
+func (g *Game) cursorWorldCommandTarget() (int, int, geom.Point, bool) {
+	x, y := ebiten.CursorPosition()
+	cursor := geom.Point{X: float64(x), Y: float64(y)}
+	if g.units.PointInPanel(cursor, g.screenWidth, g.screenHeight) {
+		return 0, 0, geom.Point{}, false
+	}
+
+	return x, y, cursor, true
+}
+
+// drawWorld renders the visible tile slice and returns enough context for later overlay
+// drawing. Keeping this as a single pass ensures hover info, tile quality and render count
+// are all derived from the same camera state used for the frame.
+func (g *Game) drawWorld(screen *ebiten.Image) (assets.Quality, int, int, bool) {
+	visible := g.world.VisibleRange(g.cam.ViewRect(float64(g.screenWidth), float64(g.screenHeight)))
+	scale := g.cam.Scale()
+	camPos := g.cam.Position()
+	tileScreenSize := g.world.TileSize() * scale
+	drawSize := math.Max(tileScreenSize, 1)
+	quality := g.atlas.QualityForScreenSize(tileScreenSize)
+	cursorX, cursorY := ebiten.CursorPosition()
+	hoveredTileX, hoveredTileY, hovered := g.hoveredTile(cursorX, cursorY)
+
+	g.renderedTiles = 0
+	for y := visible.Min.Y; y < visible.Max.Y; y++ {
+		for x := visible.Min.X; x < visible.Max.X; x++ {
+			g.drawTile(screen, x, y, drawSize, scale, camPos, quality)
+			g.renderedTiles++
+		}
+	}
+
+	return quality, hoveredTileX, hoveredTileY, hovered
+}
+
+func (g *Game) drawTile(
 	screen *ebiten.Image,
 	tileX int,
 	tileY int,
 	drawSize float64,
-	offset float64,
 	scale float64,
 	camPos geom.Point,
+	quality assets.Quality,
 ) {
-	screenX := (float64(tileX)*g.world.TileSize() - camPos.X) * scale
-	screenY := (float64(tileY)*g.world.TileSize() - camPos.Y) * scale
+	screenX, screenY := g.tileScreenPosition(tileX, tileY, scale, camPos)
+	tileTint := g.world.TileTint(tileX, tileY)
+
+	var op ebiten.DrawImageOptions
+	tileImage := g.tile
+	if atlasTile, atlasTileSize, ok := g.tileImage(tileX, tileY, quality); ok {
+		tileImage = atlasTile
+		op.GeoM.Scale(drawSize/atlasTileSize, drawSize/atlasTileSize)
+		op.ColorScale.ScaleWithColor(tileTint)
+	} else {
+		op.GeoM.Scale(drawSize, drawSize)
+		op.ColorScale.ScaleWithColor(g.world.TileColor(tileX, tileY))
+	}
+	op.GeoM.Translate(screenX, screenY)
+
+	screen.DrawImage(tileImage, &op)
+}
+
+func (g *Game) drawTileHighlight(screen *ebiten.Image, tileX int, tileY int) {
+	scale := g.cam.Scale()
+	drawSize := math.Max(g.world.TileSize()*scale, 1)
+	screenX, screenY := g.tileScreenPosition(tileX, tileY, scale, g.cam.Position())
 	border := math.Max(1, math.Round(scale))
-	left := screenX + offset
-	top := screenY + offset
+	left := screenX
+	top := screenY
 	right := left + drawSize
 	bottom := top + drawSize
 
@@ -371,6 +374,13 @@ func (g *Game) drawTileHighlight(
 	g.drawHighlightRect(screen, left, bottom-border, drawSize, border)
 	g.drawHighlightRect(screen, left, top+border, border, math.Max(bottom-top-border*2, 0))
 	g.drawHighlightRect(screen, right-border, top+border, border, math.Max(bottom-top-border*2, 0))
+}
+
+// tileScreenPosition centralizes the world-to-screen projection for tile anchors so tile
+// drawing and highlight rendering cannot drift apart when camera math changes.
+func (g *Game) tileScreenPosition(tileX int, tileY int, scale float64, camPos geom.Point) (float64, float64) {
+	return (float64(tileX)*g.world.TileSize() - camPos.X) * scale,
+		(float64(tileY)*g.world.TileSize() - camPos.Y) * scale
 }
 
 func (g *Game) drawHighlightRect(screen *ebiten.Image, x float64, y float64, width float64, height float64) {
@@ -388,6 +398,42 @@ func (g *Game) drawFilledRect(screen *ebiten.Image, x float64, y float64, width 
 	op.ColorScale.ScaleWithColor(fill)
 
 	screen.DrawImage(g.tile, &op)
+}
+
+func (g *Game) debugText(hoveredTileX, hoveredTileY int, hovered bool) string {
+	hoveredTileText := "Hovered tile: outside world"
+	if hovered {
+		tileType := g.world.TileType(hoveredTileX, hoveredTileY)
+		hoveredTileText = fmt.Sprintf(
+			"Hovered tile: (%d, %d)  Type: %s  Speed: %.0f%%",
+			hoveredTileX,
+			hoveredTileY,
+			tileType,
+			tileType.SpeedMultiplier()*100,
+		)
+	}
+
+	debugText := fmt.Sprintf(
+		"WASD/Arrows: move  Shift: faster  Space: center  Middle mouse: drag  Wheel: zoom to cursor  Left mouse: select unit  Right mouse: move selected unit  F: fire to cursor\nTPS: %.1f  RPS: %.1f  Zoom: %.2fx  Visible tiles: %d  Camera: (%.0f, %.0f)  %s",
+		ebiten.ActualTPS(),
+		ebiten.ActualFPS(),
+		g.cam.Scale(),
+		g.renderedTiles,
+		g.cam.Position().X,
+		g.cam.Position().Y,
+		hoveredTileText,
+	)
+	if g.assetErr != nil {
+		debugText += "\nAssets fallback: " + g.assetErr.Error()
+	}
+	if g.pathErr != nil {
+		debugText += "\nPath command: " + g.pathErr.Error()
+	}
+	if g.fireErr != nil {
+		debugText += "\nFire command: " + g.fireErr.Error()
+	}
+
+	return debugText
 }
 
 func (g *Game) tileImage(x, y int, quality assets.Quality) (*ebiten.Image, float64, bool) {
