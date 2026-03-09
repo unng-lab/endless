@@ -32,6 +32,8 @@ type NonStaticUnit struct {
 	animation Animation
 	elapsed   float64
 	moveSpeed float64
+
+	queuedMove queuedMoveCommand
 }
 
 type travelState struct {
@@ -40,6 +42,14 @@ type travelState struct {
 	duration  int
 	remaining int
 	active    bool
+}
+
+// queuedMoveCommand keeps at most one deferred move order for a mobile unit.
+// While the unit is still interpolating into the center of the current tile, repeated move
+// commands only replace this pending route instead of interrupting the active segment.
+type queuedMoveCommand struct {
+	path     []geom.Point
+	hasRoute bool
 }
 
 func NewRunner(position geom.Point, focused bool, phase float64) *NonStaticUnit {
@@ -86,6 +96,7 @@ func (u *NonStaticUnit) UnitKind() Kind {
 // This keeps path traversal deterministic while avoiding visible teleportation.
 func (u *NonStaticUnit) Tick(gameTick int64, delta float64, speedMultiplier func(geom.Point) float64) {
 	if !u.Alive() {
+		u.clearQueuedMove()
 		u.clearTravel()
 		return
 	}
@@ -101,6 +112,7 @@ func (u *NonStaticUnit) Tick(gameTick int64, delta float64, speedMultiplier func
 	}
 
 	u.lastUpdateTick = gameTick
+	u.promoteQueuedMoveIfReady()
 	u.sleepTime = u.advance(delta, speedMultiplier)
 	u.travel.remaining = u.sleepTime
 }
@@ -126,11 +138,31 @@ func (u *NonStaticUnit) Name() string {
 func (u *NonStaticUnit) SetPath(path []geom.Point) {
 	if !u.IsMobile() {
 		u.path = u.path[:0]
+		u.clearQueuedMove()
 		return
 	}
 
 	u.path = append(u.path[:0], path...)
+	u.clearQueuedMove()
 	u.sleepTime = 0
+}
+
+// QueueMoveCommand applies a new move order immediately only when the unit is already at the
+// center of its current logical tile. If the unit is still finishing the current segment, the
+// route is stored as the single pending command that will replace the old path later.
+func (u *NonStaticUnit) QueueMoveCommand(path []geom.Point) {
+	if !u.IsMobile() {
+		u.path = u.path[:0]
+		u.clearQueuedMove()
+		return
+	}
+
+	if u.sleepTime > 0 {
+		u.queueNextMove(path)
+		return
+	}
+
+	u.SetPath(path)
 }
 
 func (u *NonStaticUnit) IsMobile() bool {
@@ -188,6 +220,7 @@ func (u *NonStaticUnit) Respawn() {
 	u.Health = u.MaxHealth
 	u.path = u.path[:0]
 	u.sleepTime = 0
+	u.clearQueuedMove()
 	u.clearTravel()
 }
 
@@ -205,6 +238,30 @@ func (u *NonStaticUnit) LeaveTile(stack *TileStack) {
 
 func (u *NonStaticUnit) Wake() {
 	u.sleepTime = 0
+}
+
+// promoteQueuedMoveIfReady swaps in the latest deferred move order once the previous travel
+// segment has fully completed and the unit is allowed to accept a new movement command.
+func (u *NonStaticUnit) promoteQueuedMoveIfReady() {
+	if u.sleepTime > 0 || !u.queuedMove.hasRoute {
+		return
+	}
+
+	u.path = append(u.path[:0], u.queuedMove.path...)
+	u.clearQueuedMove()
+}
+
+// queueNextMove stores a defensive copy of the next move order. Keeping only one pending
+// route matches the input rule that repeated clicks during travel should update, not stack,
+// the upcoming command.
+func (u *NonStaticUnit) queueNextMove(path []geom.Point) {
+	u.queuedMove.path = append(u.queuedMove.path[:0], path...)
+	u.queuedMove.hasRoute = true
+}
+
+func (u *NonStaticUnit) clearQueuedMove() {
+	u.queuedMove.path = u.queuedMove.path[:0]
+	u.queuedMove.hasRoute = false
 }
 
 // advance schedules movement to the next reachable waypoint and returns how many ticks the

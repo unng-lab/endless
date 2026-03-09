@@ -173,6 +173,41 @@ func TestManagerProjectileCanDamageStaticUnit(t *testing.T) {
 	}
 }
 
+func TestManagerCommandSelectedMoveQueuesLatestCommandWhileUnitTravels(t *testing.T) {
+	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
+	runner := NewRunner(geom.Point{X: 8, Y: 8}, false, 0)
+	m := NewManager(gameWorld, []Unit{runner})
+	m.selectedID = runner.UnitID()
+
+	if err := m.CommandSelectedMove(2, 0); err != nil {
+		t.Fatalf("CommandSelectedMove() initial error = %v", err)
+	}
+
+	m.Update(1, 1.0/60.0)
+	initialSleep := runner.SleepTime()
+	if initialSleep <= 0 {
+		t.Fatalf("sleepTime after first move command = %d, want a positive active travel budget", initialSleep)
+	}
+
+	if err := m.CommandSelectedMove(1, 1); err != nil {
+		t.Fatalf("CommandSelectedMove() queued error = %v", err)
+	}
+	if err := m.CommandSelectedMove(0, 0); err != nil {
+		t.Fatalf("CommandSelectedMove() overwrite queued error = %v", err)
+	}
+	if runner.SleepTime() != initialSleep {
+		t.Fatalf("sleepTime after queued commands = %d, want %d", runner.SleepTime(), initialSleep)
+	}
+
+	for tick := int64(2); tick <= int64(initialSleep)+2; tick++ {
+		m.Update(tick, 1.0/60.0)
+	}
+
+	if runner.Position != (geom.Point{X: 8, Y: 8}) {
+		t.Fatalf("position after queued manager command promotion = %+v, want %+v", runner.Position, geom.Point{X: 8, Y: 8})
+	}
+}
+
 func TestProjectileVisibilityUsesCurrentCameraState(t *testing.T) {
 	gameWorld := world.New(world.Config{Columns: 64, Rows: 64, TileSize: 16})
 	m := NewManager(gameWorld, []Unit{

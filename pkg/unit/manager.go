@@ -155,7 +155,7 @@ func (m *Manager) CommandSelectedMove(targetTileX, targetTileY int) error {
 		return err
 	}
 
-	selected.SetPath(m.worldPath(path))
+	selected.QueueMoveCommand(m.worldPath(path))
 	return nil
 }
 

@@ -99,3 +99,63 @@ func TestUnitRenderPositionInterpolatesWhileSleeping(t *testing.T) {
 		t.Fatalf("render position midway = %+v, want approximately {16 8}", got)
 	}
 }
+
+func TestUnitQueueMoveCommandDefersRouteSwitchUntilCurrentTravelCompletes(t *testing.T) {
+	u := NewRunner(geom.Point{X: 8, Y: 8}, false, 0)
+	u.SetPath([]geom.Point{
+		{X: 24, Y: 8},
+		{X: 40, Y: 8},
+	})
+
+	u.Tick(1, 1.0/60.0, nil)
+	initialSleep := u.SleepTime()
+
+	u.QueueMoveCommand([]geom.Point{{X: 24, Y: 24}})
+
+	if u.SleepTime() != initialSleep {
+		t.Fatalf("sleepTime after queued command = %d, want %d while current step is active", u.SleepTime(), initialSleep)
+	}
+	if destination, ok := u.Destination(); !ok || destination != (geom.Point{X: 40, Y: 8}) {
+		t.Fatalf("destination during active step = %+v, %v, want old active route to remain in control", destination, ok)
+	}
+
+	for tick := int64(2); tick <= 21; tick++ {
+		u.Tick(tick, 1.0/60.0, nil)
+	}
+
+	if u.Position != (geom.Point{X: 24, Y: 8}) {
+		t.Fatalf("position before queued route promotion = %+v, want %+v", u.Position, geom.Point{X: 24, Y: 8})
+	}
+
+	u.Tick(22, 1.0/60.0, nil)
+
+	if u.Position != (geom.Point{X: 24, Y: 24}) {
+		t.Fatalf("position after queued route promotion = %+v, want %+v", u.Position, geom.Point{X: 24, Y: 24})
+	}
+	if u.SleepTime() != 20 {
+		t.Fatalf("sleepTime after queued route promotion = %d, want 20", u.SleepTime())
+	}
+}
+
+func TestUnitQueueMoveCommandKeepsOnlyLatestPendingRoute(t *testing.T) {
+	u := NewRunner(geom.Point{X: 8, Y: 8}, false, 0)
+	u.SetPath([]geom.Point{
+		{X: 24, Y: 8},
+		{X: 40, Y: 8},
+	})
+
+	u.Tick(1, 1.0/60.0, nil)
+
+	u.QueueMoveCommand([]geom.Point{{X: 24, Y: 24}})
+	u.QueueMoveCommand([]geom.Point{{X: 8, Y: 8}})
+
+	for tick := int64(2); tick <= 21; tick++ {
+		u.Tick(tick, 1.0/60.0, nil)
+	}
+
+	u.Tick(22, 1.0/60.0, nil)
+
+	if u.Position != (geom.Point{X: 8, Y: 8}) {
+		t.Fatalf("position after overwriting pending route = %+v, want %+v", u.Position, geom.Point{X: 8, Y: 8})
+	}
+}
