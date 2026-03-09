@@ -117,6 +117,12 @@ func (u *NonStaticUnit) Tick(gameTick int64, delta float64, speedMultiplier func
 	u.travel.remaining = u.sleepTime
 }
 
+// ShouldUpdate keeps mobile bodies inside the regular update loop every frame so movement,
+// animation timers and queued commands continue progressing deterministically.
+func (u *NonStaticUnit) ShouldUpdate() bool {
+	return true
+}
+
 func (u *NonStaticUnit) Frame() int {
 	return u.animation.frameAt(u.elapsed)
 }
@@ -237,6 +243,7 @@ func (u *NonStaticUnit) LeaveTile(stack *TileStack) {
 }
 
 func (u *NonStaticUnit) Wake() {
+	u.WakeForUpdate()
 	u.sleepTime = 0
 }
 

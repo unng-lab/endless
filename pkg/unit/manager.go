@@ -39,6 +39,15 @@ type updateRequest struct {
 	delta float64
 }
 
+// tickableUnit describes gameplay bodies that participate in the manager's per-frame update
+// loop. Static obstacles implement it too, but stay excluded while their eternal-sleep flag
+// is set.
+type tickableUnit interface {
+	Unit
+	Tick(int64, float64, func(geom.Point) float64)
+	ShouldUpdate() bool
+}
+
 type tileKey struct {
 	x int
 	y int
@@ -281,8 +290,8 @@ func (m *Manager) processUpdates(offset, workerCount int, req updateRequest) {
 }
 
 func (m *Manager) tickUnit(unit Unit, gameTick int64, delta float64) {
-	body, ok := unit.(*NonStaticUnit)
-	if !ok {
+	body, ok := unit.(tickableUnit)
+	if !ok || !body.ShouldUpdate() {
 		return
 	}
 

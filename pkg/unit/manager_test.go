@@ -173,6 +173,28 @@ func TestManagerProjectileCanDamageStaticUnit(t *testing.T) {
 	}
 }
 
+func TestManagerSkipsStaticUnitUpdateUntilExternalWake(t *testing.T) {
+	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
+	target := NewWall(geom.Point{X: 24, Y: 24})
+	m := NewManager(gameWorld, []Unit{target})
+
+	m.Update(1, 1.0/60.0)
+	if target.LastUpdateTick() != 0 {
+		t.Fatalf("lastUpdateTick while static unit sleeps = %d, want 0", target.LastUpdateTick())
+	}
+
+	target.ApplyDamage(1)
+	m.Update(2, 1.0/60.0)
+	if target.LastUpdateTick() != 2 {
+		t.Fatalf("lastUpdateTick after external wake = %d, want 2", target.LastUpdateTick())
+	}
+
+	m.Update(3, 1.0/60.0)
+	if target.LastUpdateTick() != 2 {
+		t.Fatalf("lastUpdateTick after static unit falls asleep again = %d, want 2", target.LastUpdateTick())
+	}
+}
+
 func TestManagerCommandSelectedMoveQueuesLatestCommandWhileUnitTravels(t *testing.T) {
 	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
 	runner := NewRunner(geom.Point{X: 8, Y: 8}, false, 0)

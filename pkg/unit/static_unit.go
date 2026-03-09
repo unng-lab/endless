@@ -27,7 +27,7 @@ func NewBarricade(position geom.Point) *StaticUnit {
 }
 
 func newStaticUnit(kind Kind, position geom.Point, maxHealth int, blocksMovement bool) *StaticUnit {
-	return &StaticUnit{
+	unit := &StaticUnit{
 		BaseUnit: BaseUnit{
 			Position: position,
 		},
@@ -37,6 +37,8 @@ func newStaticUnit(kind Kind, position geom.Point, maxHealth int, blocksMovement
 		Health:         maxHealth,
 		blocksMovement: blocksMovement,
 	}
+	unit.SleepUntilExternalWake()
+	return unit
 }
 
 func (s *StaticUnit) Base() *BaseUnit {
@@ -82,6 +84,30 @@ func (s *StaticUnit) CanShoot() bool {
 	return false
 }
 
+// Tick gives static units a single update after an external wake-up and then immediately puts
+// them back into the eternal-sleep mode. This keeps future reactive logic possible without
+// letting obstacles participate in every frame by default.
+func (s *StaticUnit) Tick(gameTick int64, _ float64, _ func(geom.Point) float64) {
+	if s.UpdateSleeping() {
+		return
+	}
+
+	s.lastUpdateTick = gameTick
+	s.SleepUntilExternalWake()
+}
+
+// ShouldUpdate reports whether some external event has explicitly woken the static unit for
+// one manager tick.
+func (s *StaticUnit) ShouldUpdate() bool {
+	return !s.UpdateSleeping()
+}
+
+// Wake leaves the eternal-sleep mode so the manager may process exactly one update tick for
+// this static unit.
+func (s *StaticUnit) Wake() {
+	s.WakeForUpdate()
+}
+
 func (s *StaticUnit) Frame() int {
 	return 0
 }
@@ -107,6 +133,7 @@ func (s *StaticUnit) ApplyDamage(amount int) bool {
 		return false
 	}
 
+	s.Wake()
 	s.Health -= amount
 	return s.Health <= 0
 }
@@ -115,6 +142,7 @@ func (s *StaticUnit) Respawn() {
 	s.Position = s.SpawnPosition
 	s.Health = s.MaxHealth
 	s.clearTravel()
+	s.Wake()
 }
 
 func (s *StaticUnit) Selectable() bool {

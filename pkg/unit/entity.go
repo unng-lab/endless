@@ -40,6 +40,7 @@ type BaseUnit struct {
 	sleepTime      int
 	lastUpdateTick int64
 	travel         travelState
+	updateSleeping bool
 }
 
 func (s BaseUnit) TilePosition(tileSize float64) (int, int) {
@@ -68,6 +69,12 @@ func (s BaseUnit) SleepTime() int {
 
 func (s BaseUnit) LastUpdateTick() int64 {
 	return s.lastUpdateTick
+}
+
+// UpdateSleeping reports whether the manager must skip this unit during the main update
+// pass until some external code explicitly wakes it again.
+func (s BaseUnit) UpdateSleeping() bool {
+	return s.updateSleeping
 }
 
 func (s BaseUnit) Destination() (geom.Point, bool) {
@@ -113,4 +120,15 @@ func (s *BaseUnit) consumeReachedWaypoint(target geom.Point) bool {
 
 func (s *BaseUnit) clearTravel() {
 	s.travel = travelState{}
+}
+
+// WakeForUpdate leaves the eternal-sleep mode so the manager may call Tick again.
+func (s *BaseUnit) WakeForUpdate() {
+	s.updateSleeping = false
+}
+
+// SleepUntilExternalWake blocks future Tick calls until some external event reactivates the
+// unit. Static units use this to stay completely out of the hot update loop by default.
+func (s *BaseUnit) SleepUntilExternalWake() {
+	s.updateSleeping = true
 }

@@ -81,6 +81,26 @@ func TestStaticUnitIsAlwaysImmobile(t *testing.T) {
 	}
 }
 
+func TestStaticUnitSleepsUntilExternalWake(t *testing.T) {
+	u := NewWall(geom.Point{X: 8, Y: 8})
+
+	u.Tick(1, 1.0/60.0, nil)
+	if u.LastUpdateTick() != 0 {
+		t.Fatalf("lastUpdateTick while sleeping = %d, want 0", u.LastUpdateTick())
+	}
+
+	u.Wake()
+	u.Tick(2, 1.0/60.0, nil)
+	if u.LastUpdateTick() != 2 {
+		t.Fatalf("lastUpdateTick after wake = %d, want 2", u.LastUpdateTick())
+	}
+
+	u.Tick(3, 1.0/60.0, nil)
+	if u.LastUpdateTick() != 2 {
+		t.Fatalf("lastUpdateTick after returning to sleep = %d, want 2", u.LastUpdateTick())
+	}
+}
+
 func TestUnitRenderPositionInterpolatesWhileSleeping(t *testing.T) {
 	u := NewRunner(geom.Point{X: 8, Y: 8}, false, 0)
 	u.SetPath([]geom.Point{{X: 24, Y: 8}})
