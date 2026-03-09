@@ -8,7 +8,7 @@ import (
 
 // Unit is the common runtime type for every gameplay body managed by the scene. Concrete
 // implementations split the behavior into mobile bodies, static bodies and projectiles while
-// still letting the manager keep one heterogeneous slice.
+// still letting the manager keep one heterogeneous ordered collection.
 type Unit interface {
 	Base() *BaseUnit
 	UnitID() int64

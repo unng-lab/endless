@@ -3,8 +3,8 @@ package unit
 import "sync"
 
 // TileStack stores the deterministic unit order for one logical tile. The stack keeps only
-// stable unit identifiers so membership survives slice compaction in the manager when
-// projectiles are removed and existing unit indices shift.
+// stable unit identifiers so membership survives manager-side storage rebuilds without tying
+// tile occupancy to any particular in-memory collection layout.
 type TileStack struct {
 	mu      sync.RWMutex
 	unitIDs []int64

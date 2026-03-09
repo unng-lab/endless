@@ -75,6 +75,36 @@ func TestManagerSelectAtScreenCanSelectStaticUnit(t *testing.T) {
 	}
 }
 
+func TestManagerMovesUnitBetweenTileStacksDuringUpdate(t *testing.T) {
+	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
+	runner := NewRunner(geom.Point{X: 8, Y: 8}, false, 0)
+	m := NewManager(gameWorld, []Unit{runner})
+
+	startKey := tileKey{x: 0, y: 0}
+	if stack := m.tileStacks[startKey]; stack == nil || len(stack.UnitIDs()) != 1 {
+		t.Fatalf("start tile stack = %+v, want one registered unit", stack)
+	}
+
+	runner.SetPath([]geom.Point{{X: 24, Y: 8}})
+	m.Update(1, 1.0/60.0)
+
+	if stack := m.tileStacks[startKey]; stack != nil && len(stack.UnitIDs()) != 0 {
+		t.Fatalf("start tile stack after move = %v, want empty or removed stack", stack.UnitIDs())
+	}
+
+	targetKey := tileKey{x: 1, y: 0}
+	stack := m.tileStacks[targetKey]
+	if stack == nil {
+		t.Fatal("expected target tile stack to be created during move")
+	}
+	if got := stack.UnitIDs(); len(got) != 1 || got[0] != runner.UnitID() {
+		t.Fatalf("target tile stack = %v, want runner id %d", got, runner.UnitID())
+	}
+	if got := m.registeredTiles[runner.UnitID()]; got != targetKey {
+		t.Fatalf("registered tile = %+v, want %+v", got, targetKey)
+	}
+}
+
 func TestManagerProjectileHitsUnitOccupyingEnteredTile(t *testing.T) {
 	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
 	target := NewRunner(geom.Point{X: 37, Y: 28}, false, 0)
@@ -82,7 +112,7 @@ func TestManagerProjectileHitsUnitOccupyingEnteredTile(t *testing.T) {
 		NewRunner(geom.Point{X: 24, Y: 24}, false, 0),
 		target,
 	})
-	m.selectedID = m.units[0].UnitID()
+	m.selectedID = firstOrderedUnitID(t, m.units)
 
 	if err := m.CommandSelectedFire(geom.Point{X: 120, Y: 24}); err != nil {
 		t.Fatalf("CommandSelectedFire() error = %v", err)
@@ -94,7 +124,7 @@ func TestManagerProjectileHitsUnitOccupyingEnteredTile(t *testing.T) {
 	if target.Health != initialHealth-1 {
 		t.Fatalf("target health = %d, want %d after projectile enters occupied tile", target.Health, initialHealth-1)
 	}
-	if count := countProjectiles(m.units); count != 0 {
+	if count := countProjectiles(m.units.Snapshot()); count != 0 {
 		t.Fatalf("projectiles = %d, want 0 after hit", count)
 	}
 }
@@ -104,7 +134,7 @@ func TestManagerProjectileExpiresAfterMaxRange(t *testing.T) {
 	m := NewManager(gameWorld, []Unit{
 		NewRunner(geom.Point{X: 24, Y: 24}, false, 0),
 	})
-	m.selectedID = m.units[0].UnitID()
+	m.selectedID = firstOrderedUnitID(t, m.units)
 
 	if err := m.CommandSelectedFire(geom.Point{X: 512, Y: 24}); err != nil {
 		t.Fatalf("CommandSelectedFire() error = %v", err)
@@ -114,7 +144,7 @@ func TestManagerProjectileExpiresAfterMaxRange(t *testing.T) {
 		m.Update(1, 1.0/60.0)
 	}
 
-	if count := countProjectiles(m.units); count != 0 {
+	if count := countProjectiles(m.units.Snapshot()); count != 0 {
 		t.Fatalf("projectiles = %d, want projectile removed after max range", count)
 	}
 }
@@ -129,7 +159,7 @@ func TestManagerProjectileRespawnsUnitAtSpawnPoint(t *testing.T) {
 		NewRunner(geom.Point{X: 24, Y: 24}, false, 0),
 		target,
 	})
-	m.selectedID = m.units[0].UnitID()
+	m.selectedID = firstOrderedUnitID(t, m.units)
 
 	if err := m.CommandSelectedFire(geom.Point{X: 120, Y: 24}); err != nil {
 		t.Fatalf("CommandSelectedFire() error = %v", err)
@@ -143,7 +173,7 @@ func TestManagerProjectileRespawnsUnitAtSpawnPoint(t *testing.T) {
 	if target.Health != target.MaxHealth {
 		t.Fatalf("target health = %d, want full health %d after respawn", target.Health, target.MaxHealth)
 	}
-	if count := countProjectiles(m.units); count != 0 {
+	if count := countProjectiles(m.units.Snapshot()); count != 0 {
 		t.Fatalf("projectiles = %d, want projectile consumed on hit", count)
 	}
 }
@@ -157,7 +187,7 @@ func TestManagerProjectileCanDamageStaticUnit(t *testing.T) {
 		NewRunner(geom.Point{X: 24, Y: 24}, false, 0),
 		target,
 	})
-	m.selectedID = m.units[0].UnitID()
+	m.selectedID = firstOrderedUnitID(t, m.units)
 
 	if err := m.CommandSelectedFire(geom.Point{X: 120, Y: 24}); err != nil {
 		t.Fatalf("CommandSelectedFire() error = %v", err)
@@ -300,14 +330,14 @@ func TestProjectileVisibilityUsesCurrentCameraState(t *testing.T) {
 	m := NewManager(gameWorld, []Unit{
 		NewRunner(geom.Point{X: 24, Y: 24}, false, 0),
 	})
-	m.selectedID = m.units[0].UnitID()
+	m.selectedID = firstOrderedUnitID(t, m.units)
 
 	if err := m.CommandSelectedFire(geom.Point{X: 120, Y: 24}); err != nil {
 		t.Fatalf("CommandSelectedFire() error = %v", err)
 	}
 
 	cam := camera.New(camera.Config{})
-	projectile := firstProjectile(m.units)
+	projectile := firstProjectile(m.units.Snapshot())
 	if projectile == nil {
 		t.Fatal("expected projectile to exist")
 	}
@@ -338,4 +368,15 @@ func countProjectiles(units []Unit) int {
 		}
 	}
 	return count
+}
+
+func firstOrderedUnitID(t *testing.T, units *orderedUnitMap) int64 {
+	t.Helper()
+
+	first, ok := units.At(0)
+	if !ok || first == nil {
+		t.Fatal("expected at least one unit in ordered manager storage")
+	}
+
+	return first.UnitID()
 }

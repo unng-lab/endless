@@ -13,9 +13,6 @@ const (
 	stressStaticObjectCount   = 100000
 	stressUnitCount           = 1000
 	stressUnitSpawnIntervalMs = 100
-	stressStaticSpacingTiles  = 4
-	stressStaticHalfWidth     = 720
-	stressStaticHalfHeight    = 720
 	stressSpawnSafeRadius     = 60
 	stressJobTargetRadius     = 280
 	stressJobRetryLimit       = 64
@@ -23,6 +20,7 @@ const (
 	stressSpawnRows           = 25
 	stressSpawnSpacingTiles   = 2
 	stressActorID             = 1
+	stressStaticSeed          = 2
 )
 
 type stressScenario struct {
@@ -221,34 +219,33 @@ func (a *stressActor) randomOpenTargetTile() (int, int) {
 	return a.centerTileX, a.centerTileY
 }
 
-// buildStressStaticUnits creates the requested 100 000 static blockers around the center of
-// the world while preserving a clear central arena for delayed runner spawning.
+// buildStressStaticUnits creates the requested 100 000 static blockers by sampling unique
+// random tiles across the whole map. The center spawn arena stays clear so delayed runner
+// spawning and the first actor jobs always begin from an obstacle-free patch.
 func buildStressStaticUnits(gameWorld world.World, centerTileX, centerTileY int, blocked map[int64]struct{}) []unit.Unit {
 	staticUnits := make([]unit.Unit, 0, stressStaticObjectCount)
-	for yOffset := -stressStaticHalfHeight; yOffset <= stressStaticHalfHeight && len(staticUnits) < stressStaticObjectCount; yOffset++ {
-		tileY := centerTileY + yOffset*stressStaticSpacingTiles
-		if tileY < 0 || tileY >= gameWorld.Rows() {
+	rng := rand.New(rand.NewSource(stressStaticSeed))
+
+	for len(staticUnits) < stressStaticObjectCount {
+		tileX := rng.Intn(gameWorld.Columns())
+		tileY := rng.Intn(gameWorld.Rows())
+		if math.Abs(float64(tileX-centerTileX)) <= stressSpawnSafeRadius &&
+			math.Abs(float64(tileY-centerTileY)) <= stressSpawnSafeRadius {
+			continue
+		}
+		key := packTile(tileX, tileY)
+		if _, occupied := blocked[key]; occupied {
 			continue
 		}
 
-		for xOffset := -stressStaticHalfWidth; xOffset <= stressStaticHalfWidth && len(staticUnits) < stressStaticObjectCount; xOffset++ {
-			tileX := centerTileX + xOffset*stressStaticSpacingTiles
-			if tileX < 0 || tileX >= gameWorld.Columns() {
-				continue
-			}
-			if math.Abs(float64(tileX-centerTileX)) <= stressSpawnSafeRadius &&
-				math.Abs(float64(tileY-centerTileY)) <= stressSpawnSafeRadius {
-				continue
-			}
-
-			blocked[packTile(tileX, tileY)] = struct{}{}
-			position := cellAnchor(tileX, tileY, gameWorld.TileSize())
-			if (xOffset+yOffset)&1 == 0 {
-				staticUnits = append(staticUnits, unit.NewWall(position))
-			} else {
-				staticUnits = append(staticUnits, unit.NewBarricade(position))
-			}
+		blocked[key] = struct{}{}
+		position := cellAnchor(tileX, tileY, gameWorld.TileSize())
+		if rng.Intn(2) == 0 {
+			staticUnits = append(staticUnits, unit.NewWall(position))
+			continue
 		}
+
+		staticUnits = append(staticUnits, unit.NewBarricade(position))
 	}
 
 	return staticUnits
