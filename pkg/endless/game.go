@@ -31,8 +31,7 @@ const (
 	minZoom  = 0.2
 	maxZoom  = 5.0
 	zoomStep = 0.12
-	panSpeed = 1400.0
-	tps      = 60.0
+	panStep  = 1400.0 / 60.0
 )
 
 type Game struct {
@@ -146,7 +145,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	g.updateScreenSize(screen)
 
 	visible, quality, hoveredTileX, hoveredTileY, hovered := g.drawWorld(screen)
-	if err := g.units.Draw(screen, g.cam, quality, visible, true); err != nil && g.assetErr == nil {
+	if err := g.units.Draw(screen, g.cam, quality, visible, false); err != nil && g.assetErr == nil {
 		g.assetErr = err
 	}
 
@@ -203,7 +202,7 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 }
 
 func (g *Game) handleKeyboardPan() {
-	speed := panSpeed / g.cam.Scale() / tps
+	speed := panStep / g.cam.Scale()
 	if ebiten.IsKeyPressed(ebiten.KeyShift) {
 		speed *= 2
 	}

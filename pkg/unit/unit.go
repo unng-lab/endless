@@ -17,8 +17,8 @@ const (
 )
 
 var runnerAnimation = Animation{
-	FrameCount:    8,
-	FrameDuration: 0.1,
+	FrameCount: 8,
+	FrameTicks: 6,
 }
 
 type NonStaticUnit struct {
@@ -29,10 +29,10 @@ type NonStaticUnit struct {
 	MaxHealth     int
 	Health        int
 
-	animation Animation
-	elapsed   float64
-	moveSpeed float64
-	speedAt   func(geom.Point) float64
+	animation        Animation
+	animationTicks   int
+	moveSpeedPerTick float64
+	speedAt          func(geom.Point) float64
 
 	queuedMove queuedMoveCommand
 	moveJob    moveJobState
@@ -56,7 +56,10 @@ type queuedMoveCommand struct {
 	hasRoute bool
 }
 
-func NewRunner(position geom.Point, focused bool, phase float64) *NonStaticUnit {
+// NewRunner builds one mobile unit whose movement speed is expressed directly in world
+// units per simulation tick. The animation offset uses the same tick scale so callers may
+// stagger the initial frame without any extra unit conversion.
+func NewRunner(position geom.Point, focused bool, animationTickOffset int) *NonStaticUnit {
 	kind := KindRunner
 	if focused {
 		kind = KindRunnerFocused
@@ -66,13 +69,13 @@ func NewRunner(position geom.Point, focused bool, phase float64) *NonStaticUnit 
 		BaseUnit: BaseUnit{
 			Position: position,
 		},
-		SpawnPosition: position,
-		Kind:          kind,
-		MaxHealth:     3,
-		Health:        3,
-		animation:     runnerAnimation,
-		elapsed:       phase,
-		moveSpeed:     48,
+		SpawnPosition:    position,
+		Kind:             kind,
+		MaxHealth:        3,
+		Health:           3,
+		animation:        runnerAnimation,
+		animationTicks:   normalizeAnimationOffset(animationTickOffset, runnerAnimation),
+		moveSpeedPerTick: 0.8,
 	}
 }
 
@@ -125,7 +128,7 @@ func (u *NonStaticUnit) UpdateVisible(gameTick int64) {
 		return
 	}
 
-	u.elapsed += fixedTickSeconds
+	u.animationTicks++
 	u.AdvanceVisibleTravel(gameTick)
 }
 
@@ -136,7 +139,7 @@ func (u *NonStaticUnit) ShouldUpdate() bool {
 }
 
 func (u *NonStaticUnit) Frame() int {
-	return u.animation.frameAt(u.elapsed)
+	return u.animation.frameAt(u.animationTicks)
 }
 
 func (u *NonStaticUnit) Name() string {
@@ -186,7 +189,7 @@ func (u *NonStaticUnit) QueueMoveCommand(path []geom.Point) {
 }
 
 func (u *NonStaticUnit) IsMobile() bool {
-	return u.Alive() && u.moveSpeed > 0
+	return u.Alive() && u.moveSpeedPerTick > 0
 }
 
 func (u *NonStaticUnit) BlocksMovement() bool {
@@ -323,7 +326,7 @@ func (u *NonStaticUnit) prepareForRemovalAfterDeath() {
 // unit should stay asleep before the next logical update. Returning a sleep budget instead
 // of applying continuous movement each frame keeps all units aligned to the fixed game tick.
 func (u *NonStaticUnit) advance() int {
-	if len(u.path) == 0 || u.moveSpeed <= 0 {
+	if len(u.path) == 0 || u.moveSpeedPerTick <= 0 {
 		u.clearTravel()
 		return 0
 	}
@@ -348,10 +351,10 @@ func (u *NonStaticUnit) advance() int {
 }
 
 // moveSpeedAtCurrentTile resolves the effective movement speed for the tile the unit is
-// currently standing on. Terrain modifiers are applied here once so advance can stay focused
-// on route progression and travel scheduling.
+// currently standing on. The returned value is expressed in world units per tick so advance
+// may convert distance directly into a discrete sleep budget with no additional time-unit conversion.
 func (u *NonStaticUnit) moveSpeedAtCurrentTile() (float64, bool) {
-	currentSpeed := u.moveSpeed
+	currentSpeed := u.moveSpeedPerTick
 	if u.speedAt == nil {
 		return currentSpeed, currentSpeed > 0
 	}
@@ -372,7 +375,7 @@ func (u *NonStaticUnit) startTravel(target geom.Point, currentSpeed float64) int
 	dx := target.X - u.Position.X
 	dy := target.Y - u.Position.Y
 	distance := math.Hypot(dx, dy)
-	travelTicks := sleepTicks(distance / currentSpeed)
+	travelTicks := travelTicksForDistance(distance, currentSpeed)
 
 	u.travel = travelState{
 		from:            u.RenderPosition(),
@@ -388,17 +391,38 @@ func (u *NonStaticUnit) startTravel(target geom.Point, currentSpeed float64) int
 	return travelTicks
 }
 
-// sleepTicks converts a continuous duration into a minimum number of simulation ticks.
-// Ceil is important here: when travel does not divide evenly by the fixed simulation step, we must reserve the
-// extra partial tick so render interpolation never finishes before the logical move does.
-func sleepTicks(duration float64) int {
-	if duration <= 0 {
+// travelTicksForDistance converts a segment length and a tick-based speed into the minimum
+// number of update ticks required to complete the segment. Ceil is important here: when the
+// distance does not divide evenly by the per-tick speed, the extra partial tick keeps visual
+// interpolation from finishing before the logical travel budget has been exhausted.
+func travelTicksForDistance(distance, speedPerTick float64) int {
+	if distance <= 0 || speedPerTick <= 0 {
 		return 0
 	}
 
-	ticks := int(math.Ceil(duration / fixedTickSeconds))
+	ticks := int(math.Ceil(distance / speedPerTick))
 	if ticks < 1 {
 		return 1
 	}
 	return ticks
+}
+
+// normalizeAnimationOffset folds an arbitrary initial tick offset into the animation cycle so
+// callers may stagger spawned runners without having to manage the cycle length themselves.
+func normalizeAnimationOffset(animationTickOffset int, animation Animation) int {
+	if animation.FrameCount <= 0 || animation.FrameTicks <= 0 {
+		return 0
+	}
+
+	cycleTicks := animation.FrameCount * animation.FrameTicks
+	if cycleTicks <= 0 {
+		return 0
+	}
+
+	offset := animationTickOffset % cycleTicks
+	if offset < 0 {
+		offset += cycleTicks
+	}
+
+	return offset
 }

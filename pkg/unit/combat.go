@@ -9,13 +9,13 @@ import (
 )
 
 const (
-	projectileSpeed       = 320.0
-	projectileDamage      = 1
-	projectileRadiusScale = 0.16
-	projectileRangeTiles  = 14.0
-	projectileEntryOffset = 0.05
-	impactDuration        = 0.18
-	impactRadiusScale     = 0.55
+	projectileSpeedPerTick = 320.0 / 60.0
+	projectileDamage       = 1
+	projectileRadiusScale  = 0.16
+	projectileRangeTiles   = 14.0
+	projectileEntryOffset  = 0.05
+	impactDurationTicks    = 11
+	impactRadiusScale      = 0.55
 )
 
 type Projectile struct {
@@ -60,7 +60,7 @@ func newProjectile(owner *NonStaticUnit, target geom.Point, gameWorld world.Worl
 		Radius:              gameWorld.TileSize() * projectileRadiusScale,
 		Damage:              projectileDamage,
 		impactRadius:        gameWorld.TileSize() * impactRadiusScale,
-		impactDurationTicks: sleepTicks(impactDuration),
+		impactDurationTicks: impactDurationTicks,
 	}, nil
 }
 
@@ -248,7 +248,7 @@ func (p *Projectile) startTravel(target geom.Point) int {
 	dx := target.X - p.Position.X
 	dy := target.Y - p.Position.Y
 	distance := math.Hypot(dx, dy)
-	travelTicks := sleepTicks(distance / projectileSpeed)
+	travelTicks := travelTicksForDistance(distance, projectileSpeedPerTick)
 
 	p.travel = travelState{
 		from:            p.RenderPosition(),

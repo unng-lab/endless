@@ -37,8 +37,6 @@ type Unit interface {
 	ShouldUpdate() bool
 }
 
-const fixedTickSeconds = 1.0 / 60.0
-
 // BaseUnit stores the spatial and tick-based movement state shared by all world units.
 // Concrete unit kinds embed it so interpolation, tile lookup and visibility bookkeeping stay
 // identical across runners, obstacles and projectiles.

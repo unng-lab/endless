@@ -603,7 +603,7 @@ func onlyProjectile(t *testing.T, m *Manager) *Projectile {
 func advanceProjectileExplosion(t *testing.T, m *Manager) {
 	t.Helper()
 
-	explosionTicks := sleepTicks(impactDuration) + 1
+	explosionTicks := impactDurationTicks + 1
 	for tick := int64(0); tick < int64(explosionTicks); tick++ {
 		m.Update(100 + tick)
 	}

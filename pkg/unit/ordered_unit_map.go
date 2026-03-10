@@ -50,18 +50,20 @@ func (m *orderedUnitMap) SlotsLen() int {
 	return len(m.order)
 }
 
-// HasPendingRemovalWork reports whether the backing slice still contains a deleted unit whose
-// manager-side cleanup has not yet happened. Update uses this to flush tile state even when no
-// live unit remains in storage.
+// HasPendingRemovalWork reports whether ordered storage still contains at least one deleted
+// unit whose manager-side cleanup has not finished yet. Manager.Update uses this to keep one
+// more worker pass alive after the last live unit disappears so tile stacks and job reports
+// are still flushed for deferred-deletion entries.
 func (m *orderedUnitMap) HasPendingRemovalWork() bool {
 	if m == nil {
 		return false
 	}
 
 	for _, unit := range m.order {
-		if unit == nil || !unit.Base().PendingRemoval() || unit.Base().RemovalHandled() {
+		if unit == nil || unit.Base().RemovalHandled() || !unit.Base().PendingRemoval() {
 			continue
 		}
+
 		return true
 	}
 

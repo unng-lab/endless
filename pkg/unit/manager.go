@@ -33,13 +33,11 @@ type Manager struct {
 	nextID             int64
 	lastGameTick       int64
 
-	workers        []chan updateRequest
+	workers        []chan int64
 	updateWG       sync.WaitGroup
 	jobReportsMu   sync.Mutex
 	tileRegistryMu sync.RWMutex
 }
-
-type updateRequest int64
 
 // tileEntryReactiveUnit describes units whose side effects must run exactly at the moment the
 // manager has already moved the unit into a new tile and updated tile-stack membership.
@@ -86,7 +84,7 @@ func (m *Manager) Update(gameTick int64) {
 	if m.units.Len() > 0 || m.units.HasPendingRemovalWork() {
 		for i := range m.workers {
 			m.updateWG.Add(1)
-			m.workers[i] <- updateRequest(gameTick)
+			m.workers[i] <- gameTick
 		}
 		m.updateWG.Wait()
 		if _, ok := m.selectedUnit(); !ok {
@@ -325,21 +323,21 @@ func (m *Manager) startWorkers() {
 	}
 	log.Printf("[startup] units: starting %d update workers", workerCount)
 
-	m.workers = make([]chan updateRequest, 0, workerCount)
+	m.workers = make([]chan int64, 0, workerCount)
 	for i := range workerCount {
-		ch := make(chan updateRequest, 1)
+		ch := make(chan int64, 1)
 		m.workers = append(m.workers, ch)
 		go m.workerRun(i, workerCount, ch)
 	}
 }
 
-func (m *Manager) workerRun(offset, workerCount int, updates <-chan updateRequest) {
+func (m *Manager) workerRun(offset, workerCount int, updates <-chan int64) {
 	for req := range updates {
 		m.processUpdates(offset, workerCount, req)
 	}
 }
 
-func (m *Manager) processUpdates(offset, workerCount int, req updateRequest) {
+func (m *Manager) processUpdates(offset, workerCount int, req int64) {
 	defer m.updateWG.Done()
 
 	stride := workerCount * updateBatchSize
@@ -353,7 +351,7 @@ func (m *Manager) processUpdates(offset, workerCount int, req updateRequest) {
 			if !ok {
 				continue
 			}
-			m.tickUnit(current, int64(req))
+			m.tickUnit(current, req)
 		}
 	}
 }

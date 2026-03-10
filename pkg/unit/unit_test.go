@@ -75,6 +75,22 @@ func TestUnitVisibleOnScreenReturnsFalseForOffscreenUnit(t *testing.T) {
 	}
 }
 
+func TestRunnerAnimationUsesTickOffsetsAndTickStep(t *testing.T) {
+	u := NewRunner(geom.Point{X: 8, Y: 8}, false, 7)
+
+	if got := u.Frame(); got != 1 {
+		t.Fatalf("initial frame from tick offset = %d, want 1", got)
+	}
+
+	for tick := int64(1); tick <= 5; tick++ {
+		u.UpdateVisible(tick)
+	}
+
+	if got := u.Frame(); got != 2 {
+		t.Fatalf("frame after five visible ticks = %d, want 2", got)
+	}
+}
+
 func TestStaticUnitIsAlwaysImmobile(t *testing.T) {
 	u := NewWall(geom.Point{X: 8, Y: 8})
 

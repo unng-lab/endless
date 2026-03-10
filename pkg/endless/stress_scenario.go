@@ -12,18 +12,18 @@ import (
 )
 
 const (
-	stressStaticObjectCount   = 100000
-	stressUnitCount           = 1000
-	stressUnitSpawnIntervalMs = 10
-	stressSpawnSafeRadius     = 60
-	stressJobTargetRadius     = 280
-	stressJobRetryLimit       = 64
-	stressSpawnColumns        = 40
-	stressSpawnRows           = 25
-	stressSpawnSpacingTiles   = 2
-	stressActorID             = 1
-	stressStaticSeed          = 2
-	stressSeedLogInterval     = 10000
+	stressStaticObjectCount      = 100000
+	stressUnitCount              = 1000
+	stressUnitSpawnIntervalTicks = 1
+	stressSpawnSafeRadius        = 60
+	stressJobTargetRadius        = 280
+	stressJobRetryLimit          = 64
+	stressSpawnColumns           = 40
+	stressSpawnRows              = 25
+	stressSpawnSpacingTiles      = 2
+	stressActorID                = 1
+	stressStaticSeed             = 2
+	stressSeedLogInterval        = 10000
 )
 
 type stressScenario struct {
@@ -135,9 +135,9 @@ func (s *stressScenario) JobFailedCount() int64 {
 	return s.actor.failedJobs
 }
 
-// spawnReadyUnits releases runners one by one using the requested 100 ms cadence. The actor
-// starts managing each unit immediately so the new runner receives its first move job before
-// the simulation step of the same tick.
+// spawnReadyUnits releases runners one by one using a fixed tick cadence. The actor starts
+// managing each unit immediately so the new runner receives its first move job before the
+// simulation step of the same tick.
 func (s *stressScenario) spawnReadyUnits(gameTick int64, manager *unit.Manager) {
 	for s.spawnedUnits < len(s.pendingSpawnPoints) && gameTick >= s.nextSpawnTick {
 		spawnIndex := s.spawnedUnits
@@ -145,7 +145,7 @@ func (s *stressScenario) spawnReadyUnits(gameTick int64, manager *unit.Manager) 
 		runnerID := manager.AddUnit(unit.NewRunner(
 			spawnPos,
 			spawnIndex%2 == 1,
-			float64(spawnIndex%8)*0.05,
+			(spawnIndex%8)*3,
 		))
 		s.actor.RegisterUnit(runnerID)
 		s.spawnedUnits++
@@ -325,7 +325,7 @@ func buildStressSpawnPoints(gameWorld world.World, centerTileX, centerTileY int)
 }
 
 func spawnIntervalTicks() int64 {
-	return int64(math.Round(stressUnitSpawnIntervalMs / (1000.0 / tps)))
+	return stressUnitSpawnIntervalTicks
 }
 
 func packTile(tileX, tileY int) int64 {

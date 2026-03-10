@@ -2,19 +2,21 @@ package unit
 
 // Animation describes a looped sprite animation.
 type Animation struct {
-	FrameCount    int
-	FrameDuration float64
+	FrameCount int
+	FrameTicks int
 }
 
-func (a Animation) frameAt(elapsed float64) int {
+// frameAt resolves the current sprite frame from a pure tick counter so animation timing stays
+// in the same unit system as movement and sleep scheduling.
+func (a Animation) frameAt(animationTicks int) int {
 	if a.FrameCount <= 0 {
 		return 0
 	}
 
-	frameDuration := a.FrameDuration
-	if frameDuration <= 0 {
-		frameDuration = 0.1
+	frameTicks := a.FrameTicks
+	if frameTicks <= 0 {
+		frameTicks = 1
 	}
 
-	return int(elapsed/frameDuration) % a.FrameCount
+	return (animationTicks / frameTicks) % a.FrameCount
 }
