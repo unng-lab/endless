@@ -44,6 +44,7 @@ type Game struct {
 	scenario gameScenario
 
 	tileRenderWorkers []chan tileRenderRequest
+	tileRenderTargets []*ebiten.Image
 	tileRenderWG      sync.WaitGroup
 
 	screenWidth  int
@@ -368,12 +369,11 @@ func (g *Game) drawWorld(screen *ebiten.Image) (image.Rectangle, assets.Quality,
 	cursorX, cursorY := ebiten.CursorPosition()
 	hoveredTileX, hoveredTileY, hovered := g.hoveredTile(cursorX, cursorY)
 
-	tileCommands, err := g.prepareVisibleTileDrawCommands(visible, drawSize, scale, camPos, quality)
+	renderedTiles, err := g.drawVisibleTiles(screen, visible, drawSize, scale, camPos, quality)
 	if err != nil && g.assetErr == nil {
 		g.assetErr = err
 	}
-	g.renderedTiles = len(tileCommands)
-	g.drawTileCommands(screen, tileCommands)
+	g.renderedTiles = renderedTiles
 
 	return visible, quality, hoveredTileX, hoveredTileY, hovered
 }

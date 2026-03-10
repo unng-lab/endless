@@ -14,24 +14,26 @@ import (
 
 const tileRenderBatchSize = 32
 
-// tileDrawCommand stores one already prepared terrain draw call so worker goroutines can
-// parallelize all per-tile math and asset lookup while the main draw thread only replays the
-// immutable commands onto the Ebiten screen in deterministic row-major order.
+// tileDrawCommand stores one prepared terrain draw call that can be replayed onto any Ebiten
+// image target without recalculating the tile's asset choice, tint or screen transform.
 type tileDrawCommand struct {
 	image   *ebiten.Image
 	options ebiten.DrawImageOptions
 }
 
-// tileRenderRequest holds one frame-local tile rendering job shared by every worker. Workers
-// receive the same request value and write to disjoint command indexes determined by their
-// offset, mirroring the same strided batching pattern that the unit update pool already uses.
+// tileRenderRequest describes one frame-local worker job that renders a stable subset of the
+// current visible tile range into the worker's dedicated offscreen layer. Each worker keeps its
+// own destination image because Ebiten's DrawImage mutates temporary buffers on the destination
+// image itself, so sharing one screen target across goroutines would race internally.
 type tileRenderRequest struct {
+	target   *ebiten.Image
+	minIndex int
+	maxIndex int
 	visible  image.Rectangle
 	drawSize float64
 	scale    float64
 	camPos   geom.Point
 	quality  assets.Quality
-	commands []tileDrawCommand
 	errSink  *tileRenderErrorSink
 }
 
@@ -85,44 +87,72 @@ func (g *Game) tileRenderWorker(offset, workerCount int, requests <-chan tileRen
 	}
 }
 
-// prepareVisibleTileDrawCommands allocates the frame-local command buffer and asks the worker
-// pool to fill it with the same tile order the old single-threaded renderer used. The returned
-// slice is safe to replay sequentially on the Ebiten screen after the wait ends.
-func (g *Game) prepareVisibleTileDrawCommands(
+// ensureTileRenderTargets grows or recreates the per-worker offscreen layers so every render
+// worker can draw directly into its own Ebiten image without sharing the main screen target.
+func (g *Game) ensureTileRenderTargets(width int, height int) {
+	if width <= 0 || height <= 0 || len(g.tileRenderWorkers) == 0 {
+		g.tileRenderTargets = nil
+		return
+	}
+
+	if len(g.tileRenderTargets) != len(g.tileRenderWorkers) {
+		g.tileRenderTargets = make([]*ebiten.Image, len(g.tileRenderWorkers))
+	}
+
+	for i := range g.tileRenderTargets {
+		target := g.tileRenderTargets[i]
+		if target != nil && target.Bounds().Dx() == width && target.Bounds().Dy() == height {
+			continue
+		}
+		g.tileRenderTargets[i] = ebiten.NewImage(width, height)
+	}
+}
+
+// drawVisibleTiles renders the currently visible terrain tiles. When workers are available they
+// draw directly into dedicated offscreen layers and the main thread composites the finished
+// layers onto the frame screen after every worker completes.
+func (g *Game) drawVisibleTiles(
+	screen *ebiten.Image,
 	visible image.Rectangle,
 	drawSize float64,
 	scale float64,
 	camPos geom.Point,
 	quality assets.Quality,
-) ([]tileDrawCommand, error) {
+) (int, error) {
 	totalVisibleTiles := visible.Dx() * visible.Dy()
 	if totalVisibleTiles <= 0 {
-		return nil, nil
+		return 0, nil
 	}
 
-	commands := make([]tileDrawCommand, totalVisibleTiles)
 	req := tileRenderRequest{
+		minIndex: 0,
+		maxIndex: totalVisibleTiles,
 		visible:  visible,
 		drawSize: drawSize,
 		scale:    scale,
 		camPos:   camPos,
 		quality:  quality,
-		commands: commands,
 		errSink:  &tileRenderErrorSink{},
 	}
 
 	if len(g.tileRenderWorkers) == 0 {
-		g.processTileRenderRequest(0, 1, req)
-		return commands, req.errSink.load()
+		g.drawTileRange(screen, 0, 1, req)
+		return totalVisibleTiles, req.errSink.load()
 	}
 
+	g.ensureTileRenderTargets(screen.Bounds().Dx(), screen.Bounds().Dy())
 	g.tileRenderWG.Add(len(g.tileRenderWorkers))
-	for _, worker := range g.tileRenderWorkers {
+	for i, worker := range g.tileRenderWorkers {
+		req.target = g.tileRenderTargets[i]
 		worker <- req
 	}
 	g.tileRenderWG.Wait()
 
-	return commands, req.errSink.load()
+	for _, layer := range g.tileRenderTargets {
+		screen.DrawImage(layer, nil)
+	}
+
+	return totalVisibleTiles, req.errSink.load()
 }
 
 func (g *Game) processTileRenderRequest(offset, workerCount int, req tileRenderRequest) {
@@ -132,7 +162,19 @@ func (g *Game) processTileRenderRequest(offset, workerCount int, req tileRenderR
 		}
 	}()
 
-	if len(req.commands) == 0 {
+	if req.target == nil {
+		return
+	}
+
+	req.target.Clear()
+	g.drawTileRange(req.target, offset, workerCount, req)
+}
+
+// drawTileRange renders one worker's strided tile subset into the given target image. The
+// min/max indexes keep the frame-local tile interval explicit while the strided stepping mirrors
+// the same worker partitioning model that unit updates already use.
+func (g *Game) drawTileRange(dst *ebiten.Image, offset int, workerCount int, req tileRenderRequest) {
+	if dst == nil || req.maxIndex <= req.minIndex {
 		return
 	}
 
@@ -142,10 +184,10 @@ func (g *Game) processTileRenderRequest(offset, workerCount int, req tileRenderR
 	}
 
 	stride := workerCount * tileRenderBatchSize
-	for blockStart := offset * tileRenderBatchSize; blockStart < len(req.commands); blockStart += stride {
+	for blockStart := req.minIndex + offset*tileRenderBatchSize; blockStart < req.maxIndex; blockStart += stride {
 		for indexOffset := 0; indexOffset < tileRenderBatchSize; indexOffset++ {
 			commandIndex := blockStart + indexOffset
-			if commandIndex >= len(req.commands) {
+			if commandIndex >= req.maxIndex {
 				break
 			}
 
@@ -154,14 +196,15 @@ func (g *Game) processTileRenderRequest(offset, workerCount int, req tileRenderR
 			if err != nil {
 				req.errSink.store(err)
 			}
-			req.commands[commandIndex] = command
+			dst.DrawImage(command.image, &command.options)
 		}
 	}
 }
 
-// buildTileDrawCommand resolves every per-tile render decision up front so replay stays a
-// trivial DrawImage call on the main thread. Atlas lookup failures intentionally fall back to
-// a solid-color tile image while still returning the original error to the caller.
+// buildTileDrawCommand resolves every per-tile render decision up front so a caller can execute
+// the draw on any destination image immediately after the command is prepared. Atlas lookup
+// failures intentionally fall back to a solid-color tile image while still returning the
+// original error to the caller.
 func (g *Game) buildTileDrawCommand(
 	tileX int,
 	tileY int,
@@ -186,12 +229,6 @@ func (g *Game) buildTileDrawCommand(
 	command.options.GeoM.Translate(screenX, screenY)
 
 	return command, err
-}
-
-func (g *Game) drawTileCommands(screen *ebiten.Image, commands []tileDrawCommand) {
-	for _, command := range commands {
-		screen.DrawImage(command.image, &command.options)
-	}
 }
 
 // tileCoordinatesForVisibleIndex converts one stable row-major command index back into tile
