@@ -24,27 +24,21 @@ type Manager struct {
 
 	units *orderedUnitMap
 
-	jobReports      []JobReport
-	tileStacks      map[tileKey]*TileStack
-	registeredTiles map[int64]tileKey
-	selectedID      int64
-	nextID          int64
+	bufferedJobReports map[int64][]JobReport
+	tileStacks         map[tileKey]*TileStack
+	registeredTiles    map[int64]tileKey
+	selectedID         int64
+	nextID             int64
 
 	workers        []chan updateRequest
 	updateWG       sync.WaitGroup
+	jobReportsMu   sync.Mutex
 	tileRegistryMu sync.RWMutex
 }
 
 type updateRequest struct {
 	tick  int64
 	delta float64
-}
-
-// transientUnit marks short-lived scene objects that must disappear from manager storage once
-// their self-managed lifecycle reports completion.
-type transientUnit interface {
-	Unit
-	IsActive() bool
 }
 
 // tileEntryReactiveUnit describes units whose side effects must run exactly at the moment the
@@ -64,30 +58,28 @@ type tileKey struct {
 // runtime path that will later be used for dynamic spawns.
 func NewManager(gameWorld world.World) *Manager {
 	m := &Manager{
-		world:           gameWorld,
-		renderer:        NewRenderer(),
-		units:           newOrderedUnitMap(0),
-		tileStacks:      make(map[tileKey]*TileStack),
-		registeredTiles: make(map[int64]tileKey),
+		world:              gameWorld,
+		renderer:           NewRenderer(),
+		units:              newOrderedUnitMap(0),
+		bufferedJobReports: make(map[int64][]JobReport),
+		tileStacks:         make(map[tileKey]*TileStack),
+		registeredTiles:    make(map[int64]tileKey),
 	}
 	m.startWorkers()
 	return m
 }
 
 func (m *Manager) Update(gameTick int64, delta float64) {
-	if m.units.Len() > 0 {
+	if m.units.Len() > 0 || m.units.HasPendingRemovalWork() {
 		for i := range m.workers {
 			m.updateWG.Add(1)
 			m.workers[i] <- updateRequest{tick: gameTick, delta: delta}
 		}
 		m.updateWG.Wait()
-		m.removeInactiveTransientUnits()
 		if _, ok := m.selectedUnit(); !ok {
 			m.selectedID = 0
 		}
 	}
-
-	m.collectUnitJobReports()
 }
 
 // Draw renders every tile-registered world body in the same tile order as the visible terrain
@@ -170,7 +162,7 @@ func (m *Manager) CommandSelectedMove(targetTileX, targetTileY int) error {
 }
 
 // AssignMoveJob resolves a path for the actor-issued job and binds that job to the unit so
-// completion or cancellation can later be reported back through DrainJobReports.
+// completion or cancellation can later be drained through DrainUnitJobReports for that unit.
 func (m *Manager) AssignMoveJob(job MoveJob) error {
 	current, ok := m.unitByID(job.UnitID)
 	if !ok {
@@ -233,6 +225,7 @@ func (m *Manager) AddUnit(body Unit) int64 {
 	if body == nil {
 		return 0
 	}
+	body.Base().ClearRemovalMark()
 
 	if body.UnitID() == 0 {
 		m.nextID++
@@ -247,17 +240,37 @@ func (m *Manager) AddUnit(body Unit) int64 {
 	return body.UnitID()
 }
 
-// DrainJobReports returns all actor-facing status changes emitted since the previous drain.
-// The manager aggregates reports both from job assignment failures and from units that finish
-// or lose ownership of their active move job during simulation.
-func (m *Manager) DrainJobReports() []JobReport {
-	m.collectUnitJobReports()
-	if len(m.jobReports) == 0 {
+// DrainUnitJobReports returns all actor-facing status changes currently associated with one
+// concrete unit. Reports normally stay owned by the unit itself, but the manager keeps a
+// buffered tail for assignment failures or for units that were already removed before the
+// actor had a chance to read their final status.
+func (m *Manager) DrainUnitJobReports(unitID int64) []JobReport {
+	if m == nil || unitID == 0 {
 		return nil
 	}
 
-	reports := append([]JobReport(nil), m.jobReports...)
-	m.jobReports = m.jobReports[:0]
+	reports := m.drainBufferedJobReports(unitID)
+	current, ok := m.unitByID(unitID)
+	if !ok {
+		if len(reports) == 0 {
+			return nil
+		}
+		return reports
+	}
+
+	reporter, ok := current.(jobReportingUnit)
+	if !ok {
+		if len(reports) == 0 {
+			return nil
+		}
+		return reports
+	}
+
+	reports = append(reports, reporter.drainJobReports()...)
+	if len(reports) == 0 {
+		return nil
+	}
+
 	return reports
 }
 
@@ -315,13 +328,13 @@ func (m *Manager) processUpdates(offset, workerCount int, req updateRequest) {
 	defer m.updateWG.Done()
 
 	stride := workerCount * updateBatchSize
-	for blockStart := offset * updateBatchSize; blockStart < m.units.Len(); blockStart += stride {
+	for blockStart := offset * updateBatchSize; blockStart < m.units.SlotsLen(); blockStart += stride {
 		for j := 0; j < updateBatchSize; j++ {
 			idx := blockStart + j
-			if idx >= m.units.Len() {
+			if idx >= m.units.SlotsLen() {
 				break
 			}
-			current, ok := m.units.At(idx)
+			current, ok := m.units.SlotAt(idx)
 			if !ok {
 				continue
 			}
@@ -331,12 +344,23 @@ func (m *Manager) processUpdates(offset, workerCount int, req updateRequest) {
 }
 
 func (m *Manager) tickUnit(unit Unit, gameTick int64, delta float64) {
-	if unit == nil || !unit.ShouldUpdate() {
+	if unit == nil {
+		return
+	}
+	if unit.Base().PendingRemoval() {
+		m.retireDeletedUnit(unit)
+		return
+	}
+	if !unit.ShouldUpdate() {
 		return
 	}
 
 	previousTileX, previousTileY := unit.Base().TilePosition(m.world.TileSize())
 	unit.Tick(gameTick, delta, m.tileSpeedMultiplierAt)
+	if unit.Base().PendingRemoval() {
+		m.retireDeletedUnit(unit)
+		return
+	}
 	if !unitUsesTileStack(unit) {
 		return
 	}
@@ -353,28 +377,28 @@ func (m *Manager) tickUnit(unit Unit, gameTick int64, delta float64) {
 	)
 }
 
-// removeInactiveTransientUnits compacts manager storage after worker ticks finish so short-
-// lived units such as projectiles disappear from ordered storage and tile registration only
-// once their own lifecycle has reported completion. The sweep stays separate from worker
-// updates because the ordered map cannot be mutated safely while workers still iterate it.
-func (m *Manager) removeInactiveTransientUnits() {
-	active := newOrderedUnitMap(m.units.Len())
-	m.units.Range(func(current Unit) bool {
-		if body, ok := current.(transientUnit); ok && !body.IsActive() {
-			m.tileRegistryMu.RLock()
-			registeredKey, isRegistered := m.registeredTiles[current.UnitID()]
-			m.tileRegistryMu.RUnlock()
-			if isRegistered {
-				m.unregisterUnitFromTile(current, registeredKey)
-			}
-			return true
-		}
+// retireDeletedUnit performs the immediate post-death bookkeeping for a unit that has already
+// transitioned into the deleted state. The ordered slot stays occupied until some future AddUnit
+// call reuses it, but tile registration and pending job reports must be flushed right away.
+func (m *Manager) retireDeletedUnit(unit Unit) {
+	if m == nil || unit == nil || !unit.Base().PendingRemoval() {
+		return
+	}
+	if unit.Base().RemovalHandled() {
+		return
+	}
 
-		active.Set(current)
-		return true
-	})
+	if reporter, ok := unit.(jobReportingUnit); ok {
+		m.appendBufferedJobReports(unit.UnitID(), reporter.drainJobReports())
+	}
 
-	m.units = active
+	m.tileRegistryMu.RLock()
+	registeredKey, isRegistered := m.registeredTiles[unit.UnitID()]
+	m.tileRegistryMu.RUnlock()
+	if isRegistered {
+		m.unregisterUnitFromTile(unit, registeredKey)
+	}
+	unit.Base().MarkRemovalHandled()
 }
 
 func (m *Manager) tileSpeedMultiplierAt(position geom.Point) float64 {
@@ -591,22 +615,8 @@ func (m *Manager) firstProjectileOccupant(stack *TileStack, ownerID int64) (Unit
 	return nil, false
 }
 
-// collectUnitJobReports pulls per-unit job events into the manager-owned queue so the game
-// loop can drain them without reaching into individual unit internals.
-func (m *Manager) collectUnitJobReports() {
-	m.units.Range(func(current Unit) bool {
-		reporter, ok := current.(jobReportingUnit)
-		if !ok {
-			return true
-		}
-
-		m.jobReports = append(m.jobReports, reporter.drainJobReports()...)
-		return true
-	})
-}
-
 func (m *Manager) appendJobFailure(job MoveJob) {
-	m.jobReports = append(m.jobReports, JobReport{
+	m.appendBufferedJobReport(JobReport{
 		JobID:       job.ID,
 		ActorID:     job.ActorID,
 		UnitID:      job.UnitID,
@@ -614,6 +624,45 @@ func (m *Manager) appendJobFailure(job MoveJob) {
 		TargetTileX: job.TargetTileX,
 		TargetTileY: job.TargetTileY,
 	})
+}
+
+// appendBufferedJobReports stores reports in manager-owned memory for cases where no live unit
+// can serve them directly anymore, such as assignment failures or unit removal.
+func (m *Manager) appendBufferedJobReports(unitID int64, reports []JobReport) {
+	if m == nil || unitID == 0 || len(reports) == 0 {
+		return
+	}
+
+	m.jobReportsMu.Lock()
+	m.bufferedJobReports[unitID] = append(m.bufferedJobReports[unitID], reports...)
+	m.jobReportsMu.Unlock()
+}
+
+func (m *Manager) appendBufferedJobReport(report JobReport) {
+	if m == nil || report.UnitID == 0 {
+		return
+	}
+
+	m.appendBufferedJobReports(report.UnitID, []JobReport{report})
+}
+
+// drainBufferedJobReports returns and clears the manager-owned report tail for one unit.
+// Keeping this logic separate from DrainUnitJobReports makes the lock scope explicit and small.
+func (m *Manager) drainBufferedJobReports(unitID int64) []JobReport {
+	if m == nil || unitID == 0 {
+		return nil
+	}
+
+	m.jobReportsMu.Lock()
+	defer m.jobReportsMu.Unlock()
+
+	reports := m.bufferedJobReports[unitID]
+	if len(reports) == 0 {
+		return nil
+	}
+
+	delete(m.bufferedJobReports, unitID)
+	return append([]JobReport(nil), reports...)
 }
 
 func (m *Manager) pointInWorld(position geom.Point) bool {

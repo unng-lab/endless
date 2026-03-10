@@ -47,6 +47,8 @@ type BaseUnit struct {
 	lastUpdateTick int64
 	travel         travelState
 	updateSleeping bool
+	pendingRemoval bool
+	removalHandled bool
 }
 
 func (s BaseUnit) TilePosition(tileSize float64) (int, int) {
@@ -126,6 +128,39 @@ func (s *BaseUnit) consumeReachedWaypoint(target geom.Point) bool {
 
 func (s *BaseUnit) clearTravel() {
 	s.travel = travelState{}
+}
+
+// PendingRemoval reports whether the unit has already completed its gameplay lifecycle and now
+// only waits for the manager sweep to unregister it from tiles and drop it from storage.
+func (s BaseUnit) PendingRemoval() bool {
+	return s.pendingRemoval
+}
+
+// MarkForRemoval transitions the unit into the deferred-deletion state. The manager performs
+// the physical removal later so worker iteration never mutates shared ordered storage in place.
+func (s *BaseUnit) MarkForRemoval() {
+	s.pendingRemoval = true
+	s.removalHandled = false
+}
+
+// ClearRemovalMark reactivates a unit object that is going to be reused instead of discarded.
+// Runtime code normally calls this right before storing the unit back inside the manager.
+func (s *BaseUnit) ClearRemovalMark() {
+	s.pendingRemoval = false
+	s.removalHandled = false
+}
+
+// RemovalHandled reports whether manager-side cleanup for a deleted unit has already happened.
+// This lets worker traversal flush tile state exactly once while still leaving the slot
+// available for later overwrite by a different unit.
+func (s BaseUnit) RemovalHandled() bool {
+	return s.removalHandled
+}
+
+// MarkRemovalHandled records that the manager has already drained reports and removed tile
+// registration for this deleted unit, so future updates may skip the tombstone entirely.
+func (s *BaseUnit) MarkRemovalHandled() {
+	s.removalHandled = true
 }
 
 // WakeForUpdate leaves the eternal-sleep mode so the manager may call Tick again.

@@ -224,7 +224,13 @@ func (u *NonStaticUnit) ApplyDamage(amount int) bool {
 	}
 
 	u.Health -= amount
-	return u.Health <= 0
+	if u.Health > 0 {
+		return false
+	}
+
+	u.Health = 0
+	u.prepareForRemovalAfterDeath()
+	return true
 }
 
 func (u *NonStaticUnit) Respawn() {
@@ -235,6 +241,7 @@ func (u *NonStaticUnit) Respawn() {
 	u.sleepTime = 0
 	u.clearQueuedMove()
 	u.clearTravel()
+	u.ClearRemovalMark()
 }
 
 func (u *NonStaticUnit) Selectable() bool {
@@ -285,6 +292,17 @@ func (u *NonStaticUnit) queueNextMove(path []geom.Point) {
 func (u *NonStaticUnit) clearQueuedMove() {
 	u.queuedMove.path = u.queuedMove.path[:0]
 	u.queuedMove.hasRoute = false
+}
+
+// prepareForRemovalAfterDeath cancels any gameplay state that should not outlive a dead unit.
+// The manager later removes the unit from tiles and ordered storage during its deferred sweep.
+func (u *NonStaticUnit) prepareForRemovalAfterDeath() {
+	u.failAssignedMoveJob()
+	u.path = u.path[:0]
+	u.sleepTime = 0
+	u.clearQueuedMove()
+	u.clearTravel()
+	u.MarkForRemoval()
 }
 
 // advance schedules movement to the next reachable waypoint and returns how many ticks the

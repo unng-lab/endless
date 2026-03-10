@@ -12,7 +12,7 @@ import (
 const (
 	stressStaticObjectCount   = 100000
 	stressUnitCount           = 1000
-	stressUnitSpawnIntervalMs = 100
+	stressUnitSpawnIntervalMs = 10
 	stressSpawnSafeRadius     = 60
 	stressJobTargetRadius     = 280
 	stressJobRetryLimit       = 64
@@ -162,26 +162,28 @@ func (a *stressActor) RegisterUnit(unitID int64) {
 	a.managed[unitID] = struct{}{}
 }
 
-// Update drains unit reports from the manager and immediately assigns a new move job to every
-// managed unit that is currently without one. This keeps runners moving continuously while
-// still routing all ownership through explicit job completion events.
+// Update drains reports only for the units this actor owns and immediately assigns a new move
+// job to every managed unit that is currently without one. This keeps runners moving
+// continuously without forcing the manager to rescan unrelated units for actor-facing events.
 func (a *stressActor) Update(manager *unit.Manager) {
 	if a == nil || manager == nil {
 		return
 	}
 
-	for _, report := range manager.DrainJobReports() {
-		if report.ActorID != a.id {
-			continue
-		}
+	for unitID := range a.managed {
+		for _, report := range manager.DrainUnitJobReports(unitID) {
+			if report.ActorID != a.id {
+				continue
+			}
 
-		delete(a.inFlight, report.UnitID)
-		if report.Status == unit.JobStatusCompleted {
-			a.completedJobs++
-			continue
-		}
+			delete(a.inFlight, report.UnitID)
+			if report.Status == unit.JobStatusCompleted {
+				a.completedJobs++
+				continue
+			}
 
-		a.failedJobs++
+			a.failedJobs++
+		}
 	}
 
 	for unitID := range a.managed {

@@ -124,6 +124,7 @@ func (p *Projectile) Respawn() {
 	p.exploding = false
 	p.impactAge = 0
 	p.clearTravel()
+	p.ClearRemovalMark()
 }
 
 func (p *Projectile) Selectable() bool {
@@ -148,6 +149,9 @@ func (p *Projectile) Tick(gameTick int64, delta float64, _ func(geom.Point) floa
 		if delta > 0 {
 			p.impactAge += delta
 		}
+		if !p.IsActive() {
+			p.MarkForRemoval()
+		}
 		return
 	}
 
@@ -157,11 +161,17 @@ func (p *Projectile) Tick(gameTick int64, delta float64, _ func(geom.Point) floa
 		if p.sleepTime == 0 {
 			p.travel.remaining = 0
 		}
+		if !p.IsActive() {
+			p.MarkForRemoval()
+		}
 		return
 	}
 
 	p.sleepTime = p.advance(delta)
 	p.travel.remaining = p.sleepTime
+	if !p.IsActive() {
+		p.MarkForRemoval()
+	}
 }
 
 // ShouldUpdate keeps the projectile inside the regular tick loop while it is either flying
@@ -184,17 +194,8 @@ func (p *Projectile) ReactToEnteredTile(m *Manager, stack *TileStack) {
 		return
 	}
 
-	m.tileRegistryMu.RLock()
-	targetPreviousKey, targetWasRegistered := m.registeredTiles[target.UnitID()]
-	m.tileRegistryMu.RUnlock()
 	if target.ApplyDamage(p.Damage) {
-		if targetWasRegistered {
-			m.unregisterUnitFromTile(target, targetPreviousKey)
-		}
-		target.Respawn()
-		if unitUsesTileStack(target) {
-			m.registerUnitInCurrentTile(target)
-		}
+		m.retireDeletedUnit(target)
 	}
 
 	p.StartExplosion()

@@ -21,8 +21,26 @@ func newOrderedUnitMap(capacity int) *orderedUnitMap {
 	}
 }
 
-// Len reports how many units are currently stored in insertion order.
+// Len reports how many non-deleted units are currently addressable through the ordered map.
 func (m *orderedUnitMap) Len() int {
+	if m == nil {
+		return 0
+	}
+
+	count := 0
+	for _, unit := range m.order {
+		if orderedMapUnitDeleted(unit) {
+			continue
+		}
+		count++
+	}
+
+	return count
+}
+
+// SlotsLen reports how many physical slots currently exist in insertion-order storage. Worker
+// traversal uses this value because removed units may leave reusable holes inside the slice.
+func (m *orderedUnitMap) SlotsLen() int {
 	if m == nil {
 		return 0
 	}
@@ -30,8 +48,27 @@ func (m *orderedUnitMap) Len() int {
 	return len(m.order)
 }
 
-// Set inserts a unit at the end of the ordered map or replaces the stored value for an already
-// known ID without disturbing the established iteration order.
+// HasPendingRemovalWork reports whether the backing slice still contains a deleted unit whose
+// manager-side cleanup has not yet happened. Update uses this to flush tile state even when no
+// live unit remains in storage.
+func (m *orderedUnitMap) HasPendingRemovalWork() bool {
+	if m == nil {
+		return false
+	}
+
+	for _, unit := range m.order {
+		if unit == nil || !unit.Base().PendingRemoval() || unit.Base().RemovalHandled() {
+			continue
+		}
+		return true
+	}
+
+	return false
+}
+
+// Set inserts a unit into the first reusable deleted slot or appends it at the end.
+// Replacements for an already known UnitID keep their established slot so external ordering
+// remains stable even after older dead entries stay resident inside the backing slice.
 func (m *orderedUnitMap) Set(unit Unit) {
 	if m == nil || unit == nil || unit.UnitID() == 0 {
 		return
@@ -40,6 +77,19 @@ func (m *orderedUnitMap) Set(unit Unit) {
 	unitID := unit.UnitID()
 	if index, exists := m.index[unitID]; exists {
 		m.order[index] = unit
+		return
+	}
+
+	for index, current := range m.order {
+		if !orderedMapUnitDeleted(current) {
+			continue
+		}
+
+		if current != nil {
+			delete(m.index, current.UnitID())
+		}
+		m.order[index] = unit
+		m.index[unitID] = index
 		return
 	}
 
@@ -59,22 +109,38 @@ func (m *orderedUnitMap) Get(unitID int64) (Unit, bool) {
 	}
 
 	unit := m.order[index]
-	if unit == nil {
+	if orderedMapUnitDeleted(unit) {
 		return nil, false
 	}
 
 	return unit, true
 }
 
-// At returns the unit at the given insertion-order position. Worker batches use this method to
-// keep their existing strided scheduling without depending on a raw slice.
+// At returns the live unit at the given insertion-order slot while hiding entries that were
+// already marked deleted and only await overwrite by some future insertion.
 func (m *orderedUnitMap) At(index int) (Unit, bool) {
 	if m == nil || index < 0 || index >= len(m.order) {
 		return nil, false
 	}
 
 	unit := m.order[index]
-	if unit == nil {
+	if orderedMapUnitDeleted(unit) {
+		return nil, false
+	}
+
+	return unit, true
+}
+
+// SlotAt returns the raw unit stored in the physical slot, including already deleted entries.
+// Manager worker traversal uses this lower-level accessor so it may still flush tile state for
+// units that have just been marked deleted but not yet overwritten by a later insertion.
+func (m *orderedUnitMap) SlotAt(index int) (Unit, bool) {
+	if m == nil || index < 0 || index >= len(m.order) {
+		return nil, false
+	}
+
+	unit := m.order[index]
+	if unit == nil || unit.Base().RemovalHandled() {
 		return nil, false
 	}
 
@@ -89,11 +155,15 @@ func (m *orderedUnitMap) Range(visitor func(Unit) bool) {
 	}
 
 	for _, unit := range m.order {
-		if unit == nil {
+		if orderedMapUnitDeleted(unit) {
 			continue
 		}
 		if !visitor(unit) {
 			return
 		}
 	}
+}
+
+func orderedMapUnitDeleted(unit Unit) bool {
+	return unit == nil || unit.Base().PendingRemoval()
 }

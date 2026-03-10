@@ -135,7 +135,14 @@ func (s *StaticUnit) ApplyDamage(amount int) bool {
 
 	s.Wake()
 	s.Health -= amount
-	return s.Health <= 0
+	if s.Health > 0 {
+		return false
+	}
+
+	s.Health = 0
+	s.clearTravel()
+	s.MarkForRemoval()
+	return true
 }
 
 func (s *StaticUnit) Respawn() {
@@ -143,6 +150,7 @@ func (s *StaticUnit) Respawn() {
 	s.Health = s.MaxHealth
 	s.clearTravel()
 	s.Wake()
+	s.ClearRemovalMark()
 }
 
 func (s *StaticUnit) Selectable() bool {

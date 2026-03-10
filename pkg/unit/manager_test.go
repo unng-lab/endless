@@ -212,7 +212,7 @@ func TestManagerProjectileExpiresAfterMaxRange(t *testing.T) {
 	}
 }
 
-func TestManagerProjectileRespawnsUnitAtSpawnPoint(t *testing.T) {
+func TestManagerProjectileRemovesKilledUnitFromManager(t *testing.T) {
 	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
 	target := NewRunner(geom.Point{X: 37, Y: 28}, false, 0)
 	target.SpawnPosition = geom.Point{X: 104, Y: 104}
@@ -230,14 +230,14 @@ func TestManagerProjectileRespawnsUnitAtSpawnPoint(t *testing.T) {
 
 	m.Update(1, 1.0/60.0)
 
-	if target.Position != target.SpawnPosition {
-		t.Fatalf("target position = %+v, want respawn at %+v", target.Position, target.SpawnPosition)
-	}
-	if target.Health != target.MaxHealth {
-		t.Fatalf("target health = %d, want full health %d after respawn", target.Health, target.MaxHealth)
-	}
 	if projectileCount(m) != 1 {
 		t.Fatalf("projectiles = %d, want exploding projectile to remain until animation ends", projectileCount(m))
+	}
+	if _, ok := m.unitByID(target.UnitID()); ok {
+		t.Fatalf("unitByID(%d) = true, want killed target removed", target.UnitID())
+	}
+	if _, ok := m.registeredTiles[target.UnitID()]; ok {
+		t.Fatalf("registeredTiles contains %d, want removed target to be unregistered", target.UnitID())
 	}
 
 	advanceProjectileExplosion(t, m)
@@ -263,11 +263,11 @@ func TestManagerProjectileCanDamageStaticUnit(t *testing.T) {
 
 	m.Update(1, 1.0/60.0)
 
-	if target.Position != target.SpawnPosition {
-		t.Fatalf("static position = %+v, want respawn at %+v", target.Position, target.SpawnPosition)
+	if _, ok := m.unitByID(target.UnitID()); ok {
+		t.Fatalf("unitByID(%d) = true, want killed static unit removed", target.UnitID())
 	}
-	if target.Health != target.MaxHealth {
-		t.Fatalf("static health = %d, want full health %d after respawn", target.Health, target.MaxHealth)
+	if _, ok := m.registeredTiles[target.UnitID()]; ok {
+		t.Fatalf("registeredTiles contains %d, want removed static unit to be unregistered", target.UnitID())
 	}
 }
 
@@ -289,12 +289,12 @@ func TestManagerAssignMoveJobReportsCompletion(t *testing.T) {
 
 	for tick := int64(1); tick <= 200; tick++ {
 		m.Update(tick, 1.0/60.0)
-		reports := m.DrainJobReports()
+		reports := m.DrainUnitJobReports(runner.UnitID())
 		if len(reports) == 0 {
 			continue
 		}
 		if len(reports) != 1 {
-			t.Fatalf("DrainJobReports() len = %d, want 1", len(reports))
+			t.Fatalf("DrainUnitJobReports() len = %d, want 1", len(reports))
 		}
 		if reports[0].Status != JobStatusCompleted {
 			t.Fatalf("job status = %v, want %v", reports[0].Status, JobStatusCompleted)
@@ -324,15 +324,110 @@ func TestManagerAssignMoveJobReportsFailureForImmobileTarget(t *testing.T) {
 		t.Fatal("AssignMoveJob() error = nil, want immobile-unit error")
 	}
 
-	reports := m.DrainJobReports()
+	reports := m.DrainUnitJobReports(wall.UnitID())
 	if len(reports) != 1 {
-		t.Fatalf("DrainJobReports() len = %d, want 1", len(reports))
+		t.Fatalf("DrainUnitJobReports() len = %d, want 1", len(reports))
 	}
 	if reports[0].Status != JobStatusFailed {
 		t.Fatalf("job status = %v, want %v", reports[0].Status, JobStatusFailed)
 	}
 	if reports[0].ActorID != 11 || reports[0].UnitID != wall.UnitID() {
 		t.Fatalf("job report = %+v, want actor 11 for unit %d", reports[0], wall.UnitID())
+	}
+}
+
+func TestManagerCollectsFailedJobBeforeRemovingDeadUnit(t *testing.T) {
+	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
+	runner := NewRunner(geom.Point{X: 8, Y: 8}, false, 0)
+	m := newTestManager(gameWorld, runner)
+
+	err := m.AssignMoveJob(MoveJob{
+		ID:          9,
+		ActorID:     17,
+		UnitID:      runner.UnitID(),
+		TargetTileX: 1,
+		TargetTileY: 0,
+	})
+	if err != nil {
+		t.Fatalf("AssignMoveJob() error = %v", err)
+	}
+
+	if !runner.ApplyDamage(runner.MaxHealth) {
+		t.Fatal("ApplyDamage() = false, want lethal damage")
+	}
+
+	m.Update(1, 1.0/60.0)
+
+	reports := m.DrainUnitJobReports(runner.UnitID())
+	if len(reports) != 1 {
+		t.Fatalf("DrainUnitJobReports() len = %d, want 1", len(reports))
+	}
+	if reports[0].Status != JobStatusFailed {
+		t.Fatalf("job status = %v, want %v", reports[0].Status, JobStatusFailed)
+	}
+	if reports[0].ActorID != 17 || reports[0].UnitID != runner.UnitID() {
+		t.Fatalf("job report = %+v, want actor 17 for unit %d", reports[0], runner.UnitID())
+	}
+	if _, ok := m.unitByID(runner.UnitID()); ok {
+		t.Fatalf("unitByID(%d) = true, want dead runner removed", runner.UnitID())
+	}
+}
+
+func TestManagerDrainUnitJobReportsKeepsStatusesScopedToRequestedUnit(t *testing.T) {
+	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
+	firstRunner := NewRunner(geom.Point{X: 8, Y: 8}, false, 0)
+	secondRunner := NewRunner(geom.Point{X: 40, Y: 8}, false, 0)
+	m := newTestManager(gameWorld, firstRunner, secondRunner)
+
+	err := m.AssignMoveJob(MoveJob{
+		ID:          21,
+		ActorID:     5,
+		UnitID:      firstRunner.UnitID(),
+		TargetTileX: 1,
+		TargetTileY: 0,
+	})
+	if err != nil {
+		t.Fatalf("AssignMoveJob() error = %v", err)
+	}
+
+	for tick := int64(1); tick <= 200; tick++ {
+		m.Update(tick, 1.0/60.0)
+		if len(m.DrainUnitJobReports(secondRunner.UnitID())) != 0 {
+			t.Fatal("expected unrelated unit to have no job reports")
+		}
+
+		reports := m.DrainUnitJobReports(firstRunner.UnitID())
+		if len(reports) == 0 {
+			continue
+		}
+		if len(reports) != 1 {
+			t.Fatalf("DrainUnitJobReports() len = %d, want 1", len(reports))
+		}
+		if reports[0].Status != JobStatusCompleted {
+			t.Fatalf("job status = %v, want %v", reports[0].Status, JobStatusCompleted)
+		}
+		return
+	}
+
+	t.Fatal("expected completed job report for requested unit within 200 ticks")
+}
+
+func TestManagerFlushesTileLeaveForLastDeletedUnit(t *testing.T) {
+	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
+	runner := NewRunner(geom.Point{X: 8, Y: 8}, false, 0)
+	m := newTestManager(gameWorld, runner)
+
+	if !runner.ApplyDamage(runner.MaxHealth) {
+		t.Fatal("ApplyDamage() = false, want lethal damage")
+	}
+
+	m.Update(1, 1.0/60.0)
+
+	if _, ok := m.registeredTiles[runner.UnitID()]; ok {
+		t.Fatalf("registeredTiles contains %d, want deleted last unit removed from tile registry", runner.UnitID())
+	}
+	if _, ok := m.unitByID(runner.UnitID()); ok {
+		t.Fatalf("unitByID(%d) = true, want deleted last unit hidden from lookup", runner.UnitID())
 	}
 }
 
@@ -472,12 +567,17 @@ func advanceProjectileExplosion(t *testing.T, m *Manager) {
 func firstOrderedUnitID(t *testing.T, units *orderedUnitMap) int64 {
 	t.Helper()
 
-	first, ok := units.At(0)
-	if !ok || first == nil {
-		t.Fatal("expected at least one unit in ordered manager storage")
+	for slotIndex := 0; slotIndex < units.SlotsLen(); slotIndex++ {
+		first, ok := units.At(slotIndex)
+		if !ok || first == nil {
+			continue
+		}
+
+		return first.UnitID()
 	}
 
-	return first.UnitID()
+	t.Fatal("expected at least one unit in ordered manager storage")
+	return 0
 }
 
 func newTestManager(gameWorld world.World, units ...Unit) *Manager {

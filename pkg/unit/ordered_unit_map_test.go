@@ -80,3 +80,57 @@ func TestOrderedUnitMapRangeStopsAtVisitorRequest(t *testing.T) {
 		t.Fatalf("visited order = %v, want [1 2]", visited)
 	}
 }
+
+// TestOrderedUnitMapReusesDeletedSlot verifies that a unit marked for deferred deletion stays
+// in the backing slice but disappears from logical access and yields its slot to the next insert.
+func TestOrderedUnitMapReusesDeletedSlot(t *testing.T) {
+	units := newOrderedUnitMap(3)
+	first := NewRunner(geom.Point{X: 8, Y: 8}, false, 0)
+	first.SetUnitID(1)
+	second := NewRunner(geom.Point{X: 24, Y: 24}, false, 0)
+	second.SetUnitID(2)
+	replacement := NewRunner(geom.Point{X: 40, Y: 40}, false, 0)
+	replacement.SetUnitID(3)
+
+	units.Set(first)
+	units.Set(second)
+	first.Base().MarkForRemoval()
+
+	if units.Len() != 1 {
+		t.Fatalf("Len() after mark-for-removal = %d, want 1 live unit", units.Len())
+	}
+	if units.SlotsLen() != 2 {
+		t.Fatalf("SlotsLen() after mark-for-removal = %d, want 2 physical slots", units.SlotsLen())
+	}
+	if _, ok := units.Get(first.UnitID()); ok {
+		t.Fatal("Get(first) = true after mark-for-removal, want hidden deleted unit")
+	}
+	if _, ok := units.At(0); ok {
+		t.Fatal("At(0) = true after mark-for-removal, want hidden deleted slot")
+	}
+
+	units.Set(replacement)
+
+	if units.Len() != 2 {
+		t.Fatalf("Len() after slot reuse = %d, want 2 live units", units.Len())
+	}
+	if units.SlotsLen() != 2 {
+		t.Fatalf("SlotsLen() after slot reuse = %d, want reused slot without growth", units.SlotsLen())
+	}
+
+	gotReplacement, ok := units.At(0)
+	if !ok {
+		t.Fatal("At(0) = false after slot reuse, want replacement")
+	}
+	if gotReplacement != replacement {
+		t.Fatalf("At(0) returned %p, want replacement %p", gotReplacement, replacement)
+	}
+
+	gotSecond, ok := units.At(1)
+	if !ok {
+		t.Fatal("At(1) = false after slot reuse, want second unit")
+	}
+	if gotSecond != second {
+		t.Fatalf("At(1) returned %p, want second %p", gotSecond, second)
+	}
+}
