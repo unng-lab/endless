@@ -43,7 +43,7 @@ func NewRenderer() *Renderer {
 }
 
 // DrawUnit renders exactly one gameplay body. The manager drives the traversal order so tile
-// stacks can be walked in visible-tile order while projectiles remain on their own pass.
+// stacks can be walked in visible-tile order for both regular units and projectiles.
 func (r *Renderer) DrawUnit(
 	screen *ebiten.Image,
 	cam *camera.Camera,
@@ -78,25 +78,6 @@ func (r *Renderer) DrawUnit(
 	}
 
 	return nil
-}
-
-// DrawImpacts renders the transient hit flashes after unit bodies so combat feedback stays on
-// top of the main world layer regardless of how units were gathered for the frame.
-func (r *Renderer) DrawImpacts(
-	screen *ebiten.Image,
-	cam *camera.Camera,
-	impacts []impactEffect,
-) {
-	if len(impacts) == 0 {
-		return
-	}
-
-	camPos := cam.Position()
-	scale := cam.Scale()
-
-	for _, effect := range impacts {
-		r.drawImpact(screen, camPos, scale, effect)
-	}
 }
 
 func (r *Renderer) drawAnimatedUnit(
@@ -166,12 +147,22 @@ func unitScreenRect(cam *camera.Camera, worldTileSize float64, unit Unit) (geom.
 }
 
 // ProjectileScreenRect converts the projectile's current interpolated world position into a
-// screen-space rectangle large enough for both its core and glow. Using the glow size here
-// keeps visibility consistent with the detailed rendering footprint.
+// screen-space rectangle large enough for both the flight sprite and the explosion animation.
+// This keeps visibility consistent even after a projectile has already transitioned into impact.
 func ProjectileScreenRect(cam *camera.Camera, shot *Projectile) geom.Rect {
 	camPos := cam.Position()
 	scale := cam.Scale()
 	renderPos := shot.Base().RenderPosition()
+	if shot.exploding && shot.impactDuration > 0 {
+		progress := geom.ClampFloat(shot.impactAge/shot.impactDuration, 0, 1)
+		explosionRadius := shot.impactRadius * scale * (1 + progress*0.8)
+
+		return geom.Rect{
+			Min: geom.Point{X: (renderPos.X-camPos.X)*scale - explosionRadius, Y: (renderPos.Y-camPos.Y)*scale - explosionRadius},
+			Max: geom.Point{X: (renderPos.X-camPos.X)*scale + explosionRadius, Y: (renderPos.Y-camPos.Y)*scale + explosionRadius},
+		}
+	}
+
 	glowRadius := math.Max(1, shot.Radius*scale*0.9)
 	screenX := (renderPos.X - camPos.X) * scale
 	screenY := (renderPos.Y - camPos.Y) * scale
@@ -261,6 +252,19 @@ func (r *Renderer) drawFilledRect(screen *ebiten.Image, x, y, width, height floa
 }
 
 func (r *Renderer) drawProjectile(screen *ebiten.Image, camPos geom.Point, scale float64, shot *Projectile) {
+	if shot.exploding && shot.impactDuration > 0 {
+		progress := geom.ClampFloat(shot.impactAge/shot.impactDuration, 0, 1)
+		alpha := uint8(math.Round((1 - progress) * 220))
+		size := shot.impactRadius * 2 * scale * (1 + progress*0.8)
+		renderPos := shot.Base().RenderPosition()
+		screenX := (renderPos.X - camPos.X) * scale
+		screenY := (renderPos.Y - camPos.Y) * scale
+
+		r.drawFilledRect(screen, screenX-size/2, screenY-size/2, size, size, color.NRGBA{R: 255, G: 187, B: 89, A: alpha})
+		r.drawFilledRect(screen, screenX-size*0.28, screenY-size*0.28, size*0.56, size*0.56, color.NRGBA{R: 255, G: 240, B: 196, A: alpha})
+		return
+	}
+
 	size := math.Max(2, shot.Radius*2*scale)
 	renderPos := shot.Base().RenderPosition()
 	screenX := (renderPos.X - camPos.X) * scale
@@ -270,22 +274,6 @@ func (r *Renderer) drawProjectile(screen *ebiten.Image, camPos geom.Point, scale
 	r.drawFilledRect(screen, screenX-glowSize/2, screenY-glowSize/2, glowSize, glowSize, color.NRGBA{R: 255, G: 176, B: 64, A: 110})
 	r.drawFilledRect(screen, screenX-size/2, screenY-size/2, size, size, color.NRGBA{R: 255, G: 226, B: 168, A: 255})
 }
-
-func (r *Renderer) drawImpact(screen *ebiten.Image, camPos geom.Point, scale float64, effect impactEffect) {
-	if effect.Duration <= 0 {
-		return
-	}
-
-	progress := geom.ClampFloat(effect.Age/effect.Duration, 0, 1)
-	alpha := uint8(math.Round((1 - progress) * 220))
-	size := effect.Radius * 2 * scale * (1 + progress*0.8)
-	screenX := (effect.Position.X - camPos.X) * scale
-	screenY := (effect.Position.Y - camPos.Y) * scale
-
-	r.drawFilledRect(screen, screenX-size/2, screenY-size/2, size, size, color.NRGBA{R: 255, G: 187, B: 89, A: alpha})
-	r.drawFilledRect(screen, screenX-size*0.28, screenY-size*0.28, size*0.56, size*0.56, color.NRGBA{R: 255, G: 240, B: 196, A: alpha})
-}
-
 func (r *Renderer) drawHealthBar(screen *ebiten.Image, rect geom.Rect, health, maxHealth int) {
 	if maxHealth <= 0 || health >= maxHealth {
 		return

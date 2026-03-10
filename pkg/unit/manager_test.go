@@ -2,6 +2,7 @@ package unit
 
 import (
 	"image"
+	"math"
 	"testing"
 
 	"github.com/unng-lab/endless/pkg/camera"
@@ -129,6 +130,32 @@ func TestManagerVisibleTileUnitsFollowVisibleTileAndTileStackOrder(t *testing.T)
 	}
 }
 
+func TestManagerVisibleTileUnitsIncludeProjectileFromTileStack(t *testing.T) {
+	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
+	m := newTestManager(gameWorld,
+		NewRunner(geom.Point{X: 24, Y: 24}, false, 0),
+	)
+	m.selectedID = firstOrderedUnitID(t, m.units)
+
+	if err := m.CommandSelectedFire(geom.Point{X: 120, Y: 24}); err != nil {
+		t.Fatalf("CommandSelectedFire() error = %v", err)
+	}
+
+	projectile := onlyProjectile(t, m)
+	startKey := tileKey{x: 1, y: 1}
+	if got := m.registeredTiles[projectile.UnitID()]; got != startKey {
+		t.Fatalf("registered tile = %+v, want %+v for projectile", got, startKey)
+	}
+
+	visibleUnits := m.visibleTileUnits(image.Rect(0, 0, 3, 3))
+	if len(visibleUnits) != 2 {
+		t.Fatalf("visibleTileUnits() len = %d, want 2 with runner and projectile", len(visibleUnits))
+	}
+	if visibleUnits[1].UnitID() != projectile.UnitID() {
+		t.Fatalf("visible unit[1] = %d, want projectile %d appended in tile stack order", visibleUnits[1].UnitID(), projectile.UnitID())
+	}
+}
+
 func TestManagerProjectileHitsUnitOccupyingEnteredTile(t *testing.T) {
 	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
 	target := NewRunner(geom.Point{X: 37, Y: 28}, false, 0)
@@ -148,15 +175,20 @@ func TestManagerProjectileHitsUnitOccupyingEnteredTile(t *testing.T) {
 	if target.Health != initialHealth-1 {
 		t.Fatalf("target health = %d, want %d after projectile enters occupied tile", target.Health, initialHealth-1)
 	}
-	projectileCount := 0
-	m.units.Range(func(unit Unit) bool {
-		if _, ok := unit.(*Projectile); ok {
-			projectileCount++
-		}
-		return true
-	})
-	if projectileCount != 0 {
-		t.Fatalf("projectiles = %d, want 0 after hit", projectileCount)
+	projectile := onlyProjectile(t, m)
+	if !projectile.exploding {
+		t.Fatal("expected projectile to keep living as an explosion after hit")
+	}
+	if _, ok := m.registeredTiles[projectile.UnitID()]; !ok {
+		t.Fatal("expected exploding projectile to stay registered in tile stack until animation ends")
+	}
+
+	advanceProjectileExplosion(t, m)
+	if projectileCount(m) != 0 {
+		t.Fatalf("projectiles = %d, want 0 after explosion animation completes", projectileCount(m))
+	}
+	if _, ok := m.registeredTiles[projectile.UnitID()]; ok {
+		t.Fatal("expected projectile tile registration to be removed after explosion animation completes")
 	}
 }
 
@@ -175,15 +207,8 @@ func TestManagerProjectileExpiresAfterMaxRange(t *testing.T) {
 		m.Update(1, 1.0/60.0)
 	}
 
-	projectileCount := 0
-	m.units.Range(func(unit Unit) bool {
-		if _, ok := unit.(*Projectile); ok {
-			projectileCount++
-		}
-		return true
-	})
-	if projectileCount != 0 {
-		t.Fatalf("projectiles = %d, want projectile removed after max range", projectileCount)
+	if projectileCount(m) != 0 {
+		t.Fatalf("projectiles = %d, want projectile removed after max range", projectileCount(m))
 	}
 }
 
@@ -211,15 +236,13 @@ func TestManagerProjectileRespawnsUnitAtSpawnPoint(t *testing.T) {
 	if target.Health != target.MaxHealth {
 		t.Fatalf("target health = %d, want full health %d after respawn", target.Health, target.MaxHealth)
 	}
-	projectileCount := 0
-	m.units.Range(func(unit Unit) bool {
-		if _, ok := unit.(*Projectile); ok {
-			projectileCount++
-		}
-		return true
-	})
-	if projectileCount != 0 {
-		t.Fatalf("projectiles = %d, want projectile consumed on hit", projectileCount)
+	if projectileCount(m) != 1 {
+		t.Fatalf("projectiles = %d, want exploding projectile to remain until animation ends", projectileCount(m))
+	}
+
+	advanceProjectileExplosion(t, m)
+	if projectileCount(m) != 0 {
+		t.Fatalf("projectiles = %d, want projectile removed after explosion animation", projectileCount(m))
 	}
 }
 
@@ -401,6 +424,48 @@ func TestProjectileVisibilityUsesCurrentCameraState(t *testing.T) {
 	cam.SetPosition(geom.Point{X: 400, Y: 400})
 	if unitVisibleOnScreen(cam, gameWorld.TileSize(), 64, 64, projectile) {
 		t.Fatal("expected projectile to become offscreen after camera move")
+	}
+}
+
+func projectileCount(m *Manager) int {
+	count := 0
+	m.units.Range(func(unit Unit) bool {
+		if _, ok := unit.(*Projectile); ok {
+			count++
+		}
+		return true
+	})
+	return count
+}
+
+func onlyProjectile(t *testing.T, m *Manager) *Projectile {
+	t.Helper()
+
+	var projectile *Projectile
+	m.units.Range(func(unit Unit) bool {
+		currentProjectile, ok := unit.(*Projectile)
+		if !ok {
+			return true
+		}
+		if projectile != nil {
+			t.Fatal("expected exactly one projectile")
+		}
+		projectile = currentProjectile
+		return true
+	})
+	if projectile == nil {
+		t.Fatal("expected projectile to exist")
+	}
+
+	return projectile
+}
+
+func advanceProjectileExplosion(t *testing.T, m *Manager) {
+	t.Helper()
+
+	explosionTicks := int(math.Ceil(impactDuration/(1.0/60.0))) + 1
+	for tick := int64(0); tick < int64(explosionTicks); tick++ {
+		m.Update(100+tick, 1.0/60.0)
 	}
 }
 

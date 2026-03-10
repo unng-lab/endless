@@ -24,7 +24,6 @@ type Manager struct {
 
 	units *orderedUnitMap
 
-	impacts         []impactEffect
 	jobReports      []JobReport
 	tileStacks      map[tileKey]*TileStack
 	registeredTiles map[int64]tileKey
@@ -41,13 +40,18 @@ type updateRequest struct {
 	delta float64
 }
 
-// tickableUnit describes gameplay bodies that participate in the manager's per-frame update
-// loop. Static obstacles implement it too, but stay excluded while their eternal-sleep flag
-// is set.
-type tickableUnit interface {
+// transientUnit marks short-lived scene objects that must disappear from manager storage once
+// their self-managed lifecycle reports completion.
+type transientUnit interface {
 	Unit
-	Tick(int64, float64, func(geom.Point) float64)
-	ShouldUpdate() bool
+	IsActive() bool
+}
+
+// tileEntryReactiveUnit describes units whose side effects must run exactly at the moment the
+// manager has already moved the unit into a new tile and updated tile-stack membership.
+// Projectiles use this hook to resolve impacts against the occupants of the tile they entered.
+type tileEntryReactiveUnit interface {
+	ReactToEnteredTile(*Manager, *TileStack)
 }
 
 type tileKey struct {
@@ -77,74 +81,18 @@ func (m *Manager) Update(gameTick int64, delta float64) {
 			m.workers[i] <- updateRequest{tick: gameTick, delta: delta}
 		}
 		m.updateWG.Wait()
-	}
-
-	if delta > 0 && m.units.Len() > 0 {
-		active := newOrderedUnitMap(m.units.Len())
-		m.units.Range(func(current Unit) bool {
-			shot, ok := current.(*Projectile)
-			if !ok {
-				active.Set(current)
-				return true
-			}
-
-			previousTileX, previousTileY := shot.Base().TilePosition(m.world.TileSize())
-			previousKey := tileKey{x: previousTileX, y: previousTileY}
-			moved := shot.Tick(delta)
-			if moved {
-				currentTileX, currentTileY := shot.Base().TilePosition(m.world.TileSize())
-				currentKey := tileKey{x: currentTileX, y: currentTileY}
-				if previousKey != currentKey {
-					m.tileRegistryMu.RLock()
-					previousStack := m.tileStacks[previousKey]
-					currentStack := m.tileStacks[currentKey]
-					m.tileRegistryMu.RUnlock()
-
-					if previousStack != nil {
-						shot.LeaveTile(previousStack)
-					}
-					shot.EnterTile(currentStack)
-					if target, hit := m.firstProjectileOccupant(currentStack, shot.OwnerID); hit {
-						impactPos := shot.Position
-						m.tileRegistryMu.RLock()
-						targetPreviousKey, targetWasRegistered := m.registeredTiles[target.UnitID()]
-						m.tileRegistryMu.RUnlock()
-						if target.ApplyDamage(shot.Damage) {
-							target.Respawn()
-							if unitUsesTileStack(target) {
-								if targetWasRegistered {
-									m.unregisterUnitFromTile(target, targetPreviousKey)
-								}
-								m.registerUnitInCurrentTile(target)
-							}
-						}
-						m.impacts = append(m.impacts, newImpactEffect(impactPos, m.world.TileSize()))
-						return true
-					}
-				}
-			}
-
-			if !shot.IsActive() {
-				return true
-			}
-
-			active.Set(shot)
-			return true
-		})
-
-		m.units = active
+		m.removeInactiveTransientUnits()
 		if _, ok := m.selectedUnit(); !ok {
 			m.selectedID = 0
 		}
 	}
 
-	m.updateImpacts(delta)
 	m.collectUnitJobReports()
 }
 
-// Draw renders the world bodies in the same tile order as the visible terrain pass. Selectable
-// units come from per-tile stacks during the second visible-tile walk, while projectiles stay
-// on a dedicated pass because they are not registered in tile occupancy.
+// Draw renders every tile-registered world body in the same tile order as the visible terrain
+// pass. This keeps regular units and projectiles on one deterministic traversal driven by the
+// same TileStack membership data.
 func (m *Manager) Draw(screen *ebiten.Image, cam *camera.Camera, quality assets.Quality, visible image.Rectangle) error {
 	for _, current := range m.visibleTileUnits(visible) {
 		if err := m.renderer.DrawUnit(screen, cam, m.world.TileSize(), quality, current); err != nil {
@@ -152,11 +100,6 @@ func (m *Manager) Draw(screen *ebiten.Image, cam *camera.Camera, quality assets.
 		}
 	}
 
-	if err := m.drawNonTileStackUnits(screen, cam, quality); err != nil {
-		return err
-	}
-
-	m.renderer.DrawImpacts(screen, cam, m.impacts)
 	return nil
 }
 
@@ -181,7 +124,7 @@ func (m *Manager) SelectAtScreen(cam *camera.Camera, cursor geom.Point, screenWi
 	}
 
 	stack := m.stackAtWorldPoint(worldPos)
-	candidates := m.unitsFromStack(stack)
+	candidates := m.selectableUnitsFromStack(stack)
 	if len(candidates) == 0 {
 		m.selectedID = 0
 		return
@@ -276,9 +219,7 @@ func (m *Manager) CommandSelectedFire(target geom.Point) error {
 		return err
 	}
 
-	m.nextID++
-	shot.SetUnitID(m.nextID)
-	m.units.Set(shot)
+	m.AddUnit(shot)
 	return nil
 }
 
@@ -390,27 +331,50 @@ func (m *Manager) processUpdates(offset, workerCount int, req updateRequest) {
 }
 
 func (m *Manager) tickUnit(unit Unit, gameTick int64, delta float64) {
-	body, ok := unit.(tickableUnit)
-	if !ok || !body.ShouldUpdate() {
+	if unit == nil || !unit.ShouldUpdate() {
 		return
 	}
 
-	previousTileX, previousTileY := body.Base().TilePosition(m.world.TileSize())
-	body.Tick(gameTick, delta, m.tileSpeedMultiplierAt)
-	if !unitUsesTileStack(body) {
+	previousTileX, previousTileY := unit.Base().TilePosition(m.world.TileSize())
+	unit.Tick(gameTick, delta, m.tileSpeedMultiplierAt)
+	if !unitUsesTileStack(unit) {
 		return
 	}
 
-	currentTileX, currentTileY := body.Base().TilePosition(m.world.TileSize())
+	currentTileX, currentTileY := unit.Base().TilePosition(m.world.TileSize())
 	if previousTileX == currentTileX && previousTileY == currentTileY {
 		return
 	}
 
 	m.moveUnitToTile(
-		body,
+		unit,
 		tileKey{x: previousTileX, y: previousTileY},
 		tileKey{x: currentTileX, y: currentTileY},
 	)
+}
+
+// removeInactiveTransientUnits compacts manager storage after worker ticks finish so short-
+// lived units such as projectiles disappear from ordered storage and tile registration only
+// once their own lifecycle has reported completion. The sweep stays separate from worker
+// updates because the ordered map cannot be mutated safely while workers still iterate it.
+func (m *Manager) removeInactiveTransientUnits() {
+	active := newOrderedUnitMap(m.units.Len())
+	m.units.Range(func(current Unit) bool {
+		if body, ok := current.(transientUnit); ok && !body.IsActive() {
+			m.tileRegistryMu.RLock()
+			registeredKey, isRegistered := m.registeredTiles[current.UnitID()]
+			m.tileRegistryMu.RUnlock()
+			if isRegistered {
+				m.unregisterUnitFromTile(current, registeredKey)
+			}
+			return true
+		}
+
+		active.Set(current)
+		return true
+	})
+
+	m.units = active
 }
 
 func (m *Manager) tileSpeedMultiplierAt(position geom.Point) float64 {
@@ -504,13 +468,13 @@ func (m *Manager) moveUnitToTile(unit Unit, from tileKey, to tileKey) {
 		return
 	}
 
+	var currentStack *TileStack
 	m.tileRegistryMu.Lock()
-	defer m.tileRegistryMu.Unlock()
-
 	if registeredKey, isRegistered := m.registeredTiles[unit.UnitID()]; isRegistered {
 		from = registeredKey
 	}
 	if from == to {
+		m.tileRegistryMu.Unlock()
 		return
 	}
 
@@ -519,9 +483,17 @@ func (m *Manager) moveUnitToTile(unit Unit, from tileKey, to tileKey) {
 		m.dropEmptyTileStackLocked(from, previousStack)
 	}
 
-	currentStack := m.ensureTileStackLocked(to)
+	currentStack = m.ensureTileStackLocked(to)
 	unit.EnterTile(currentStack)
 	m.registeredTiles[unit.UnitID()] = to
+	m.tileRegistryMu.Unlock()
+
+	body, ok := unit.(tileEntryReactiveUnit)
+	if !ok {
+		return
+	}
+
+	body.ReactToEnteredTile(m, currentStack)
 }
 
 func (m *Manager) stackAtWorldPoint(position geom.Point) *TileStack {
@@ -548,9 +520,29 @@ func (m *Manager) unitsFromStack(stack *TileStack) []Unit {
 	return units
 }
 
-// visibleTileUnits collects selectable units by iterating the already computed visible tile
-// rectangle in row-major order. Each tile contributes units in its local TileStack order so
-// draw order remains deterministic both across tiles and within a shared tile.
+// selectableUnitsFromStack keeps click selection tied to gameplay bodies the player may
+// meaningfully inspect or command even though the same tile stack can also contain projectiles
+// for rendering and collision purposes.
+func (m *Manager) selectableUnitsFromStack(stack *TileStack) []Unit {
+	units := m.unitsFromStack(stack)
+	if len(units) == 0 {
+		return nil
+	}
+
+	selectable := units[:0]
+	for _, current := range units {
+		if !current.Selectable() {
+			continue
+		}
+		selectable = append(selectable, current)
+	}
+
+	return selectable
+}
+
+// visibleTileUnits collects every tile-registered unit by iterating the already computed
+// visible tile rectangle in row-major order. Each tile contributes units in its local
+// TileStack order so draw order remains deterministic both across tiles and within one tile.
 func (m *Manager) visibleTileUnits(visible image.Rectangle) []Unit {
 	if m == nil || visible.Empty() {
 		return nil
@@ -599,22 +591,6 @@ func (m *Manager) firstProjectileOccupant(stack *TileStack, ownerID int64) (Unit
 	return nil, false
 }
 
-func (m *Manager) updateImpacts(delta float64) {
-	if delta <= 0 || len(m.impacts) == 0 {
-		return
-	}
-
-	active := m.impacts[:0]
-	for _, effect := range m.impacts {
-		effect.Age += delta
-		if effect.Age >= effect.Duration {
-			continue
-		}
-		active = append(active, effect)
-	}
-	m.impacts = active
-}
-
 // collectUnitJobReports pulls per-unit job events into the manager-owned queue so the game
 // loop can drain them without reaching into individual unit internals.
 func (m *Manager) collectUnitJobReports() {
@@ -647,40 +623,11 @@ func (m *Manager) pointInWorld(position geom.Point) bool {
 		position.Y <= m.world.Height()
 }
 
+// unitUsesTileStack centralizes which bodies participate in tile-local ordering. Projectiles
+// now opt in here as non-selectable stack members so rendering and collision can reuse the
+// same per-tile structure without making shots clickable in the UI.
 func unitUsesTileStack(unit Unit) bool {
-	return unit != nil && unit.Alive() && unit.Selectable()
-}
-
-// drawNonTileStackUnits renders dynamic bodies that are intentionally excluded from tile
-// occupancy, such as projectiles. Visibility filtering here prevents the extra pass from
-// touching off-screen projectiles after the tile-based unit layer is done.
-func (m *Manager) drawNonTileStackUnits(screen *ebiten.Image, cam *camera.Camera, quality assets.Quality) error {
-	if m == nil || screen == nil || cam == nil {
-		return nil
-	}
-
-	screenBounds := screen.Bounds()
-	screenWidth := screenBounds.Dx()
-	screenHeight := screenBounds.Dy()
-	var drawErr error
-
-	m.units.Range(func(current Unit) bool {
-		if unitUsesTileStack(current) {
-			return true
-		}
-		if !unitVisibleOnScreen(cam, m.world.TileSize(), screenWidth, screenHeight, current) {
-			return true
-		}
-
-		if err := m.renderer.DrawUnit(screen, cam, m.world.TileSize(), quality, current); err != nil {
-			drawErr = err
-			return false
-		}
-
-		return true
-	})
-
-	return drawErr
+	return unit != nil && unit.Alive() && (unit.Selectable() || unit.UnitKind() == KindProjectile)
 }
 
 func (m *Manager) tileStackAtKey(key tileKey) *TileStack {

@@ -28,6 +28,12 @@ type Unit interface {
 	Selectable() bool
 	EnterTile(*TileStack)
 	LeaveTile(*TileStack)
+	// Tick advances the gameplay state for one manager update step. Callers provide the current
+	// game tick, the fixed-step delta and an optional terrain-speed lookup used by moving units.
+	Tick(int64, float64, func(geom.Point) float64)
+	// ShouldUpdate reports whether this unit should participate in the manager's current update
+	// pass. Static units use it to stay asleep outside externally triggered wake-ups.
+	ShouldUpdate() bool
 }
 
 // BaseUnit stores the spatial and tick-based movement state shared by all world units.

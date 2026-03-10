@@ -24,13 +24,11 @@ type Projectile struct {
 	OwnerID int64
 	Radius  float64
 	Damage  int
-}
 
-type impactEffect struct {
-	Position geom.Point
-	Radius   float64
-	Age      float64
-	Duration float64
+	impactRadius   float64
+	impactAge      float64
+	impactDuration float64
+	exploding      bool
 }
 
 // newProjectile builds a discrete trajectory that advances from tile to tile in the cursor
@@ -58,9 +56,11 @@ func newProjectile(owner *NonStaticUnit, target geom.Point, gameWorld world.Worl
 			Position: owner.Position,
 			path:     path,
 		},
-		OwnerID: owner.ID,
-		Radius:  gameWorld.TileSize() * projectileRadiusScale,
-		Damage:  projectileDamage,
+		OwnerID:        owner.ID,
+		Radius:         gameWorld.TileSize() * projectileRadiusScale,
+		Damage:         projectileDamage,
+		impactRadius:   gameWorld.TileSize() * impactRadiusScale,
+		impactDuration: impactDuration,
 	}, nil
 }
 
@@ -121,6 +121,8 @@ func (p *Projectile) ApplyDamage(_ int) bool {
 }
 
 func (p *Projectile) Respawn() {
+	p.exploding = false
+	p.impactAge = 0
 	p.clearTravel()
 }
 
@@ -128,42 +130,98 @@ func (p *Projectile) Selectable() bool {
 	return false
 }
 
-func (p *Projectile) EnterTile(_ *TileStack) {
+func (p *Projectile) EnterTile(stack *TileStack) {
+	stack.AddUnit(p.UnitID())
 }
 
-func (p *Projectile) LeaveTile(_ *TileStack) {
+func (p *Projectile) LeaveTile(stack *TileStack) {
+	stack.RemoveUnit(p.UnitID())
 }
 
-func newImpactEffect(position geom.Point, tileSize float64) impactEffect {
-	return impactEffect{
-		Position: position,
-		Radius:   tileSize * impactRadiusScale,
-		Duration: impactDuration,
+// Tick advances the projectile through the same manager-driven update contract as every other
+// tickable unit. Projectile-specific side effects are resolved immediately when the manager
+// moves the projectile into the next tile, so this method only advances movement or impact age.
+func (p *Projectile) Tick(gameTick int64, delta float64, _ func(geom.Point) float64) {
+	p.lastUpdateTick = gameTick
+
+	if p.exploding {
+		if delta > 0 {
+			p.impactAge += delta
+		}
+		return
 	}
-}
 
-// Tick advances the projectile using the same discrete sleepTime model as regular units.
-// The returned flag tells the caller whether the logical position entered a new tile during
-// this simulation tick and therefore needs an interaction check.
-func (p *Projectile) Tick(delta float64) bool {
 	if p.sleepTime > 0 {
 		p.sleepTime--
 		p.travel.remaining = p.sleepTime
 		if p.sleepTime == 0 {
 			p.travel.remaining = 0
 		}
-		return false
+		return
 	}
 
 	p.sleepTime = p.advance(delta)
 	p.travel.remaining = p.sleepTime
-	return p.travel.active
+}
+
+// ShouldUpdate keeps the projectile inside the regular tick loop while it is either flying
+// towards the next tile or still finishing its short impact animation.
+func (p *Projectile) ShouldUpdate() bool {
+	return p.IsActive()
+}
+
+// ReactToEnteredTile resolves projectile impacts at the exact point where the manager has
+// already registered the projectile inside the newly entered tile. Running the hit test here
+// keeps the projectile lifecycle local to the projectile while reusing the same tile-entry
+// event that every moving unit already goes through.
+func (p *Projectile) ReactToEnteredTile(m *Manager, stack *TileStack) {
+	if p == nil || p.exploding || m == nil {
+		return
+	}
+
+	target, hit := m.firstProjectileOccupant(stack, p.OwnerID)
+	if !hit {
+		return
+	}
+
+	m.tileRegistryMu.RLock()
+	targetPreviousKey, targetWasRegistered := m.registeredTiles[target.UnitID()]
+	m.tileRegistryMu.RUnlock()
+	if target.ApplyDamage(p.Damage) {
+		if targetWasRegistered {
+			m.unregisterUnitFromTile(target, targetPreviousKey)
+		}
+		target.Respawn()
+		if unitUsesTileStack(target) {
+			m.registerUnitInCurrentTile(target)
+		}
+	}
+
+	p.StartExplosion()
 }
 
 // IsActive reports whether the projectile still has either a future waypoint to traverse or
 // a currently interpolated segment that should remain visible.
 func (p *Projectile) IsActive() bool {
+	if p.exploding {
+		return p.impactAge < p.impactDuration
+	}
+
 	return len(p.path) > 0 || p.sleepTime > 0
+}
+
+// StartExplosion freezes the projectile at the impact point and reuses the same runtime object
+// for the short-lived hit animation so the manager does not need a separate impact collection.
+func (p *Projectile) StartExplosion() {
+	if p == nil || p.exploding {
+		return
+	}
+
+	p.exploding = true
+	p.impactAge = 0
+	p.path = p.path[:0]
+	p.sleepTime = 0
+	p.clearTravel()
 }
 
 func (p *Projectile) advance(delta float64) int {
