@@ -6,6 +6,7 @@ import (
 	"image/color"
 	"log"
 	"math"
+	"sync"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -35,12 +36,15 @@ const (
 )
 
 type Game struct {
-	cam    *camera.Camera
-	world  world.World
-	atlas  *assets.TileAtlas
-	tile   *ebiten.Image
-	units  *unit.Manager
-	stress *stressScenario
+	cam      *camera.Camera
+	world    world.World
+	atlas    *assets.TileAtlas
+	tile     *ebiten.Image
+	units    *unit.Manager
+	scenario gameScenario
+
+	tileRenderWorkers []chan tileRenderRequest
+	tileRenderWG      sync.WaitGroup
 
 	screenWidth  int
 	screenHeight int
@@ -60,9 +64,22 @@ type Game struct {
 	firstDrawLogged   bool
 }
 
+// NewGame builds the regular lightweight scene used by the default desktop launcher.
 func NewGame() *Game {
+	return NewGameWithConfig(GameConfig{Mode: GameModeBasic})
+}
+
+// NewStressGame builds the dedicated heavy-load scene used by the separate stress launcher.
+func NewStressGame() *Game {
+	return NewGameWithConfig(GameConfig{Mode: GameModeStress})
+}
+
+// NewGameWithConfig constructs the game core and chooses one startup scenario that will seed
+// units and optional orchestration on top of the shared world, camera and rendering systems.
+func NewGameWithConfig(config GameConfig) *Game {
 	startedAt := time.Now()
 	log.Printf("[startup] game: NewGame started")
+	config = normalizedGameConfig(config)
 
 	tileStartedAt := time.Now()
 	tile := ebiten.NewImage(1, 1)
@@ -77,9 +94,9 @@ func NewGame() *Game {
 	})
 	log.Printf("[startup] game: world created in %s (%dx%d tiles, tile size %.1f)", time.Since(worldStartedAt), mapColumns, mapRows, tileSize)
 
-	stressStartedAt := time.Now()
-	stress := newStressScenario(gameWorld)
-	log.Printf("[startup] game: stress scenario prepared in %s", time.Since(stressStartedAt))
+	scenarioStartedAt := time.Now()
+	scenario := newScenarioForMode(config.Mode, gameWorld)
+	log.Printf("[startup] game: %s scenario prepared in %s", config.Mode, time.Since(scenarioStartedAt))
 
 	structStartedAt := time.Now()
 	g := &Game{
@@ -91,7 +108,7 @@ func NewGame() *Game {
 		world:        gameWorld,
 		atlas:        assets.NewTileAtlas(),
 		tile:         tile,
-		stress:       stress,
+		scenario:     scenario,
 		screenWidth:  DefaultScreenWidth,
 		screenHeight: DefaultScreenHeight,
 		startedAt:    startedAt,
@@ -102,10 +119,14 @@ func NewGame() *Game {
 	g.units = unit.NewManager(g.world)
 	log.Printf("[startup] game: unit manager initialized in %s", time.Since(managerStartedAt))
 
-	if g.stress != nil {
+	tileRenderStartedAt := time.Now()
+	g.startTileRenderWorkers()
+	log.Printf("[startup] game: tile render worker pool started in %s", time.Since(tileRenderStartedAt))
+
+	if g.scenario != nil {
 		seedStartedAt := time.Now()
-		g.stress.SeedStaticUnits(g.units)
-		log.Printf("[startup] game: static stress units seeded in %s", time.Since(seedStartedAt))
+		g.scenario.SeedUnits(g.units)
+		log.Printf("[startup] game: scenario units seeded in %s", time.Since(seedStartedAt))
 	}
 
 	cameraStartedAt := time.Now()
@@ -124,8 +145,8 @@ func (g *Game) Update() error {
 	}
 
 	g.tickCounter++
-	if g.stress != nil {
-		g.stress.Update(g.tickCounter, g.units)
+	if g.scenario != nil {
+		g.scenario.Update(g.tickCounter, g.units)
 	}
 	g.units.Update(g.tickCounter)
 	g.updateCameraControls()
@@ -145,7 +166,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	g.updateScreenSize(screen)
 
 	visible, quality, hoveredTileX, hoveredTileY, hovered := g.drawWorld(screen)
-	if err := g.units.Draw(screen, g.cam, quality, visible, false); err != nil && g.assetErr == nil {
+	if err := g.units.Draw(screen, g.cam, quality, visible, true); err != nil && g.assetErr == nil {
 		g.assetErr = err
 	}
 
@@ -347,42 +368,14 @@ func (g *Game) drawWorld(screen *ebiten.Image) (image.Rectangle, assets.Quality,
 	cursorX, cursorY := ebiten.CursorPosition()
 	hoveredTileX, hoveredTileY, hovered := g.hoveredTile(cursorX, cursorY)
 
-	g.renderedTiles = 0
-	for y := visible.Min.Y; y < visible.Max.Y; y++ {
-		for x := visible.Min.X; x < visible.Max.X; x++ {
-			g.drawTile(screen, x, y, drawSize, scale, camPos, quality)
-			g.renderedTiles++
-		}
+	tileCommands, err := g.prepareVisibleTileDrawCommands(visible, drawSize, scale, camPos, quality)
+	if err != nil && g.assetErr == nil {
+		g.assetErr = err
 	}
+	g.renderedTiles = len(tileCommands)
+	g.drawTileCommands(screen, tileCommands)
 
 	return visible, quality, hoveredTileX, hoveredTileY, hovered
-}
-
-func (g *Game) drawTile(
-	screen *ebiten.Image,
-	tileX int,
-	tileY int,
-	drawSize float64,
-	scale float64,
-	camPos geom.Point,
-	quality assets.Quality,
-) {
-	screenX, screenY := g.tileScreenPosition(tileX, tileY, scale, camPos)
-	tileTint := g.world.TileTint(tileX, tileY)
-
-	var op ebiten.DrawImageOptions
-	tileImage := g.tile
-	if atlasTile, atlasTileSize, ok := g.tileImage(tileX, tileY, quality); ok {
-		tileImage = atlasTile
-		op.GeoM.Scale(drawSize/atlasTileSize, drawSize/atlasTileSize)
-		op.ColorScale.ScaleWithColor(tileTint)
-	} else {
-		op.GeoM.Scale(drawSize, drawSize)
-		op.ColorScale.ScaleWithColor(g.world.TileColor(tileX, tileY))
-	}
-	op.GeoM.Translate(screenX, screenY)
-
-	screen.DrawImage(tileImage, &op)
 }
 
 func (g *Game) drawTileHighlight(screen *ebiten.Image, tileX int, tileY int) {
@@ -457,35 +450,27 @@ func (g *Game) debugText(hoveredTileX, hoveredTileY int, hovered bool) string {
 	if g.fireErr != nil {
 		debugText += "\nFire command: " + g.fireErr.Error()
 	}
-	if g.stress != nil {
-		debugText += fmt.Sprintf(
-			"\nStress: units %d/%d  static objects %d  jobs completed %d  jobs failed %d",
-			g.stress.SpawnedUnits(),
-			stressUnitCount,
-			g.stress.StaticObjects(),
-			g.stress.JobCompletedCount(),
-			g.stress.JobFailedCount(),
-		)
+	if g.scenario != nil {
+		if scenarioDebugText := g.scenario.DebugText(); scenarioDebugText != "" {
+			debugText += "\n" + scenarioDebugText
+		}
 	}
 
 	return debugText
 }
 
-func (g *Game) tileImage(x, y int, quality assets.Quality) (*ebiten.Image, float64, bool) {
+func (g *Game) tileImage(x, y int, quality assets.Quality) (*ebiten.Image, float64, error) {
 	tileSize := g.atlas.TileSize(quality)
 	if tileSize == 0 {
-		return nil, 0, false
+		return nil, 0, nil
 	}
 
 	tileImage, err := g.atlas.TileImage(g.world.TileIndex(x, y), quality)
 	if err != nil {
-		if g.assetErr == nil {
-			g.assetErr = err
-		}
-		return nil, 0, false
+		return nil, 0, err
 	}
 
-	return tileImage, float64(tileSize), true
+	return tileImage, float64(tileSize), nil
 }
 
 func cellAnchor(tileX, tileY int, tileSize float64) geom.Point {

@@ -42,7 +42,6 @@ func (m *orderedUnitMap) SlotsLen() int {
 	return len(m.order)
 }
 
-
 // Set inserts a unit into one of the explicitly released free slots or appends it at the end.
 // Replacements for an already known UnitID keep their established slot so external ordering
 // remains stable even after older dead entries have already yielded their physical slot.

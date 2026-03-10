@@ -317,7 +317,7 @@ func (m *Manager) unitByID(unitID int64) (Unit, bool) {
 }
 
 func (m *Manager) startWorkers() {
-	workerCount := runtime.GOMAXPROCS(0)
+	workerCount := runtime.GOMAXPROCS(0) / 4
 	if workerCount < 1 {
 		workerCount = 1
 	}

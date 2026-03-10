@@ -11,7 +11,7 @@ import (
 
 func main() {
 	startedAt := time.Now()
-	log.Printf("[startup] launcher: process started")
+	log.Printf("[startup] launcher: stress process started")
 
 	flagsStartedAt := time.Now()
 	runConfig := launcher.ParseRunConfig()
@@ -30,7 +30,7 @@ func main() {
 	}()
 
 	windowStartedAt := time.Now()
-	ebiten.SetWindowTitle("Endless")
+	ebiten.SetWindowTitle("Endless Stress")
 	ebiten.SetWindowSize(endless.DefaultScreenWidth, endless.DefaultScreenHeight)
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 	ebiten.SetFullscreen(false)
@@ -38,11 +38,11 @@ func main() {
 	log.Printf("[startup] launcher: window configured in %s", time.Since(windowStartedAt))
 
 	gameStartedAt := time.Now()
-	game := endless.NewGame()
-	log.Printf("[startup] launcher: NewGame completed in %s", time.Since(gameStartedAt))
+	game := endless.NewStressGame()
+	log.Printf("[startup] launcher: NewStressGame completed in %s", time.Since(gameStartedAt))
 	log.Printf("[startup] launcher: entering ebiten.RunGame after %s total startup prep", time.Since(startedAt))
 
 	if err := ebiten.RunGame(game); err != nil {
-		log.Fatalf("run endless: %v", err)
+		log.Fatalf("run endless stress: %v", err)
 	}
 }

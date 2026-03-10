@@ -1,4 +1,4 @@
-package main
+package launcher
 
 import (
 	"errors"
@@ -15,14 +15,18 @@ import (
 	"sync"
 )
 
-type profilingConfig struct {
-	cpuProfilePath  string
-	heapProfilePath string
-	tracePath       string
-	pprofAddress    string
+// ProfilingConfig describes every optional runtime profile the desktop launchers may enable
+// before Ebiten takes control of the process.
+type ProfilingConfig struct {
+	CPUProfilePath  string
+	HeapProfilePath string
+	TracePath       string
+	PprofAddress    string
 }
 
-type profilerSession struct {
+// ProfilerSession owns the files and shutdown order for the active profiling tools so callers
+// may always defer Stop immediately after startup succeeds.
+type ProfilerSession struct {
 	cpuProfileFile  *os.File
 	traceFile       *os.File
 	heapProfilePath string
@@ -31,22 +35,22 @@ type profilerSession struct {
 	stopErr  error
 }
 
-// startProfiler enables the optional profiling endpoints requested on the command line.
-// CPU and trace profilers are started before the Ebiten loop begins, while heap, mutex and
-// block profiles are configured so they can be captured after the stress run completes.
-func startProfiler(config profilingConfig) (*profilerSession, error) {
-	session := &profilerSession{
-		heapProfilePath: config.heapProfilePath,
+// StartProfiler enables the optional profiling endpoints requested on the command line. CPU
+// and trace profilers are started before the Ebiten loop begins, while heap, mutex and block
+// profiles are configured so they can be captured after a long interactive run finishes.
+func StartProfiler(config ProfilingConfig) (*ProfilerSession, error) {
+	session := &ProfilerSession{
+		heapProfilePath: config.HeapProfilePath,
 	}
 
-	if config.pprofAddress != "" {
-		if err := startPprofServer(config.pprofAddress); err != nil {
+	if config.PprofAddress != "" {
+		if err := startPprofServer(config.PprofAddress); err != nil {
 			return nil, err
 		}
 	}
 
-	if config.cpuProfilePath != "" {
-		cpuProfileFile, err := createProfileFile(config.cpuProfilePath)
+	if config.CPUProfilePath != "" {
+		cpuProfileFile, err := createProfileFile(config.CPUProfilePath)
 		if err != nil {
 			return nil, fmt.Errorf("create CPU profile file: %w", err)
 		}
@@ -58,8 +62,8 @@ func startProfiler(config profilingConfig) (*profilerSession, error) {
 		log.Printf("CPU profiling enabled: %s", cpuProfileFile.Name())
 	}
 
-	if config.tracePath != "" {
-		traceFile, err := createProfileFile(config.tracePath)
+	if config.TracePath != "" {
+		traceFile, err := createProfileFile(config.TracePath)
 		if err != nil {
 			pprof.StopCPUProfile()
 			if closeErr := closeFiles(session.cpuProfileFile); closeErr != nil {
@@ -79,12 +83,12 @@ func startProfiler(config profilingConfig) (*profilerSession, error) {
 		log.Printf("Runtime trace enabled: %s", traceFile.Name())
 	}
 
-	if config.heapProfilePath != "" {
+	if config.HeapProfilePath != "" {
 		runtime.MemProfileRate = 1
-		log.Printf("Heap profiling enabled: %s", config.heapProfilePath)
+		log.Printf("Heap profiling enabled: %s", config.HeapProfilePath)
 	}
 
-	if config.pprofAddress != "" || config.cpuProfilePath != "" || config.heapProfilePath != "" || config.tracePath != "" {
+	if config.PprofAddress != "" || config.CPUProfilePath != "" || config.HeapProfilePath != "" || config.TracePath != "" {
 		runtime.SetBlockProfileRate(1)
 		runtime.SetMutexProfileFraction(1)
 		log.Printf("Blocking and mutex profiling enabled")
@@ -93,9 +97,9 @@ func startProfiler(config profilingConfig) (*profilerSession, error) {
 	return session, nil
 }
 
-// Stop flushes every active profile in the right order so the generated files stay valid even
-// when the game exits because the window was closed after a long stress session.
-func (s *profilerSession) Stop() error {
+// Stop flushes every active profile in the correct order so the produced files remain valid
+// even when the game exits because the user closes the window during profiling.
+func (s *ProfilerSession) Stop() error {
 	if s == nil {
 		return nil
 	}
@@ -129,8 +133,8 @@ func (s *profilerSession) Stop() error {
 	return s.stopErr
 }
 
-// startPprofServer launches the standard library diagnostics handlers in the background so
-// the running Ebiten process can be sampled with `go tool pprof` during a stress run.
+// startPprofServer launches the standard-library diagnostics handlers in the background so the
+// running Ebiten process can be sampled with go tool pprof while the window stays interactive.
 func startPprofServer(address string) error {
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
@@ -147,8 +151,8 @@ func startPprofServer(address string) error {
 	return nil
 }
 
-// writeHeapProfile forces a GC cycle before the snapshot so the resulting heap profile shows
-// retained memory instead of transient allocations that were already dead at shutdown.
+// writeHeapProfile forces a GC cycle before taking the snapshot so the saved heap profile
+// reflects retained allocations instead of garbage that was already unreachable.
 func writeHeapProfile(profilePath string) error {
 	heapProfileFile, err := createProfileFile(profilePath)
 	if err != nil {
@@ -169,8 +173,8 @@ func writeHeapProfile(profilePath string) error {
 	return nil
 }
 
-// createProfileFile ensures profile outputs can be written into nested folders directly from
-// the run command, which keeps repeatable stress captures convenient.
+// createProfileFile ensures profiling outputs can be written into nested directories directly
+// from the launch command without any manual filesystem preparation.
 func createProfileFile(profilePath string) (*os.File, error) {
 	if err := os.MkdirAll(filepath.Dir(profilePath), 0o755); err != nil {
 		return nil, fmt.Errorf("create profile directory: %w", err)
@@ -184,6 +188,8 @@ func createProfileFile(profilePath string) (*os.File, error) {
 	return file, nil
 }
 
+// closeFiles collapses repeated best-effort cleanup paths into one helper so the startup
+// rollback logic stays readable when one of the profilers fails to initialize.
 func closeFiles(files ...*os.File) error {
 	var closeErrors []error
 	for _, file := range files {

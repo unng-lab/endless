@@ -1,6 +1,7 @@
 package endless
 
 import (
+	"fmt"
 	"log"
 	"math"
 	"math/rand"
@@ -59,10 +60,10 @@ func newStressScenario(gameWorld world.World) *stressScenario {
 	return scenario
 }
 
-// SeedStaticUnits creates the stress harness obstacle field through the public manager API so
-// the manager constructor can stay empty and every static body still gets normal tile-stack
+// SeedUnits creates the stress harness obstacle field through the public manager API so the
+// manager constructor can stay empty and every static body still gets normal tile-stack
 // registration and ID assignment.
-func (s *stressScenario) SeedStaticUnits(manager *unit.Manager) {
+func (s *stressScenario) SeedUnits(manager *unit.Manager) {
 	if s == nil || manager == nil {
 		return
 	}
@@ -133,6 +134,23 @@ func (s *stressScenario) JobFailedCount() int64 {
 	}
 
 	return s.actor.failedJobs
+}
+
+// DebugText exposes one compact scene summary for the in-game overlay so the dedicated stress
+// launcher can confirm that the expected heavy-load harness was actually seeded.
+func (s *stressScenario) DebugText() string {
+	if s == nil {
+		return ""
+	}
+
+	return fmt.Sprintf(
+		"Scene: stress  units %d/%d  static objects %d  jobs completed %d  jobs failed %d",
+		s.SpawnedUnits(),
+		stressUnitCount,
+		s.StaticObjects(),
+		s.JobCompletedCount(),
+		s.JobFailedCount(),
+	)
 }
 
 // spawnReadyUnits releases runners one by one using a fixed tick cadence. The actor starts
