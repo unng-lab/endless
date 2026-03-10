@@ -29,15 +29,7 @@ func (m *orderedUnitMap) Len() int {
 		return 0
 	}
 
-	count := 0
-	for _, unit := range m.order {
-		if orderedMapUnitDeleted(unit) {
-			continue
-		}
-		count++
-	}
-
-	return count
+	return len(m.order) - len(m.freeSlots)
 }
 
 // SlotsLen reports how many physical slots currently exist in insertion-order storage. Worker
@@ -50,25 +42,6 @@ func (m *orderedUnitMap) SlotsLen() int {
 	return len(m.order)
 }
 
-// HasPendingRemovalWork reports whether ordered storage still contains at least one deleted
-// unit whose manager-side cleanup has not finished yet. Manager.Update uses this to keep one
-// more worker pass alive after the last live unit disappears so tile stacks and job reports
-// are still flushed for deferred-deletion entries.
-func (m *orderedUnitMap) HasPendingRemovalWork() bool {
-	if m == nil {
-		return false
-	}
-
-	for _, unit := range m.order {
-		if unit == nil || unit.Base().RemovalHandled() || !unit.Base().PendingRemoval() {
-			continue
-		}
-
-		return true
-	}
-
-	return false
-}
 
 // Set inserts a unit into one of the explicitly released free slots or appends it at the end.
 // Replacements for an already known UnitID keep their established slot so external ordering

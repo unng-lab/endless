@@ -106,6 +106,47 @@ func TestManagerMovesUnitBetweenTileStacksDuringUpdate(t *testing.T) {
 	}
 }
 
+func TestManagerRunsNextTickImmediatelyAfterUnitReachesNextTile(t *testing.T) {
+	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
+	runner := NewRunner(geom.Point{X: 8, Y: 8}, false, 0)
+	m := newTestManager(gameWorld, runner)
+
+	runner.SetPath([]geom.Point{
+		{X: 24, Y: 8},
+		{X: 40, Y: 8},
+	})
+
+	m.Update(1)
+	if got := runner.Position; got != (geom.Point{X: 24, Y: 8}) {
+		t.Fatalf("position after first update = %+v, want %+v", got, geom.Point{X: 24, Y: 8})
+	}
+	initialSleep := runner.SleepTime()
+	if initialSleep <= 0 {
+		t.Fatalf("sleepTime after first update = %d, want positive travel budget", initialSleep)
+	}
+	wakeTick := int64(initialSleep) + 1
+
+	for tick := int64(2); tick < wakeTick; tick++ {
+		m.Update(tick)
+	}
+
+	if got := runner.Position; got != (geom.Point{X: 24, Y: 8}) {
+		t.Fatalf("position before wake tick = %+v, want %+v", got, geom.Point{X: 24, Y: 8})
+	}
+	if got := runner.LastUpdateTick(); got != 1 {
+		t.Fatalf("lastUpdateTick before wake tick = %d, want 1", got)
+	}
+
+	m.Update(wakeTick)
+
+	if got := runner.Position; got != (geom.Point{X: 40, Y: 8}) {
+		t.Fatalf("position on wake tick = %+v, want %+v", got, geom.Point{X: 40, Y: 8})
+	}
+	if got := runner.LastUpdateTick(); got != wakeTick {
+		t.Fatalf("lastUpdateTick on wake tick = %d, want %d", got, wakeTick)
+	}
+}
+
 func TestManagerVisibleTileUnitsFollowVisibleTileAndTileStackOrder(t *testing.T) {
 	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
 	firstInLowerTile := NewRunner(geom.Point{X: 8, Y: 24}, false, 0)

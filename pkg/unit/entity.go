@@ -132,8 +132,9 @@ func (s *BaseUnit) clearTravel() {
 	s.travel = travelState{}
 }
 
-// StepSleep reduces the remaining logical sleep budget by one simulation tick. The manager
-// calls this before deciding whether the unit may enter its gameplay Tick hook.
+// StepSleep reduces the remaining logical sleep budget by one simulation tick. When the
+// budget reaches zero, the segment has visually completed as well, so the next manager pass
+// may immediately enter Tick in that same game tick without reconstructing a stale midpoint.
 func (s *BaseUnit) StepSleep() {
 	if s == nil || s.sleepTime <= 0 {
 		return
@@ -143,6 +144,7 @@ func (s *BaseUnit) StepSleep() {
 	s.travel.remaining = s.sleepTime
 	if s.sleepTime == 0 {
 		s.travel.remaining = 0
+		s.travel.visualRemaining = 0
 	}
 }
 

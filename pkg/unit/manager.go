@@ -81,7 +81,7 @@ func NewManager(gameWorld world.World) *Manager {
 
 func (m *Manager) Update(gameTick int64) {
 	m.lastGameTick = gameTick
-	if m.units.Len() > 0 || m.units.HasPendingRemovalWork() {
+	if m.units.Len() > 0 {
 		for i := range m.workers {
 			m.updateWG.Add(1)
 			m.workers[i] <- gameTick
@@ -372,8 +372,11 @@ func (m *Manager) tickUnit(unit Unit, gameTick int64) {
 		if projectile, ok := unit.(*Projectile); ok && !projectile.IsActive() {
 			projectile.MarkForRemoval()
 			m.retireDeletedUnit(projectile)
+			return
 		}
-		return
+		if unit.Base().SleepTime() > 0 {
+			return
+		}
 	}
 	if !unit.ShouldUpdate() {
 		return
