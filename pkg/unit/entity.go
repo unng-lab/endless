@@ -28,13 +28,16 @@ type Unit interface {
 	Selectable() bool
 	EnterTile(*TileStack)
 	LeaveTile(*TileStack)
-	// Tick advances the gameplay state for one manager update step. Callers provide the current
-	// game tick, the fixed-step delta and an optional terrain-speed lookup used by moving units.
-	Tick(int64, float64, func(geom.Point) float64)
+	// Tick advances the gameplay state for one manager update step. The manager already handles
+	// sleep countdowns and eternal-sleep filtering before calling this hook, so units only
+	// receive the current simulation tick when they are allowed to perform gameplay work.
+	Tick(int64)
 	// ShouldUpdate reports whether this unit should participate in the manager's current update
 	// pass. Static units use it to stay asleep outside externally triggered wake-ups.
 	ShouldUpdate() bool
 }
+
+const fixedTickSeconds = 1.0 / 60.0
 
 // BaseUnit stores the spatial and tick-based movement state shared by all world units.
 // Concrete unit kinds embed it so interpolation, tile lookup and visibility bookkeeping stay
@@ -42,13 +45,14 @@ type Unit interface {
 type BaseUnit struct {
 	Position geom.Point
 
-	path           []geom.Point
-	sleepTime      int
-	lastUpdateTick int64
-	travel         travelState
-	updateSleeping bool
-	pendingRemoval bool
-	removalHandled bool
+	path            []geom.Point
+	sleepTime       int
+	lastUpdateTick  int64
+	lastVisibleTick int64
+	travel          travelState
+	updateSleeping  bool
+	pendingRemoval  bool
+	removalHandled  bool
 }
 
 func (s BaseUnit) TilePosition(tileSize float64) (int, int) {
@@ -106,7 +110,7 @@ func (s BaseUnit) RenderPosition() geom.Point {
 		return s.Position
 	}
 
-	progress := 1 - float64(s.travel.remaining)/float64(s.travel.duration)
+	progress := 1 - float64(s.travel.visualRemaining)/float64(s.travel.duration)
 	progress = geom.ClampFloat(progress, 0, 1)
 	return geom.Point{
 		X: s.travel.from.X + (s.travel.to.X-s.travel.from.X)*progress,
@@ -128,6 +132,41 @@ func (s *BaseUnit) consumeReachedWaypoint(target geom.Point) bool {
 
 func (s *BaseUnit) clearTravel() {
 	s.travel = travelState{}
+}
+
+// StepSleep reduces the remaining logical sleep budget by one simulation tick. The manager
+// calls this before deciding whether the unit may enter its gameplay Tick hook.
+func (s *BaseUnit) StepSleep() {
+	if s == nil || s.sleepTime <= 0 {
+		return
+	}
+
+	s.sleepTime--
+	s.travel.remaining = s.sleepTime
+	if s.sleepTime == 0 {
+		s.travel.remaining = 0
+	}
+}
+
+// AdvanceVisibleTravel updates the interpolated position exactly once for one simulation tick.
+// Visible units call this during the visible tile-stack traversal so rendering stays smooth
+// without forcing hidden units to spend extra work on per-frame interpolation state.
+func (s *BaseUnit) AdvanceVisibleTravel(gameTick int64) {
+	if s == nil || s.lastVisibleTick == gameTick {
+		return
+	}
+
+	s.lastVisibleTick = gameTick
+	if !s.travel.active || s.travel.duration <= 0 {
+		return
+	}
+
+	if s.travel.visualRemaining > s.travel.remaining {
+		s.travel.visualRemaining = s.travel.remaining
+	}
+	if s.travel.remaining == 0 {
+		s.travel.visualRemaining = 0
+	}
 }
 
 // PendingRemoval reports whether the unit has already completed its gameplay lifecycle and now

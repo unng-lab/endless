@@ -4,8 +4,9 @@ package unit
 // The ordered slice stores Unit values directly so iteration walks a dense backing array instead
 // of chasing an extra heap-allocated entry object per unit.
 type orderedUnitMap struct {
-	order []Unit
-	index map[int64]int
+	order     []Unit
+	index     map[int64]int
+	freeSlots []int
 }
 
 // newOrderedUnitMap allocates the ordered lookup once so the manager can add units without
@@ -16,8 +17,9 @@ func newOrderedUnitMap(capacity int) *orderedUnitMap {
 	}
 
 	return &orderedUnitMap{
-		order: make([]Unit, 0, capacity),
-		index: make(map[int64]int, capacity),
+		order:     make([]Unit, 0, capacity),
+		index:     make(map[int64]int, capacity),
+		freeSlots: make([]int, 0),
 	}
 }
 
@@ -66,9 +68,9 @@ func (m *orderedUnitMap) HasPendingRemovalWork() bool {
 	return false
 }
 
-// Set inserts a unit into the first reusable deleted slot or appends it at the end.
+// Set inserts a unit into one of the explicitly released free slots or appends it at the end.
 // Replacements for an already known UnitID keep their established slot so external ordering
-// remains stable even after older dead entries stay resident inside the backing slice.
+// remains stable even after older dead entries have already yielded their physical slot.
 func (m *orderedUnitMap) Set(unit Unit) {
 	if m == nil || unit == nil || unit.UnitID() == 0 {
 		return
@@ -80,21 +82,37 @@ func (m *orderedUnitMap) Set(unit Unit) {
 		return
 	}
 
-	for index, current := range m.order {
-		if !orderedMapUnitDeleted(current) {
-			continue
-		}
-
-		if current != nil {
-			delete(m.index, current.UnitID())
-		}
-		m.order[index] = unit
-		m.index[unitID] = index
+	freeIndex, ok := m.takeFreeSlot()
+	if ok {
+		m.order[freeIndex] = unit
+		m.index[unitID] = freeIndex
 		return
 	}
 
 	m.index[unitID] = len(m.order)
 	m.order = append(m.order, unit)
+}
+
+// ReleaseDeletedSlot returns the physical slot of a deleted unit back to the reusable slot
+// pool after manager-side cleanup has fully completed for that unit.
+func (m *orderedUnitMap) ReleaseDeletedSlot(unitID int64) {
+	if m == nil || unitID == 0 {
+		return
+	}
+
+	index, ok := m.index[unitID]
+	if !ok || index < 0 || index >= len(m.order) {
+		return
+	}
+
+	unit := m.order[index]
+	if unit == nil || !unit.Base().PendingRemoval() {
+		return
+	}
+
+	delete(m.index, unitID)
+	m.order[index] = nil
+	m.freeSlots = append(m.freeSlots, index)
 }
 
 // Get resolves a unit by its stable ID in constant time.
@@ -166,4 +184,18 @@ func (m *orderedUnitMap) Range(visitor func(Unit) bool) {
 
 func orderedMapUnitDeleted(unit Unit) bool {
 	return unit == nil || unit.Base().PendingRemoval()
+}
+
+// takeFreeSlot pops one reusable physical slot index from the dedicated free-slot pool.
+// Keeping released slots in a separate slice avoids rescanning the whole ordered storage on
+// every insertion during large bootstrap phases such as static stress-unit registration.
+func (m *orderedUnitMap) takeFreeSlot() (int, bool) {
+	if m == nil || len(m.freeSlots) == 0 {
+		return 0, false
+	}
+
+	lastIndex := len(m.freeSlots) - 1
+	slotIndex := m.freeSlots[lastIndex]
+	m.freeSlots = m.freeSlots[:lastIndex]
+	return slotIndex, true
 }

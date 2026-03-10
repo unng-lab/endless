@@ -1,8 +1,10 @@
 package endless
 
 import (
+	"log"
 	"math"
 	"math/rand"
+	"time"
 
 	"github.com/unng-lab/endless/pkg/geom"
 	"github.com/unng-lab/endless/pkg/unit"
@@ -21,6 +23,7 @@ const (
 	stressSpawnSpacingTiles   = 2
 	stressActorID             = 1
 	stressStaticSeed          = 2
+	stressSeedLogInterval     = 10000
 )
 
 type stressScenario struct {
@@ -35,17 +38,25 @@ type stressScenario struct {
 // blockers are still planned up front, but they are now injected through Manager.AddUnit so the
 // manager boot path never bypasses its normal registration logic.
 func newStressScenario(gameWorld world.World) *stressScenario {
+	startedAt := time.Now()
 	centerTileX := gameWorld.Columns() / 2
 	centerTileY := gameWorld.Rows() / 2
 	blockedTiles := make(map[int64]struct{}, stressStaticObjectCount)
+	log.Printf("[startup] stress: creating scenario for center tile (%d, %d)", centerTileX, centerTileY)
 
-	return &stressScenario{
+	spawnPointsStartedAt := time.Now()
+	spawnPoints := buildStressSpawnPoints(gameWorld, centerTileX, centerTileY)
+	log.Printf("[startup] stress: prepared %d spawn points in %s", len(spawnPoints), time.Since(spawnPointsStartedAt))
+
+	scenario := &stressScenario{
 		actor:              newStressActor(gameWorld, centerTileX, centerTileY, blockedTiles),
-		pendingSpawnPoints: buildStressSpawnPoints(gameWorld, centerTileX, centerTileY),
+		pendingSpawnPoints: spawnPoints,
 		nextSpawnTick:      spawnIntervalTicks(),
 		spawnedUnits:       0,
 		staticObjects:      stressStaticObjectCount,
 	}
+	log.Printf("[startup] stress: scenario struct ready in %s", time.Since(startedAt))
+	return scenario
 }
 
 // SeedStaticUnits creates the stress harness obstacle field through the public manager API so
@@ -56,9 +67,28 @@ func (s *stressScenario) SeedStaticUnits(manager *unit.Manager) {
 		return
 	}
 
-	for _, current := range buildStressStaticUnits(s.actor.world, s.actor.centerTileX, s.actor.centerTileY, s.actor.blocked) {
+	startedAt := time.Now()
+	log.Printf("[startup] stress: static unit seeding started (%d objects planned)", stressStaticObjectCount)
+
+	buildStartedAt := time.Now()
+	staticUnits := buildStressStaticUnits(s.actor.world, s.actor.centerTileX, s.actor.centerTileY, s.actor.blocked)
+	log.Printf("[startup] stress: built %d static units in %s", len(staticUnits), time.Since(buildStartedAt))
+
+	registerStartedAt := time.Now()
+	for index, current := range staticUnits {
 		manager.AddUnit(current)
+		if (index+1)%stressSeedLogInterval == 0 || index+1 == len(staticUnits) {
+			log.Printf(
+				"[startup] stress: registered %d/%d static units in %s (seed total %s)",
+				index+1,
+				len(staticUnits),
+				time.Since(registerStartedAt),
+				time.Since(startedAt),
+			)
+		}
 	}
+
+	log.Printf("[startup] stress: static unit seeding finished in %s", time.Since(startedAt))
 }
 
 // Update advances the scenario-specific orchestration before the main unit simulation step.
@@ -237,6 +267,7 @@ func (a *stressActor) randomOpenTargetTile() (int, int) {
 // random tiles across the whole map. The center spawn arena stays clear so delayed runner
 // spawning and the first actor jobs always begin from an obstacle-free patch.
 func buildStressStaticUnits(gameWorld world.World, centerTileX, centerTileY int, blocked map[int64]struct{}) []unit.Unit {
+	startedAt := time.Now()
 	staticUnits := make([]unit.Unit, 0, stressStaticObjectCount)
 	rng := rand.New(rand.NewSource(stressStaticSeed))
 
@@ -256,10 +287,12 @@ func buildStressStaticUnits(gameWorld world.World, centerTileX, centerTileY int,
 		position := cellAnchor(tileX, tileY, gameWorld.TileSize())
 		if rng.Intn(2) == 0 {
 			staticUnits = append(staticUnits, unit.NewWall(position))
-			continue
+		} else {
+			staticUnits = append(staticUnits, unit.NewBarricade(position))
 		}
-
-		staticUnits = append(staticUnits, unit.NewBarricade(position))
+		if len(staticUnits)%stressSeedLogInterval == 0 || len(staticUnits) == stressStaticObjectCount {
+			log.Printf("[startup] stress: generated %d/%d static units in %s", len(staticUnits), stressStaticObjectCount, time.Since(startedAt))
+		}
 	}
 
 	return staticUnits

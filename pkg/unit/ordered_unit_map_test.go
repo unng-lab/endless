@@ -81,16 +81,19 @@ func TestOrderedUnitMapRangeStopsAtVisitorRequest(t *testing.T) {
 	}
 }
 
-// TestOrderedUnitMapReusesDeletedSlot verifies that a unit marked for deferred deletion stays
-// in the backing slice but disappears from logical access and yields its slot to the next insert.
+// TestOrderedUnitMapReusesReleasedDeletedSlot verifies that a unit marked for deferred deletion
+// stays hidden from logical access and yields its slot only after manager-style cleanup has
+// explicitly released that physical slot back into the reusable free-slot pool.
 func TestOrderedUnitMapReusesDeletedSlot(t *testing.T) {
 	units := newOrderedUnitMap(3)
 	first := NewRunner(geom.Point{X: 8, Y: 8}, false, 0)
 	first.SetUnitID(1)
 	second := NewRunner(geom.Point{X: 24, Y: 24}, false, 0)
 	second.SetUnitID(2)
-	replacement := NewRunner(geom.Point{X: 40, Y: 40}, false, 0)
-	replacement.SetUnitID(3)
+	preReleaseReplacement := NewRunner(geom.Point{X: 40, Y: 40}, false, 0)
+	preReleaseReplacement.SetUnitID(3)
+	releasedSlotReplacement := NewRunner(geom.Point{X: 56, Y: 56}, false, 0)
+	releasedSlotReplacement.SetUnitID(4)
 
 	units.Set(first)
 	units.Set(second)
@@ -109,21 +112,30 @@ func TestOrderedUnitMapReusesDeletedSlot(t *testing.T) {
 		t.Fatal("At(0) = true after mark-for-removal, want hidden deleted slot")
 	}
 
-	units.Set(replacement)
-
-	if units.Len() != 2 {
-		t.Fatalf("Len() after slot reuse = %d, want 2 live units", units.Len())
+	units.Set(preReleaseReplacement)
+	if units.SlotsLen() != 3 {
+		t.Fatalf("SlotsLen() before released-slot reuse = %d, want append to a new physical slot", units.SlotsLen())
 	}
-	if units.SlotsLen() != 2 {
-		t.Fatalf("SlotsLen() after slot reuse = %d, want reused slot without growth", units.SlotsLen())
+	if got, ok := units.At(2); !ok || got != preReleaseReplacement {
+		t.Fatalf("At(2) = %p, %v before released-slot reuse, want appended replacement", got, ok)
+	}
+
+	units.ReleaseDeletedSlot(first.UnitID())
+	units.Set(releasedSlotReplacement)
+
+	if units.Len() != 3 {
+		t.Fatalf("Len() after slot reuse = %d, want 3 live units", units.Len())
+	}
+	if units.SlotsLen() != 3 {
+		t.Fatalf("SlotsLen() after slot reuse = %d, want reused released slot without extra growth", units.SlotsLen())
 	}
 
 	gotReplacement, ok := units.At(0)
 	if !ok {
 		t.Fatal("At(0) = false after slot reuse, want replacement")
 	}
-	if gotReplacement != replacement {
-		t.Fatalf("At(0) returned %p, want replacement %p", gotReplacement, replacement)
+	if gotReplacement != releasedSlotReplacement {
+		t.Fatalf("At(0) returned %p, want replacement %p", gotReplacement, releasedSlotReplacement)
 	}
 
 	gotSecond, ok := units.At(1)
@@ -132,5 +144,13 @@ func TestOrderedUnitMapReusesDeletedSlot(t *testing.T) {
 	}
 	if gotSecond != second {
 		t.Fatalf("At(1) returned %p, want second %p", gotSecond, second)
+	}
+
+	gotPreReleaseReplacement, ok := units.At(2)
+	if !ok {
+		t.Fatal("At(2) = false after slot reuse, want pre-release appended unit")
+	}
+	if gotPreReleaseReplacement != preReleaseReplacement {
+		t.Fatalf("At(2) returned %p, want pre-release replacement %p", gotPreReleaseReplacement, preReleaseReplacement)
 	}
 }

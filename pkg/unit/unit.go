@@ -32,6 +32,7 @@ type NonStaticUnit struct {
 	animation Animation
 	elapsed   float64
 	moveSpeed float64
+	speedAt   func(geom.Point) float64
 
 	queuedMove queuedMoveCommand
 	moveJob    moveJobState
@@ -39,11 +40,12 @@ type NonStaticUnit struct {
 }
 
 type travelState struct {
-	from      geom.Point
-	to        geom.Point
-	duration  int
-	remaining int
-	active    bool
+	from            geom.Point
+	to              geom.Point
+	duration        int
+	remaining       int
+	visualRemaining int
+	active          bool
 }
 
 // queuedMoveCommand keeps at most one deferred move order for a mobile unit.
@@ -93,10 +95,10 @@ func (u *NonStaticUnit) UnitKind() Kind {
 // Tick advances unit state by one game tick.
 // Movement is intentionally split into two layers:
 //   - logical movement jumps between tile anchors and is scheduled through sleepTime;
-//   - visual movement is reconstructed from travel so rendering can interpolate smoothly.
+//   - visual movement is reconstructed later from visible-travel state during draw.
 //
 // This keeps path traversal deterministic while avoiding visible teleportation.
-func (u *NonStaticUnit) Tick(gameTick int64, delta float64, speedMultiplier func(geom.Point) float64) {
+func (u *NonStaticUnit) Tick(gameTick int64) {
 	if !u.Alive() {
 		u.failAssignedMoveJob()
 		u.clearQueuedMove()
@@ -104,21 +106,27 @@ func (u *NonStaticUnit) Tick(gameTick int64, delta float64, speedMultiplier func
 		return
 	}
 
-	u.elapsed += delta
 	if u.sleepTime > 0 {
-		u.sleepTime--
-		u.travel.remaining = u.sleepTime
-		if u.sleepTime == 0 {
-			u.travel.remaining = 0
-		}
 		return
 	}
 
 	u.lastUpdateTick = gameTick
 	u.promoteQueuedMoveIfReady()
-	u.sleepTime = u.advance(delta, speedMultiplier)
+	u.sleepTime = u.advance()
 	u.completeAssignedMoveJobIfFinished()
 	u.travel.remaining = u.sleepTime
+}
+
+// UpdateVisible advances only the render-facing state for a visible unit. The manager calls
+// this while iterating visible tile stacks so animation and interpolated travel progress only
+// spend work on units that may actually be drawn this frame.
+func (u *NonStaticUnit) UpdateVisible(gameTick int64) {
+	if u == nil || u.lastVisibleTick == gameTick {
+		return
+	}
+
+	u.elapsed += fixedTickSeconds
+	u.AdvanceVisibleTravel(gameTick)
 }
 
 // ShouldUpdate keeps mobile bodies inside the regular update loop every frame so movement,
@@ -261,6 +269,12 @@ func (u *NonStaticUnit) Wake() {
 	u.sleepTime = 0
 }
 
+// SetSpeedMultiplierLookup binds the terrain-speed resolver once so Tick may stay on the
+// requested minimal contract and receive only the current simulation tick.
+func (u *NonStaticUnit) SetSpeedMultiplierLookup(speedAt func(geom.Point) float64) {
+	u.speedAt = speedAt
+}
+
 // setPathWithoutJobCancel updates the immediate route without touching the current move-job
 // bookkeeping. Job-driven code uses this helper so it can install a path first and report the
 // final status only when the path actually completes or fails later.
@@ -308,8 +322,8 @@ func (u *NonStaticUnit) prepareForRemovalAfterDeath() {
 // advance schedules movement to the next reachable waypoint and returns how many ticks the
 // unit should stay asleep before the next logical update. Returning a sleep budget instead
 // of applying continuous movement each frame keeps all units aligned to the fixed game tick.
-func (u *NonStaticUnit) advance(delta float64, speedMultiplier func(geom.Point) float64) int {
-	if delta <= 0 || len(u.path) == 0 || u.moveSpeed <= 0 {
+func (u *NonStaticUnit) advance() int {
+	if len(u.path) == 0 || u.moveSpeed <= 0 {
 		u.clearTravel()
 		return 0
 	}
@@ -320,13 +334,13 @@ func (u *NonStaticUnit) advance(delta float64, speedMultiplier func(geom.Point) 
 			continue
 		}
 
-		currentSpeed, ok := u.moveSpeedAtCurrentTile(speedMultiplier)
+		currentSpeed, ok := u.moveSpeedAtCurrentTile()
 		if !ok {
 			u.clearTravel()
 			return 0
 		}
 
-		return u.startTravel(target, currentSpeed, delta)
+		return u.startTravel(target, currentSpeed)
 	}
 
 	u.clearTravel()
@@ -336,13 +350,13 @@ func (u *NonStaticUnit) advance(delta float64, speedMultiplier func(geom.Point) 
 // moveSpeedAtCurrentTile resolves the effective movement speed for the tile the unit is
 // currently standing on. Terrain modifiers are applied here once so advance can stay focused
 // on route progression and travel scheduling.
-func (u *NonStaticUnit) moveSpeedAtCurrentTile(speedMultiplier func(geom.Point) float64) (float64, bool) {
+func (u *NonStaticUnit) moveSpeedAtCurrentTile() (float64, bool) {
 	currentSpeed := u.moveSpeed
-	if speedMultiplier == nil {
+	if u.speedAt == nil {
 		return currentSpeed, currentSpeed > 0
 	}
 
-	multiplier := speedMultiplier(u.Position)
+	multiplier := u.speedAt(u.Position)
 	if multiplier <= 0 {
 		return 0, false
 	}
@@ -354,18 +368,19 @@ func (u *NonStaticUnit) moveSpeedAtCurrentTile(speedMultiplier func(geom.Point) 
 // startTravel snapshots the segment that render interpolation should visualize, then moves
 // the logical position directly to the next waypoint. This split lets pathfinding and tile
 // occupancy observe the new cell immediately while drawing still shows continuous motion.
-func (u *NonStaticUnit) startTravel(target geom.Point, currentSpeed, delta float64) int {
+func (u *NonStaticUnit) startTravel(target geom.Point, currentSpeed float64) int {
 	dx := target.X - u.Position.X
 	dy := target.Y - u.Position.Y
 	distance := math.Hypot(dx, dy)
-	travelTicks := sleepTicks(distance/currentSpeed, delta)
+	travelTicks := sleepTicks(distance / currentSpeed)
 
 	u.travel = travelState{
-		from:      u.RenderPosition(),
-		to:        target,
-		duration:  travelTicks,
-		remaining: travelTicks,
-		active:    true,
+		from:            u.RenderPosition(),
+		to:              target,
+		duration:        travelTicks,
+		remaining:       travelTicks,
+		visualRemaining: travelTicks,
+		active:          true,
 	}
 	u.Position = target
 	u.path = u.path[1:]
@@ -374,17 +389,14 @@ func (u *NonStaticUnit) startTravel(target geom.Point, currentSpeed, delta float
 }
 
 // sleepTicks converts a continuous duration into a minimum number of simulation ticks.
-// Ceil is important here: when travel does not divide evenly by delta, we must reserve the
+// Ceil is important here: when travel does not divide evenly by the fixed simulation step, we must reserve the
 // extra partial tick so render interpolation never finishes before the logical move does.
-func sleepTicks(duration, delta float64) int {
+func sleepTicks(duration float64) int {
 	if duration <= 0 {
 		return 0
 	}
-	if delta <= 0 {
-		return 1
-	}
 
-	ticks := int(math.Ceil(duration / delta))
+	ticks := int(math.Ceil(duration / fixedTickSeconds))
 	if ticks < 1 {
 		return 1
 	}

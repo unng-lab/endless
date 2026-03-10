@@ -3,30 +3,46 @@ package main
 import (
 	"flag"
 	"log"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/unng-lab/endless/pkg/endless"
 )
 
 func main() {
+	startedAt := time.Now()
+	log.Printf("[startup] launcher: process started")
+
+	flagsStartedAt := time.Now()
 	runConfig := parseRunConfig()
+	log.Printf("[startup] launcher: command-line flags parsed in %s", time.Since(flagsStartedAt))
+
+	profilerStartedAt := time.Now()
 	profilerSession, err := startProfiler(runConfig.profiling)
 	if err != nil {
 		log.Fatalf("start profiler: %v", err)
 	}
+	log.Printf("[startup] launcher: profiler configured in %s", time.Since(profilerStartedAt))
 	defer func() {
 		if stopErr := profilerSession.Stop(); stopErr != nil {
 			log.Printf("stop profiler: %v", stopErr)
 		}
 	}()
 
+	windowStartedAt := time.Now()
 	ebiten.SetWindowTitle("Endless")
 	ebiten.SetWindowSize(endless.DefaultScreenWidth, endless.DefaultScreenHeight)
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 	ebiten.SetFullscreen(false)
 	ebiten.SetVsyncEnabled(false)
+	log.Printf("[startup] launcher: window configured in %s", time.Since(windowStartedAt))
 
-	if err := ebiten.RunGame(endless.NewGame()); err != nil {
+	gameStartedAt := time.Now()
+	game := endless.NewGame()
+	log.Printf("[startup] launcher: NewGame completed in %s", time.Since(gameStartedAt))
+	log.Printf("[startup] launcher: entering ebiten.RunGame after %s total startup prep", time.Since(startedAt))
+
+	if err := ebiten.RunGame(game); err != nil {
 		log.Fatalf("run endless: %v", err)
 	}
 }

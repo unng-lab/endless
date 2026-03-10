@@ -87,7 +87,7 @@ func (s *StaticUnit) CanShoot() bool {
 // Tick gives static units a single update after an external wake-up and then immediately puts
 // them back into the eternal-sleep mode. This keeps future reactive logic possible without
 // letting obstacles participate in every frame by default.
-func (s *StaticUnit) Tick(gameTick int64, _ float64, _ func(geom.Point) float64) {
+func (s *StaticUnit) Tick(gameTick int64) {
 	if s.UpdateSleeping() {
 		return
 	}

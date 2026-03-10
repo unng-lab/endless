@@ -3,9 +3,11 @@ package unit
 import (
 	"fmt"
 	"image"
+	"log"
 	"math"
 	"runtime"
 	"sync"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
@@ -29,6 +31,7 @@ type Manager struct {
 	registeredTiles    map[int64]tileKey
 	selectedID         int64
 	nextID             int64
+	lastGameTick       int64
 
 	workers        []chan updateRequest
 	updateWG       sync.WaitGroup
@@ -36,16 +39,20 @@ type Manager struct {
 	tileRegistryMu sync.RWMutex
 }
 
-type updateRequest struct {
-	tick  int64
-	delta float64
-}
+type updateRequest int64
 
 // tileEntryReactiveUnit describes units whose side effects must run exactly at the moment the
 // manager has already moved the unit into a new tile and updated tile-stack membership.
 // Projectiles use this hook to resolve impacts against the occupants of the tile they entered.
 type tileEntryReactiveUnit interface {
 	ReactToEnteredTile(*Manager, *TileStack)
+}
+
+// visibleUpdatingUnit describes units that maintain additional draw-only state for visible
+// interpolation or animation. The manager invokes this hook while iterating visible tile
+// stacks so the draw list is built and refreshed in one pass over the visible tiles.
+type visibleUpdatingUnit interface {
+	UpdateVisible(int64)
 }
 
 type tileKey struct {
@@ -57,6 +64,7 @@ type tileKey struct {
 // AddUnit so tile stacks, persistent IDs and ordered storage are initialized through the same
 // runtime path that will later be used for dynamic spawns.
 func NewManager(gameWorld world.World) *Manager {
+	startedAt := time.Now()
 	m := &Manager{
 		world:              gameWorld,
 		renderer:           NewRenderer(),
@@ -65,15 +73,20 @@ func NewManager(gameWorld world.World) *Manager {
 		tileStacks:         make(map[tileKey]*TileStack),
 		registeredTiles:    make(map[int64]tileKey),
 	}
+	log.Printf("[startup] units: manager core structures allocated in %s", time.Since(startedAt))
+
+	workersStartedAt := time.Now()
 	m.startWorkers()
+	log.Printf("[startup] units: worker pool started in %s", time.Since(workersStartedAt))
 	return m
 }
 
-func (m *Manager) Update(gameTick int64, delta float64) {
+func (m *Manager) Update(gameTick int64) {
+	m.lastGameTick = gameTick
 	if m.units.Len() > 0 || m.units.HasPendingRemovalWork() {
 		for i := range m.workers {
 			m.updateWG.Add(1)
-			m.workers[i] <- updateRequest{tick: gameTick, delta: delta}
+			m.workers[i] <- updateRequest(gameTick)
 		}
 		m.updateWG.Wait()
 		if _, ok := m.selectedUnit(); !ok {
@@ -83,10 +96,10 @@ func (m *Manager) Update(gameTick int64, delta float64) {
 }
 
 // Draw renders every tile-registered world body in the same tile order as the visible terrain
-// pass. This keeps regular units and projectiles on one deterministic traversal driven by the
-// same TileStack membership data.
-func (m *Manager) Draw(screen *ebiten.Image, cam *camera.Camera, quality assets.Quality, visible image.Rectangle) error {
-	for _, current := range m.visibleTileUnits(visible) {
+// pass. Callers may disable the extra visible-unit refresh when they need the draw traversal to
+// reuse the current interpolated state without advancing visible-only animation or smoothing.
+func (m *Manager) Draw(screen *ebiten.Image, cam *camera.Camera, quality assets.Quality, visible image.Rectangle, updateVisibleUnits bool) error {
+	for _, current := range m.visibleTileUnits(visible, updateVisibleUnits) {
 		if err := m.renderer.DrawUnit(screen, cam, m.world.TileSize(), quality, current); err != nil {
 			return err
 		}
@@ -234,6 +247,7 @@ func (m *Manager) AddUnit(body Unit) int64 {
 		m.nextID = body.UnitID()
 	}
 
+	m.bindUnitRuntimeDependencies(body)
 	m.units.Set(body)
 	m.registerUnitInCurrentTile(body)
 
@@ -309,6 +323,7 @@ func (m *Manager) startWorkers() {
 	if workerCount < 1 {
 		workerCount = 1
 	}
+	log.Printf("[startup] units: starting %d update workers", workerCount)
 
 	m.workers = make([]chan updateRequest, 0, workerCount)
 	for i := range workerCount {
@@ -338,12 +353,12 @@ func (m *Manager) processUpdates(offset, workerCount int, req updateRequest) {
 			if !ok {
 				continue
 			}
-			m.tickUnit(current, req.tick, req.delta)
+			m.tickUnit(current, int64(req))
 		}
 	}
 }
 
-func (m *Manager) tickUnit(unit Unit, gameTick int64, delta float64) {
+func (m *Manager) tickUnit(unit Unit, gameTick int64) {
 	if unit == nil {
 		return
 	}
@@ -351,12 +366,23 @@ func (m *Manager) tickUnit(unit Unit, gameTick int64, delta float64) {
 		m.retireDeletedUnit(unit)
 		return
 	}
+	if unit.Base().UpdateSleeping() {
+		return
+	}
+	if unit.Base().SleepTime() > 0 {
+		unit.Base().StepSleep()
+		if projectile, ok := unit.(*Projectile); ok && !projectile.IsActive() {
+			projectile.MarkForRemoval()
+			m.retireDeletedUnit(projectile)
+		}
+		return
+	}
 	if !unit.ShouldUpdate() {
 		return
 	}
 
 	previousTileX, previousTileY := unit.Base().TilePosition(m.world.TileSize())
-	unit.Tick(gameTick, delta, m.tileSpeedMultiplierAt)
+	unit.Tick(gameTick)
 	if unit.Base().PendingRemoval() {
 		m.retireDeletedUnit(unit)
 		return
@@ -399,6 +425,7 @@ func (m *Manager) retireDeletedUnit(unit Unit) {
 		m.unregisterUnitFromTile(unit, registeredKey)
 	}
 	unit.Base().MarkRemovalHandled()
+	m.units.ReleaseDeletedSlot(unit.UnitID())
 }
 
 func (m *Manager) tileSpeedMultiplierAt(position geom.Point) float64 {
@@ -451,6 +478,21 @@ func (m *Manager) registerUnitInCurrentTile(unit Unit) {
 	unit.EnterTile(stack)
 	m.registeredTiles[unit.UnitID()] = key
 	m.tileRegistryMu.Unlock()
+}
+
+// bindUnitRuntimeDependencies installs manager-owned resolvers once at registration time so
+// the hot Tick path can stay on the minimal tick-only contract requested for units.
+func (m *Manager) bindUnitRuntimeDependencies(unit Unit) {
+	if m == nil || unit == nil {
+		return
+	}
+
+	body, ok := unit.(*NonStaticUnit)
+	if !ok {
+		return
+	}
+
+	body.SetSpeedMultiplierLookup(m.tileSpeedMultiplierAt)
 }
 
 func (m *Manager) unregisterUnitFromTile(unit Unit, key tileKey) {
@@ -567,7 +609,9 @@ func (m *Manager) selectableUnitsFromStack(stack *TileStack) []Unit {
 // visibleTileUnits collects every tile-registered unit by iterating the already computed
 // visible tile rectangle in row-major order. Each tile contributes units in its local
 // TileStack order so draw order remains deterministic both across tiles and within one tile.
-func (m *Manager) visibleTileUnits(visible image.Rectangle) []Unit {
+// When requested, the same pass also advances draw-only visible state exactly once for the
+// current game tick so visible interpolation stays coupled to the tile traversal.
+func (m *Manager) visibleTileUnits(visible image.Rectangle, updateVisibleUnits bool) []Unit {
 	if m == nil || visible.Empty() {
 		return nil
 	}
@@ -580,11 +624,29 @@ func (m *Manager) visibleTileUnits(visible image.Rectangle) []Unit {
 				continue
 			}
 
-			visibleUnits = append(visibleUnits, m.unitsFromStack(stack)...)
+			for _, current := range m.unitsFromStack(stack) {
+				if updateVisibleUnits {
+					m.updateVisibleUnit(current)
+				}
+				visibleUnits = append(visibleUnits, current)
+			}
 		}
 	}
 
 	return visibleUnits
+}
+
+func (m *Manager) updateVisibleUnit(unit Unit) {
+	if unit == nil {
+		return
+	}
+
+	body, ok := unit.(visibleUpdatingUnit)
+	if !ok {
+		return
+	}
+
+	body.UpdateVisible(m.lastGameTick)
 }
 
 // firstProjectileOccupant resolves hits through the tile stack the projectile has just entered.

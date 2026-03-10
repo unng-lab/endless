@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"log"
 	"math"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -53,19 +55,34 @@ type Game struct {
 	pathErr       error
 	fireErr       error
 	tickCounter   int64
+
+	startedAt         time.Time
+	firstUpdateLogged bool
+	firstDrawLogged   bool
 }
 
 func NewGame() *Game {
+	startedAt := time.Now()
+	log.Printf("[startup] game: NewGame started")
+
+	tileStartedAt := time.Now()
 	tile := ebiten.NewImage(1, 1)
 	tile.Fill(color.White)
+	log.Printf("[startup] game: base tile image prepared in %s", time.Since(tileStartedAt))
 
+	worldStartedAt := time.Now()
 	gameWorld := world.New(world.Config{
 		Columns:  mapColumns,
 		Rows:     mapRows,
 		TileSize: tileSize,
 	})
-	stress := newStressScenario(gameWorld)
+	log.Printf("[startup] game: world created in %s (%dx%d tiles, tile size %.1f)", time.Since(worldStartedAt), mapColumns, mapRows, tileSize)
 
+	stressStartedAt := time.Now()
+	stress := newStressScenario(gameWorld)
+	log.Printf("[startup] game: stress scenario prepared in %s", time.Since(stressStartedAt))
+
+	structStartedAt := time.Now()
 	g := &Game{
 		cam: camera.New(camera.Config{
 			Scale:    1,
@@ -78,25 +95,40 @@ func NewGame() *Game {
 		stress:       stress,
 		screenWidth:  DefaultScreenWidth,
 		screenHeight: DefaultScreenHeight,
+		startedAt:    startedAt,
 	}
+	log.Printf("[startup] game: camera, atlas and game struct initialized in %s", time.Since(structStartedAt))
 
+	managerStartedAt := time.Now()
 	g.units = unit.NewManager(g.world)
+	log.Printf("[startup] game: unit manager initialized in %s", time.Since(managerStartedAt))
+
 	if g.stress != nil {
+		seedStartedAt := time.Now()
 		g.stress.SeedStaticUnits(g.units)
+		log.Printf("[startup] game: static stress units seeded in %s", time.Since(seedStartedAt))
 	}
 
+	cameraStartedAt := time.Now()
 	g.centerCamera()
 	g.clampCamera()
+	log.Printf("[startup] game: initial camera placement completed in %s", time.Since(cameraStartedAt))
+	log.Printf("[startup] game: NewGame finished in %s", time.Since(startedAt))
 
 	return g
 }
 
 func (g *Game) Update() error {
+	if !g.firstUpdateLogged {
+		g.firstUpdateLogged = true
+		log.Printf("[startup] game: first Update reached after %s", time.Since(g.startedAt))
+	}
+
 	g.tickCounter++
 	if g.stress != nil {
 		g.stress.Update(g.tickCounter, g.units)
 	}
-	g.units.Update(g.tickCounter, 1.0/tps)
+	g.units.Update(g.tickCounter)
 	g.updateCameraControls()
 	g.handleGameplayInput()
 
@@ -104,12 +136,17 @@ func (g *Game) Update() error {
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
+	if !g.firstDrawLogged {
+		g.firstDrawLogged = true
+		log.Printf("[startup] game: first Draw reached after %s", time.Since(g.startedAt))
+	}
+
 	screen.Fill(color.NRGBA{R: 17, G: 24, B: 31, A: 255})
 
 	g.updateScreenSize(screen)
 
 	visible, quality, hoveredTileX, hoveredTileY, hovered := g.drawWorld(screen)
-	if err := g.units.Draw(screen, g.cam, quality, visible); err != nil && g.assetErr == nil {
+	if err := g.units.Draw(screen, g.cam, quality, visible, true); err != nil && g.assetErr == nil {
 		g.assetErr = err
 	}
 

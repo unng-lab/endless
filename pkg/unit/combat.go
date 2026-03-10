@@ -25,10 +25,10 @@ type Projectile struct {
 	Radius  float64
 	Damage  int
 
-	impactRadius   float64
-	impactAge      float64
-	impactDuration float64
-	exploding      bool
+	impactRadius        float64
+	impactTicks         int
+	impactDurationTicks int
+	exploding           bool
 }
 
 // newProjectile builds a discrete trajectory that advances from tile to tile in the cursor
@@ -56,11 +56,11 @@ func newProjectile(owner *NonStaticUnit, target geom.Point, gameWorld world.Worl
 			Position: owner.Position,
 			path:     path,
 		},
-		OwnerID:        owner.ID,
-		Radius:         gameWorld.TileSize() * projectileRadiusScale,
-		Damage:         projectileDamage,
-		impactRadius:   gameWorld.TileSize() * impactRadiusScale,
-		impactDuration: impactDuration,
+		OwnerID:             owner.ID,
+		Radius:              gameWorld.TileSize() * projectileRadiusScale,
+		Damage:              projectileDamage,
+		impactRadius:        gameWorld.TileSize() * impactRadiusScale,
+		impactDurationTicks: sleepTicks(impactDuration),
 	}, nil
 }
 
@@ -122,7 +122,7 @@ func (p *Projectile) ApplyDamage(_ int) bool {
 
 func (p *Projectile) Respawn() {
 	p.exploding = false
-	p.impactAge = 0
+	p.impactTicks = 0
 	p.clearTravel()
 	p.ClearRemovalMark()
 }
@@ -142,13 +142,11 @@ func (p *Projectile) LeaveTile(stack *TileStack) {
 // Tick advances the projectile through the same manager-driven update contract as every other
 // tickable unit. Projectile-specific side effects are resolved immediately when the manager
 // moves the projectile into the next tile, so this method only advances movement or impact age.
-func (p *Projectile) Tick(gameTick int64, delta float64, _ func(geom.Point) float64) {
+func (p *Projectile) Tick(gameTick int64) {
 	p.lastUpdateTick = gameTick
 
 	if p.exploding {
-		if delta > 0 {
-			p.impactAge += delta
-		}
+		p.impactTicks++
 		if !p.IsActive() {
 			p.MarkForRemoval()
 		}
@@ -156,22 +154,24 @@ func (p *Projectile) Tick(gameTick int64, delta float64, _ func(geom.Point) floa
 	}
 
 	if p.sleepTime > 0 {
-		p.sleepTime--
-		p.travel.remaining = p.sleepTime
-		if p.sleepTime == 0 {
-			p.travel.remaining = 0
-		}
-		if !p.IsActive() {
-			p.MarkForRemoval()
-		}
 		return
 	}
 
-	p.sleepTime = p.advance(delta)
+	p.sleepTime = p.advance()
 	p.travel.remaining = p.sleepTime
 	if !p.IsActive() {
 		p.MarkForRemoval()
 	}
+}
+
+// UpdateVisible keeps the projectile's render interpolation in sync with the visible draw pass.
+// Logical movement still progresses only through Tick and manager-managed sleep countdowns.
+func (p *Projectile) UpdateVisible(gameTick int64) {
+	if p == nil {
+		return
+	}
+
+	p.AdvanceVisibleTravel(gameTick)
 }
 
 // ShouldUpdate keeps the projectile inside the regular tick loop while it is either flying
@@ -205,7 +205,7 @@ func (p *Projectile) ReactToEnteredTile(m *Manager, stack *TileStack) {
 // a currently interpolated segment that should remain visible.
 func (p *Projectile) IsActive() bool {
 	if p.exploding {
-		return p.impactAge < p.impactDuration
+		return p.impactTicks < p.impactDurationTicks
 	}
 
 	return len(p.path) > 0 || p.sleepTime > 0
@@ -219,14 +219,14 @@ func (p *Projectile) StartExplosion() {
 	}
 
 	p.exploding = true
-	p.impactAge = 0
+	p.impactTicks = 0
 	p.path = p.path[:0]
 	p.sleepTime = 0
 	p.clearTravel()
 }
 
-func (p *Projectile) advance(delta float64) int {
-	if delta <= 0 || len(p.path) == 0 {
+func (p *Projectile) advance() int {
+	if len(p.path) == 0 {
 		p.clearTravel()
 		return 0
 	}
@@ -237,25 +237,26 @@ func (p *Projectile) advance(delta float64) int {
 			continue
 		}
 
-		return p.startTravel(target, delta)
+		return p.startTravel(target)
 	}
 
 	p.clearTravel()
 	return 0
 }
 
-func (p *Projectile) startTravel(target geom.Point, delta float64) int {
+func (p *Projectile) startTravel(target geom.Point) int {
 	dx := target.X - p.Position.X
 	dy := target.Y - p.Position.Y
 	distance := math.Hypot(dx, dy)
-	travelTicks := sleepTicks(distance/projectileSpeed, delta)
+	travelTicks := sleepTicks(distance / projectileSpeed)
 
 	p.travel = travelState{
-		from:      p.RenderPosition(),
-		to:        target,
-		duration:  travelTicks,
-		remaining: travelTicks,
-		active:    true,
+		from:            p.RenderPosition(),
+		to:              target,
+		duration:        travelTicks,
+		remaining:       travelTicks,
+		visualRemaining: travelTicks,
+		active:          true,
 	}
 	p.Position = target
 	p.path = p.path[1:]

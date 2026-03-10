@@ -2,7 +2,6 @@ package unit
 
 import (
 	"image"
-	"math"
 	"testing"
 
 	"github.com/unng-lab/endless/pkg/camera"
@@ -88,7 +87,7 @@ func TestManagerMovesUnitBetweenTileStacksDuringUpdate(t *testing.T) {
 	}
 
 	runner.SetPath([]geom.Point{{X: 24, Y: 8}})
-	m.Update(1, 1.0/60.0)
+	m.Update(1)
 
 	if stack := m.tileStacks[startKey]; stack != nil && len(stack.UnitIDs()) != 0 {
 		t.Fatalf("start tile stack after move = %v, want empty or removed stack", stack.UnitIDs())
@@ -114,7 +113,7 @@ func TestManagerVisibleTileUnitsFollowVisibleTileAndTileStackOrder(t *testing.T)
 	upperTileUnit := NewWall(geom.Point{X: 24, Y: 8})
 	m := newTestManager(gameWorld, firstInLowerTile, secondInLowerTile, upperTileUnit)
 
-	visibleUnits := m.visibleTileUnits(image.Rect(0, 0, 2, 2))
+	visibleUnits := m.visibleTileUnits(image.Rect(0, 0, 2, 2), true)
 	if len(visibleUnits) != 3 {
 		t.Fatalf("visibleTileUnits() len = %d, want 3", len(visibleUnits))
 	}
@@ -147,12 +146,58 @@ func TestManagerVisibleTileUnitsIncludeProjectileFromTileStack(t *testing.T) {
 		t.Fatalf("registered tile = %+v, want %+v for projectile", got, startKey)
 	}
 
-	visibleUnits := m.visibleTileUnits(image.Rect(0, 0, 3, 3))
+	visibleUnits := m.visibleTileUnits(image.Rect(0, 0, 3, 3), true)
 	if len(visibleUnits) != 2 {
 		t.Fatalf("visibleTileUnits() len = %d, want 2 with runner and projectile", len(visibleUnits))
 	}
 	if visibleUnits[1].UnitID() != projectile.UnitID() {
 		t.Fatalf("visible unit[1] = %d, want projectile %d appended in tile stack order", visibleUnits[1].UnitID(), projectile.UnitID())
+	}
+}
+
+func TestManagerVisibleTileUnitsAdvanceOnlyVisibleUnitRenderState(t *testing.T) {
+	gameWorld := world.New(world.Config{Columns: 64, Rows: 64, TileSize: 16})
+	visibleRunner := NewRunner(geom.Point{X: 8, Y: 8}, false, 0)
+	hiddenRunner := NewRunner(geom.Point{X: 328, Y: 8}, false, 0)
+	m := newTestManager(gameWorld, visibleRunner, hiddenRunner)
+
+	visibleRunner.SetPath([]geom.Point{{X: 24, Y: 8}})
+	hiddenRunner.SetPath([]geom.Point{{X: 344, Y: 8}})
+	m.Update(1)
+	m.Update(2)
+
+	visibleUnits := m.visibleTileUnits(image.Rect(0, 0, 2, 2), true)
+	if len(visibleUnits) != 1 || visibleUnits[0].UnitID() != visibleRunner.UnitID() {
+		t.Fatalf("visibleTileUnits() = %v, want only visible runner", len(visibleUnits))
+	}
+
+	visibleRender := visibleRunner.RenderPosition()
+	if !(visibleRender.X > 8 && visibleRender.X < 24) {
+		t.Fatalf("visible runner render position = %+v, want interpolation between tiles", visibleRender)
+	}
+
+	hiddenRender := hiddenRunner.RenderPosition()
+	if hiddenRender != (geom.Point{X: 328, Y: 8}) {
+		t.Fatalf("hidden runner render position = %+v, want untouched hidden start point", hiddenRender)
+	}
+}
+
+func TestManagerVisibleTileUnitsCanSkipAdditionalVisibleRefresh(t *testing.T) {
+	gameWorld := world.New(world.Config{Columns: 64, Rows: 64, TileSize: 16})
+	visibleRunner := NewRunner(geom.Point{X: 8, Y: 8}, false, 0)
+	m := newTestManager(gameWorld, visibleRunner)
+
+	visibleRunner.SetPath([]geom.Point{{X: 24, Y: 8}})
+	m.Update(1)
+	m.Update(2)
+
+	visibleUnits := m.visibleTileUnits(image.Rect(0, 0, 2, 2), false)
+	if len(visibleUnits) != 1 || visibleUnits[0].UnitID() != visibleRunner.UnitID() {
+		t.Fatalf("visibleTileUnits() = %v, want only visible runner", len(visibleUnits))
+	}
+
+	if got := visibleRunner.RenderPosition(); got != (geom.Point{X: 8, Y: 8}) {
+		t.Fatalf("render position without additional visible refresh = %+v, want unchanged start point", got)
 	}
 }
 
@@ -170,7 +215,7 @@ func TestManagerProjectileHitsUnitOccupyingEnteredTile(t *testing.T) {
 	}
 
 	initialHealth := target.Health
-	m.Update(1, 1.0/60.0)
+	m.Update(1)
 
 	if target.Health != initialHealth-1 {
 		t.Fatalf("target health = %d, want %d after projectile enters occupied tile", target.Health, initialHealth-1)
@@ -204,7 +249,7 @@ func TestManagerProjectileExpiresAfterMaxRange(t *testing.T) {
 	}
 
 	for range 60 {
-		m.Update(1, 1.0/60.0)
+		m.Update(1)
 	}
 
 	if projectileCount(m) != 0 {
@@ -228,7 +273,7 @@ func TestManagerProjectileRemovesKilledUnitFromManager(t *testing.T) {
 		t.Fatalf("CommandSelectedFire() error = %v", err)
 	}
 
-	m.Update(1, 1.0/60.0)
+	m.Update(1)
 
 	if projectileCount(m) != 1 {
 		t.Fatalf("projectiles = %d, want exploding projectile to remain until animation ends", projectileCount(m))
@@ -261,7 +306,7 @@ func TestManagerProjectileCanDamageStaticUnit(t *testing.T) {
 		t.Fatalf("CommandSelectedFire() error = %v", err)
 	}
 
-	m.Update(1, 1.0/60.0)
+	m.Update(1)
 
 	if _, ok := m.unitByID(target.UnitID()); ok {
 		t.Fatalf("unitByID(%d) = true, want killed static unit removed", target.UnitID())
@@ -288,7 +333,7 @@ func TestManagerAssignMoveJobReportsCompletion(t *testing.T) {
 	}
 
 	for tick := int64(1); tick <= 200; tick++ {
-		m.Update(tick, 1.0/60.0)
+		m.Update(tick)
 		reports := m.DrainUnitJobReports(runner.UnitID())
 		if len(reports) == 0 {
 			continue
@@ -356,7 +401,7 @@ func TestManagerCollectsFailedJobBeforeRemovingDeadUnit(t *testing.T) {
 		t.Fatal("ApplyDamage() = false, want lethal damage")
 	}
 
-	m.Update(1, 1.0/60.0)
+	m.Update(1)
 
 	reports := m.DrainUnitJobReports(runner.UnitID())
 	if len(reports) != 1 {
@@ -391,7 +436,7 @@ func TestManagerDrainUnitJobReportsKeepsStatusesScopedToRequestedUnit(t *testing
 	}
 
 	for tick := int64(1); tick <= 200; tick++ {
-		m.Update(tick, 1.0/60.0)
+		m.Update(tick)
 		if len(m.DrainUnitJobReports(secondRunner.UnitID())) != 0 {
 			t.Fatal("expected unrelated unit to have no job reports")
 		}
@@ -421,7 +466,7 @@ func TestManagerFlushesTileLeaveForLastDeletedUnit(t *testing.T) {
 		t.Fatal("ApplyDamage() = false, want lethal damage")
 	}
 
-	m.Update(1, 1.0/60.0)
+	m.Update(1)
 
 	if _, ok := m.registeredTiles[runner.UnitID()]; ok {
 		t.Fatalf("registeredTiles contains %d, want deleted last unit removed from tile registry", runner.UnitID())
@@ -436,18 +481,18 @@ func TestManagerSkipsStaticUnitUpdateUntilExternalWake(t *testing.T) {
 	target := NewWall(geom.Point{X: 24, Y: 24})
 	m := newTestManager(gameWorld, target)
 
-	m.Update(1, 1.0/60.0)
+	m.Update(1)
 	if target.LastUpdateTick() != 0 {
 		t.Fatalf("lastUpdateTick while static unit sleeps = %d, want 0", target.LastUpdateTick())
 	}
 
 	target.ApplyDamage(1)
-	m.Update(2, 1.0/60.0)
+	m.Update(2)
 	if target.LastUpdateTick() != 2 {
 		t.Fatalf("lastUpdateTick after external wake = %d, want 2", target.LastUpdateTick())
 	}
 
-	m.Update(3, 1.0/60.0)
+	m.Update(3)
 	if target.LastUpdateTick() != 2 {
 		t.Fatalf("lastUpdateTick after static unit falls asleep again = %d, want 2", target.LastUpdateTick())
 	}
@@ -463,7 +508,7 @@ func TestManagerCommandSelectedMoveQueuesLatestCommandWhileUnitTravels(t *testin
 		t.Fatalf("CommandSelectedMove() initial error = %v", err)
 	}
 
-	m.Update(1, 1.0/60.0)
+	m.Update(1)
 	initialSleep := runner.SleepTime()
 	if initialSleep <= 0 {
 		t.Fatalf("sleepTime after first move command = %d, want a positive active travel budget", initialSleep)
@@ -480,7 +525,7 @@ func TestManagerCommandSelectedMoveQueuesLatestCommandWhileUnitTravels(t *testin
 	}
 
 	for tick := int64(2); tick <= int64(initialSleep)+2; tick++ {
-		m.Update(tick, 1.0/60.0)
+		m.Update(tick)
 	}
 
 	if runner.Position != (geom.Point{X: 8, Y: 8}) {
@@ -558,9 +603,9 @@ func onlyProjectile(t *testing.T, m *Manager) *Projectile {
 func advanceProjectileExplosion(t *testing.T, m *Manager) {
 	t.Helper()
 
-	explosionTicks := int(math.Ceil(impactDuration/(1.0/60.0))) + 1
+	explosionTicks := sleepTicks(impactDuration) + 1
 	for tick := int64(0); tick < int64(explosionTicks); tick++ {
-		m.Update(100+tick, 1.0/60.0)
+		m.Update(100 + tick)
 	}
 }
 

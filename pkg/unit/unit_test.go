@@ -14,7 +14,7 @@ func TestUnitFollowsPathUsingSleepTicks(t *testing.T) {
 		{X: 40, Y: 8},
 	})
 
-	u.Tick(1, 1.0/60.0, nil)
+	u.Tick(1)
 
 	if u.Position != (geom.Point{X: 24, Y: 8}) {
 		t.Fatalf("position after first wake = %+v, want %+v", u.Position, geom.Point{X: 24, Y: 8})
@@ -27,7 +27,11 @@ func TestUnitFollowsPathUsingSleepTicks(t *testing.T) {
 	}
 
 	for tick := int64(2); tick <= 22; tick++ {
-		u.Tick(tick, 1.0/60.0, nil)
+		if u.SleepTime() > 0 {
+			u.StepSleep()
+			continue
+		}
+		u.Tick(tick)
 	}
 
 	if u.Position != (geom.Point{X: 40, Y: 8}) {
@@ -41,8 +45,9 @@ func TestUnitFollowsPathUsingSleepTicks(t *testing.T) {
 func TestUnitAppliesSpeedMultiplierToSleepTicks(t *testing.T) {
 	u := NewRunner(geom.Point{X: 8, Y: 8}, false, 0)
 	u.SetPath([]geom.Point{{X: 24, Y: 8}})
+	u.SetSpeedMultiplierLookup(func(geom.Point) float64 { return 0.5 })
 
-	u.Tick(1, 1.0/60.0, func(geom.Point) float64 { return 0.5 })
+	u.Tick(1)
 
 	if u.Position != (geom.Point{X: 24, Y: 8}) {
 		t.Fatalf("position = %+v, want %+v", u.Position, geom.Point{X: 24, Y: 8})
@@ -84,18 +89,18 @@ func TestStaticUnitIsAlwaysImmobile(t *testing.T) {
 func TestStaticUnitSleepsUntilExternalWake(t *testing.T) {
 	u := NewWall(geom.Point{X: 8, Y: 8})
 
-	u.Tick(1, 1.0/60.0, nil)
+	u.Tick(1)
 	if u.LastUpdateTick() != 0 {
 		t.Fatalf("lastUpdateTick while sleeping = %d, want 0", u.LastUpdateTick())
 	}
 
 	u.Wake()
-	u.Tick(2, 1.0/60.0, nil)
+	u.Tick(2)
 	if u.LastUpdateTick() != 2 {
 		t.Fatalf("lastUpdateTick after wake = %d, want 2", u.LastUpdateTick())
 	}
 
-	u.Tick(3, 1.0/60.0, nil)
+	u.Tick(3)
 	if u.LastUpdateTick() != 2 {
 		t.Fatalf("lastUpdateTick after returning to sleep = %d, want 2", u.LastUpdateTick())
 	}
@@ -105,13 +110,14 @@ func TestUnitRenderPositionInterpolatesWhileSleeping(t *testing.T) {
 	u := NewRunner(geom.Point{X: 8, Y: 8}, false, 0)
 	u.SetPath([]geom.Point{{X: 24, Y: 8}})
 
-	u.Tick(1, 1.0/60.0, nil)
+	u.Tick(1)
 	if got := u.RenderPosition(); got != (geom.Point{X: 8, Y: 8}) {
 		t.Fatalf("render position right after move = %+v, want start point", got)
 	}
 
 	for tick := int64(2); tick <= 11; tick++ {
-		u.Tick(tick, 1.0/60.0, nil)
+		u.StepSleep()
+		u.UpdateVisible(tick)
 	}
 
 	got := u.RenderPosition()
@@ -127,7 +133,7 @@ func TestUnitQueueMoveCommandDefersRouteSwitchUntilCurrentTravelCompletes(t *tes
 		{X: 40, Y: 8},
 	})
 
-	u.Tick(1, 1.0/60.0, nil)
+	u.Tick(1)
 	initialSleep := u.SleepTime()
 
 	u.QueueMoveCommand([]geom.Point{{X: 24, Y: 24}})
@@ -140,14 +146,14 @@ func TestUnitQueueMoveCommandDefersRouteSwitchUntilCurrentTravelCompletes(t *tes
 	}
 
 	for tick := int64(2); tick <= 21; tick++ {
-		u.Tick(tick, 1.0/60.0, nil)
+		u.StepSleep()
 	}
 
 	if u.Position != (geom.Point{X: 24, Y: 8}) {
 		t.Fatalf("position before queued route promotion = %+v, want %+v", u.Position, geom.Point{X: 24, Y: 8})
 	}
 
-	u.Tick(22, 1.0/60.0, nil)
+	u.Tick(22)
 
 	if u.Position != (geom.Point{X: 24, Y: 24}) {
 		t.Fatalf("position after queued route promotion = %+v, want %+v", u.Position, geom.Point{X: 24, Y: 24})
@@ -164,16 +170,16 @@ func TestUnitQueueMoveCommandKeepsOnlyLatestPendingRoute(t *testing.T) {
 		{X: 40, Y: 8},
 	})
 
-	u.Tick(1, 1.0/60.0, nil)
+	u.Tick(1)
 
 	u.QueueMoveCommand([]geom.Point{{X: 24, Y: 24}})
 	u.QueueMoveCommand([]geom.Point{{X: 8, Y: 8}})
 
 	for tick := int64(2); tick <= 21; tick++ {
-		u.Tick(tick, 1.0/60.0, nil)
+		u.StepSleep()
 	}
 
-	u.Tick(22, 1.0/60.0, nil)
+	u.Tick(22)
 
 	if u.Position != (geom.Point{X: 8, Y: 8}) {
 		t.Fatalf("position after overwriting pending route = %+v, want %+v", u.Position, geom.Point{X: 8, Y: 8})

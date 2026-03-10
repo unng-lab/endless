@@ -153,8 +153,8 @@ func ProjectileScreenRect(cam *camera.Camera, shot *Projectile) geom.Rect {
 	camPos := cam.Position()
 	scale := cam.Scale()
 	renderPos := shot.Base().RenderPosition()
-	if shot.exploding && shot.impactDuration > 0 {
-		progress := geom.ClampFloat(shot.impactAge/shot.impactDuration, 0, 1)
+	if shot.exploding && shot.impactDurationTicks > 0 {
+		progress := geom.ClampFloat(float64(shot.impactTicks)/float64(shot.impactDurationTicks), 0, 1)
 		explosionRadius := shot.impactRadius * scale * (1 + progress*0.8)
 
 		return geom.Rect{
@@ -252,8 +252,8 @@ func (r *Renderer) drawFilledRect(screen *ebiten.Image, x, y, width, height floa
 }
 
 func (r *Renderer) drawProjectile(screen *ebiten.Image, camPos geom.Point, scale float64, shot *Projectile) {
-	if shot.exploding && shot.impactDuration > 0 {
-		progress := geom.ClampFloat(shot.impactAge/shot.impactDuration, 0, 1)
+	if shot.exploding && shot.impactDurationTicks > 0 {
+		progress := geom.ClampFloat(float64(shot.impactTicks)/float64(shot.impactDurationTicks), 0, 1)
 		alpha := uint8(math.Round((1 - progress) * 220))
 		size := shot.impactRadius * 2 * scale * (1 + progress*0.8)
 		renderPos := shot.Base().RenderPosition()
