@@ -29,7 +29,15 @@ func (m *orderedUnitMap) Len() int {
 		return 0
 	}
 
-	return len(m.order) - len(m.freeSlots)
+	live := 0
+	for _, unit := range m.order {
+		if orderedMapUnitDeleted(unit) {
+			continue
+		}
+		live++
+	}
+
+	return live
 }
 
 // SlotsLen reports how many physical slots currently exist in insertion-order storage. Worker

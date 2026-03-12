@@ -122,8 +122,8 @@ func (m *Manager) statusText(selected Unit) string {
 	}
 
 	if !base.IsMoving() {
-		if selected.CanShoot() {
-			return "State: idle  Weapon: ready"
+		if body, ok := selected.(*NonStaticUnit); ok && body.CanShoot() {
+			return "State: idle  " + weaponStatusText(body)
 		}
 		return "State: idle"
 	}
@@ -135,11 +135,28 @@ func (m *Manager) statusText(selected Unit) string {
 
 	targetTileX := int(math.Floor(destination.X / m.world.TileSize()))
 	targetTileY := int(math.Floor(destination.Y / m.world.TileSize()))
-	if selected.CanShoot() {
-		return fmt.Sprintf("State: moving  Target: (%d, %d)  Waypoints: %d  Weapon: ready", targetTileX, targetTileY, base.PathLen())
+	if body, ok := selected.(*NonStaticUnit); ok && body.CanShoot() {
+		return fmt.Sprintf(
+			"State: moving  Target: (%d, %d)  Waypoints: %d  %s",
+			targetTileX,
+			targetTileY,
+			base.PathLen(),
+			weaponStatusText(body),
+		)
 	}
 
 	return fmt.Sprintf("State: moving  Target: (%d, %d)  Waypoints: %d", targetTileX, targetTileY, base.PathLen())
+}
+
+func weaponStatusText(unit *NonStaticUnit) string {
+	if unit == nil || !unit.CanShoot() {
+		return "Weapon: unavailable"
+	}
+	if unit.WeaponReady() {
+		return "Weapon: ready"
+	}
+
+	return fmt.Sprintf("Weapon: cooldown %d", unit.fireCooldownRemaining)
 }
 
 func (m *Manager) drawFilledRect(screen *ebiten.Image, x, y, width, height float64, fill color.Color) {

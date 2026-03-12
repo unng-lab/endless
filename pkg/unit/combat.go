@@ -31,21 +31,16 @@ type Projectile struct {
 	exploding           bool
 }
 
-// newProjectile builds a discrete trajectory that advances from tile to tile in the cursor
-// direction. The projectile keeps the same sleepTime-based cadence as units, so collision is
-// checked only when the logical position enters the next tile on the route.
-func newProjectile(owner *NonStaticUnit, target geom.Point, gameWorld world.World) (*Projectile, error) {
-	dx := target.X - owner.Position.X
-	dy := target.Y - owner.Position.Y
-	length := math.Hypot(dx, dy)
+// newProjectile builds a discrete trajectory that advances from tile to tile in the requested
+// normalized fire direction. The projectile keeps the same sleepTime-based cadence as units,
+// so collision is checked only when the logical position enters the next tile on the route.
+func newProjectile(owner *NonStaticUnit, direction geom.Point, gameWorld world.World) (*Projectile, error) {
+	length := math.Hypot(direction.X, direction.Y)
 	if length <= 1e-6 {
-		return nil, fmt.Errorf("cursor is too close to the unit")
+		return nil, fmt.Errorf("fire direction is too small")
 	}
 
-	direction := geom.Point{
-		X: dx / length,
-		Y: dy / length,
-	}
+	direction = geom.Point{X: direction.X / length, Y: direction.Y / length}
 	path := buildProjectilePath(owner.Position, direction, gameWorld, gameWorld.TileSize()*projectileRangeTiles)
 	if len(path) == 0 {
 		return nil, fmt.Errorf("shot leaves the world immediately")

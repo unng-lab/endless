@@ -181,6 +181,7 @@ func TestManagerVisibleTileUnitsIncludeProjectileFromTileStack(t *testing.T) {
 		t.Fatalf("CommandSelectedFire() error = %v", err)
 	}
 
+	advanceFireOrderUntilProjectileSpawned(t, m, 1)
 	projectile := onlyProjectile(t, m)
 	startKey := tileKey{x: 1, y: 1}
 	if got := m.registeredTiles[projectile.UnitID()]; got != startKey {
@@ -255,8 +256,9 @@ func TestManagerProjectileHitsUnitOccupyingEnteredTile(t *testing.T) {
 		t.Fatalf("CommandSelectedFire() error = %v", err)
 	}
 
+	spawnTick := advanceFireOrderUntilProjectileSpawned(t, m, 1)
 	initialHealth := target.Health
-	m.Update(1)
+	m.Update(spawnTick + 1)
 
 	if target.Health != initialHealth-1 {
 		t.Fatalf("target health = %d, want %d after projectile enters occupied tile", target.Health, initialHealth-1)
@@ -289,8 +291,9 @@ func TestManagerProjectileExpiresAfterMaxRange(t *testing.T) {
 		t.Fatalf("CommandSelectedFire() error = %v", err)
 	}
 
-	for range 60 {
-		m.Update(1)
+	spawnTick := advanceFireOrderUntilProjectileSpawned(t, m, 1)
+	for tick := spawnTick + 1; tick <= spawnTick+60; tick++ {
+		m.Update(tick)
 	}
 
 	if projectileCount(m) != 0 {
@@ -314,7 +317,8 @@ func TestManagerProjectileRemovesKilledUnitFromManager(t *testing.T) {
 		t.Fatalf("CommandSelectedFire() error = %v", err)
 	}
 
-	m.Update(1)
+	spawnTick := advanceFireOrderUntilProjectileSpawned(t, m, 1)
+	m.Update(spawnTick + 1)
 
 	if projectileCount(m) != 1 {
 		t.Fatalf("projectiles = %d, want exploding projectile to remain until animation ends", projectileCount(m))
@@ -347,7 +351,8 @@ func TestManagerProjectileCanDamageStaticUnit(t *testing.T) {
 		t.Fatalf("CommandSelectedFire() error = %v", err)
 	}
 
-	m.Update(1)
+	spawnTick := advanceFireOrderUntilProjectileSpawned(t, m, 1)
+	m.Update(spawnTick + 1)
 
 	if _, ok := m.unitByID(target.UnitID()); ok {
 		t.Fatalf("unitByID(%d) = true, want killed static unit removed", target.UnitID())
@@ -357,85 +362,65 @@ func TestManagerProjectileCanDamageStaticUnit(t *testing.T) {
 	}
 }
 
-func TestManagerAssignMoveJobReportsCompletion(t *testing.T) {
+func TestManagerIssueMoveOrderReportsQueuedStartedAndCompleted(t *testing.T) {
 	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
 	runner := NewRunner(geom.Point{X: 8, Y: 8}, false, 0)
 	m := newTestManager(gameWorld, runner)
 
-	err := m.AssignMoveJob(MoveJob{
-		ID:          1,
-		ActorID:     7,
-		UnitID:      runner.UnitID(),
-		TargetTileX: 1,
-		TargetTileY: 0,
-	})
+	err := m.IssueMoveOrder(runner.UnitID(), geom.Point{X: 24, Y: 8})
 	if err != nil {
-		t.Fatalf("AssignMoveJob() error = %v", err)
+		t.Fatalf("IssueMoveOrder() error = %v", err)
 	}
 
+	collected := make([]OrderReport, 0)
 	for tick := int64(1); tick <= 200; tick++ {
 		m.Update(tick)
-		reports := m.DrainUnitJobReports(runner.UnitID())
+		reports := m.DrainUnitOrderReports(runner.UnitID())
 		if len(reports) == 0 {
 			continue
 		}
-		if len(reports) != 1 {
-			t.Fatalf("DrainUnitJobReports() len = %d, want 1", len(reports))
+		collected = append(collected, reports...)
+		if !containsOrderStatus(collected, OrderCompleted) {
+			continue
 		}
-		if reports[0].Status != JobStatusCompleted {
-			t.Fatalf("job status = %v, want %v", reports[0].Status, JobStatusCompleted)
-		}
-		if reports[0].ActorID != 7 || reports[0].UnitID != runner.UnitID() {
-			t.Fatalf("job report = %+v, want actor 7 for unit %d", reports[0], runner.UnitID())
-		}
+
+		assertOrderStatusesPresent(t, collected, OrderQueued, OrderStarted, OrderCompleted)
 		return
 	}
 
-	t.Fatal("expected completed job report within 200 ticks")
+	t.Fatal("expected completed move order report within 200 ticks")
 }
 
-func TestManagerAssignMoveJobReportsFailureForImmobileTarget(t *testing.T) {
+func TestManagerIssueMoveOrderReportsFailureForImmobileTarget(t *testing.T) {
 	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
 	wall := NewWall(geom.Point{X: 8, Y: 8})
 	m := newTestManager(gameWorld, wall)
 
-	err := m.AssignMoveJob(MoveJob{
-		ID:          3,
-		ActorID:     11,
-		UnitID:      wall.UnitID(),
-		TargetTileX: 2,
-		TargetTileY: 2,
-	})
+	err := m.IssueMoveOrder(wall.UnitID(), geom.Point{X: 40, Y: 40})
 	if err == nil {
-		t.Fatal("AssignMoveJob() error = nil, want immobile-unit error")
+		t.Fatal("IssueMoveOrder() error = nil, want immobile-unit error")
 	}
 
-	reports := m.DrainUnitJobReports(wall.UnitID())
+	reports := m.DrainUnitOrderReports(wall.UnitID())
 	if len(reports) != 1 {
-		t.Fatalf("DrainUnitJobReports() len = %d, want 1", len(reports))
+		t.Fatalf("DrainUnitOrderReports() len = %d, want 1", len(reports))
 	}
-	if reports[0].Status != JobStatusFailed {
-		t.Fatalf("job status = %v, want %v", reports[0].Status, JobStatusFailed)
+	if reports[0].Status != OrderFailed {
+		t.Fatalf("order status = %v, want %v", reports[0].Status, OrderFailed)
 	}
-	if reports[0].ActorID != 11 || reports[0].UnitID != wall.UnitID() {
-		t.Fatalf("job report = %+v, want actor 11 for unit %d", reports[0], wall.UnitID())
+	if reports[0].Kind != OrderKindMove || reports[0].UnitID != wall.UnitID() {
+		t.Fatalf("order report = %+v, want move failure for unit %d", reports[0], wall.UnitID())
 	}
 }
 
-func TestManagerCollectsFailedJobBeforeRemovingDeadUnit(t *testing.T) {
+func TestManagerCollectsCanceledOrderBeforeRemovingDeadUnit(t *testing.T) {
 	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
 	runner := NewRunner(geom.Point{X: 8, Y: 8}, false, 0)
 	m := newTestManager(gameWorld, runner)
 
-	err := m.AssignMoveJob(MoveJob{
-		ID:          9,
-		ActorID:     17,
-		UnitID:      runner.UnitID(),
-		TargetTileX: 1,
-		TargetTileY: 0,
-	})
+	err := m.IssueMoveOrder(runner.UnitID(), geom.Point{X: 24, Y: 8})
 	if err != nil {
-		t.Fatalf("AssignMoveJob() error = %v", err)
+		t.Fatalf("IssueMoveOrder() error = %v", err)
 	}
 
 	if !runner.ApplyDamage(runner.MaxHealth) {
@@ -444,58 +429,125 @@ func TestManagerCollectsFailedJobBeforeRemovingDeadUnit(t *testing.T) {
 
 	m.Update(1)
 
-	reports := m.DrainUnitJobReports(runner.UnitID())
-	if len(reports) != 1 {
-		t.Fatalf("DrainUnitJobReports() len = %d, want 1", len(reports))
-	}
-	if reports[0].Status != JobStatusFailed {
-		t.Fatalf("job status = %v, want %v", reports[0].Status, JobStatusFailed)
-	}
-	if reports[0].ActorID != 17 || reports[0].UnitID != runner.UnitID() {
-		t.Fatalf("job report = %+v, want actor 17 for unit %d", reports[0], runner.UnitID())
+	reports := m.DrainUnitOrderReports(runner.UnitID())
+	assertOrderStatusesPresent(t, reports, OrderQueued, OrderCanceled)
+	if reports[len(reports)-1].UnitID != runner.UnitID() {
+		t.Fatalf("last order report = %+v, want unit %d", reports[len(reports)-1], runner.UnitID())
 	}
 	if _, ok := m.unitByID(runner.UnitID()); ok {
 		t.Fatalf("unitByID(%d) = true, want dead runner removed", runner.UnitID())
 	}
 }
 
-func TestManagerDrainUnitJobReportsKeepsStatusesScopedToRequestedUnit(t *testing.T) {
+func TestManagerDrainUnitOrderReportsKeepsStatusesScopedToRequestedUnit(t *testing.T) {
 	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
 	firstRunner := NewRunner(geom.Point{X: 8, Y: 8}, false, 0)
 	secondRunner := NewRunner(geom.Point{X: 40, Y: 8}, false, 0)
 	m := newTestManager(gameWorld, firstRunner, secondRunner)
 
-	err := m.AssignMoveJob(MoveJob{
-		ID:          21,
-		ActorID:     5,
-		UnitID:      firstRunner.UnitID(),
-		TargetTileX: 1,
-		TargetTileY: 0,
-	})
+	err := m.IssueMoveOrder(firstRunner.UnitID(), geom.Point{X: 24, Y: 8})
 	if err != nil {
-		t.Fatalf("AssignMoveJob() error = %v", err)
+		t.Fatalf("IssueMoveOrder() error = %v", err)
 	}
 
+	collected := make([]OrderReport, 0)
 	for tick := int64(1); tick <= 200; tick++ {
 		m.Update(tick)
-		if len(m.DrainUnitJobReports(secondRunner.UnitID())) != 0 {
-			t.Fatal("expected unrelated unit to have no job reports")
+		if len(m.DrainUnitOrderReports(secondRunner.UnitID())) != 0 {
+			t.Fatal("expected unrelated unit to have no order reports")
 		}
 
-		reports := m.DrainUnitJobReports(firstRunner.UnitID())
+		reports := m.DrainUnitOrderReports(firstRunner.UnitID())
 		if len(reports) == 0 {
 			continue
 		}
-		if len(reports) != 1 {
-			t.Fatalf("DrainUnitJobReports() len = %d, want 1", len(reports))
+		collected = append(collected, reports...)
+		if !containsOrderStatus(collected, OrderCompleted) {
+			continue
 		}
-		if reports[0].Status != JobStatusCompleted {
-			t.Fatalf("job status = %v, want %v", reports[0].Status, JobStatusCompleted)
+
+		assertOrderStatusesPresent(t, collected, OrderQueued, OrderStarted, OrderCompleted)
+		return
+	}
+
+	t.Fatal("expected completed order report for requested unit within 200 ticks")
+}
+
+func TestManagerIssueFireOrderReportsQueuedStartedAndCompleted(t *testing.T) {
+	gameWorld := world.New(world.Config{Columns: 64, Rows: 64, TileSize: 16})
+	runner := NewRunner(geom.Point{X: 24, Y: 24}, false, 0)
+	m := newTestManager(gameWorld, runner)
+
+	if err := m.IssueFireOrder(runner.UnitID(), geom.Point{X: 1, Y: 0}); err != nil {
+		t.Fatalf("IssueFireOrder() error = %v", err)
+	}
+
+	collected := make([]OrderReport, 0)
+	for tick := int64(1); tick <= 32; tick++ {
+		m.Update(tick)
+		collected = append(collected, m.DrainUnitOrderReports(runner.UnitID())...)
+		if !containsOrderStatus(collected, OrderCompleted) {
+			continue
+		}
+
+		assertOrderStatusesPresent(t, collected, OrderQueued, OrderStarted, OrderCompleted)
+		if projectileCount(m) != 1 {
+			t.Fatalf("projectiles = %d, want one released projectile after completed fire order", projectileCount(m))
 		}
 		return
 	}
 
-	t.Fatal("expected completed job report for requested unit within 200 ticks")
+	t.Fatal("expected completed fire order report within 32 ticks")
+}
+
+func TestManagerIssueFireOrderWaitsForCooldownBeforeStartingNextShot(t *testing.T) {
+	gameWorld := world.New(world.Config{Columns: 64, Rows: 64, TileSize: 16})
+	runner := NewRunner(geom.Point{X: 24, Y: 24}, false, 0)
+	m := newTestManager(gameWorld, runner)
+
+	if err := m.IssueFireOrder(runner.UnitID(), geom.Point{X: 1, Y: 0}); err != nil {
+		t.Fatalf("IssueFireOrder() first error = %v", err)
+	}
+
+	firstCompleteTick := int64(0)
+	for tick := int64(1); tick <= 32; tick++ {
+		m.Update(tick)
+		reports := m.DrainUnitOrderReports(runner.UnitID())
+		if !containsOrderStatus(reports, OrderCompleted) {
+			continue
+		}
+
+		firstCompleteTick = tick
+		break
+	}
+	if firstCompleteTick == 0 {
+		t.Fatal("expected first fire order to complete")
+	}
+
+	if err := m.IssueFireOrder(runner.UnitID(), geom.Point{X: 1, Y: 0}); err != nil {
+		t.Fatalf("IssueFireOrder() second error = %v", err)
+	}
+
+	queuedReports := m.DrainUnitOrderReports(runner.UnitID())
+	if len(queuedReports) != 1 || queuedReports[0].Status != OrderQueued {
+		t.Fatalf("queued fire reports = %+v, want one queued second order", queuedReports)
+	}
+	secondOrderID := queuedReports[0].OrderID
+
+	for tick := firstCompleteTick + 1; tick < firstCompleteTick+fireOrderCooldownTicks; tick++ {
+		m.Update(tick)
+		reports := reportsForOrderID(m.DrainUnitOrderReports(runner.UnitID()), secondOrderID)
+		if containsOrderStatus(reports, OrderStarted) {
+			t.Fatalf("second fire order started at tick %d before cooldown expired", tick)
+		}
+	}
+
+	startTick := firstCompleteTick + fireOrderCooldownTicks
+	m.Update(startTick)
+	reports := reportsForOrderID(m.DrainUnitOrderReports(runner.UnitID()), secondOrderID)
+	if !containsOrderStatus(reports, OrderStarted) {
+		t.Fatalf("second fire order reports at tick %d = %+v, want started after cooldown", startTick, reports)
+	}
 }
 
 func TestManagerFlushesTileLeaveForLastDeletedUnit(t *testing.T) {
@@ -585,6 +637,7 @@ func TestProjectileVisibilityUsesCurrentCameraState(t *testing.T) {
 		t.Fatalf("CommandSelectedFire() error = %v", err)
 	}
 
+	advanceFireOrderUntilProjectileSpawned(t, m, 1)
 	cam := camera.New(camera.Config{})
 	var projectile *Projectile
 	m.units.Range(func(unit Unit) bool {
@@ -648,6 +701,54 @@ func advanceProjectileExplosion(t *testing.T, m *Manager) {
 	for tick := int64(0); tick < int64(explosionTicks); tick++ {
 		m.Update(100 + tick)
 	}
+}
+
+func advanceFireOrderUntilProjectileSpawned(t *testing.T, m *Manager, startTick int64) int64 {
+	t.Helper()
+
+	for tick := startTick; tick <= startTick+fireOrderWindupTicks+2; tick++ {
+		m.Update(tick)
+		if projectileCount(m) > 0 {
+			return tick
+		}
+	}
+
+	t.Fatal("expected projectile to spawn after fire-order windup")
+	return 0
+}
+
+func containsOrderStatus(reports []OrderReport, status OrderStatus) bool {
+	for _, report := range reports {
+		if report.Status == status {
+			return true
+		}
+	}
+
+	return false
+}
+
+func assertOrderStatusesPresent(t *testing.T, reports []OrderReport, statuses ...OrderStatus) {
+	t.Helper()
+
+	for _, status := range statuses {
+		if containsOrderStatus(reports, status) {
+			continue
+		}
+
+		t.Fatalf("order reports %+v do not contain status %v", reports, status)
+	}
+}
+
+func reportsForOrderID(reports []OrderReport, orderID int64) []OrderReport {
+	filtered := make([]OrderReport, 0, len(reports))
+	for _, report := range reports {
+		if report.OrderID != orderID {
+			continue
+		}
+		filtered = append(filtered, report)
+	}
+
+	return filtered
 }
 
 func firstOrderedUnitID(t *testing.T, units *orderedUnitMap) int64 {

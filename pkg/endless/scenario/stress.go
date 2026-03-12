@@ -179,8 +179,7 @@ type stressActor struct {
 	centerTileY int
 	blocked     map[int64]struct{}
 	managed     map[int64]struct{}
-	inFlight    map[int64]int64
-	nextJobID   int64
+	inFlight    map[int64]struct{}
 
 	completedJobs int64
 	failedJobs    int64
@@ -198,7 +197,7 @@ func newStressActor(gameWorld world.World, centerTileX, centerTileY int, blocked
 		centerTileY: centerTileY,
 		blocked:     blocked,
 		managed:     make(map[int64]struct{}, stressUnitCount),
-		inFlight:    make(map[int64]int64, stressUnitCount),
+		inFlight:    make(map[int64]struct{}, stressUnitCount),
 	}
 }
 
@@ -219,18 +218,15 @@ func (a *stressActor) Update(manager *unit.Manager) {
 	}
 
 	for unitID := range a.managed {
-		for _, report := range manager.DrainUnitJobReports(unitID) {
-			if report.ActorID != a.id {
-				continue
-			}
-
-			delete(a.inFlight, report.UnitID)
-			if report.Status == unit.JobStatusCompleted {
+		for _, report := range manager.DrainUnitOrderReports(unitID) {
+			switch report.Status {
+			case unit.OrderCompleted:
+				delete(a.inFlight, report.UnitID)
 				a.completedJobs++
-				continue
+			case unit.OrderFailed, unit.OrderCanceled:
+				delete(a.inFlight, report.UnitID)
+				a.failedJobs++
 			}
-
-			a.failedJobs++
 		}
 	}
 
@@ -239,26 +235,18 @@ func (a *stressActor) Update(manager *unit.Manager) {
 			continue
 		}
 
-		job := a.nextMoveJob(unitID)
-		if err := manager.AssignMoveJob(job); err != nil {
+		target := a.nextMoveTarget(unitID)
+		if err := manager.IssueMoveOrder(unitID, target); err != nil {
 			continue
 		}
 
-		a.inFlight[unitID] = job.ID
+		a.inFlight[unitID] = struct{}{}
 	}
 }
 
-func (a *stressActor) nextMoveJob(unitID int64) unit.MoveJob {
+func (a *stressActor) nextMoveTarget(_ int64) geom.Point {
 	targetTileX, targetTileY := a.randomOpenTargetTile()
-	a.nextJobID++
-
-	return unit.MoveJob{
-		ID:          a.nextJobID,
-		ActorID:     a.id,
-		UnitID:      unitID,
-		TargetTileX: targetTileX,
-		TargetTileY: targetTileY,
-	}
+	return cellAnchor(targetTileX, targetTileY, a.world.TileSize())
 }
 
 // randomOpenTargetTile samples the stress arena until it finds a tile that is inside the
