@@ -12,8 +12,13 @@ import (
 )
 
 const (
-	defaultBatchSize   = 512
-	defaultTablePrefix = "endless_rl"
+	defaultBatchSize        = 512
+	defaultTablePrefix      = "endless_rl"
+	defaultClickHouseAddr   = "192.168.0.115:8123"
+	defaultClickHouseDB     = "default"
+	defaultClickHouseUser   = "default"
+	defaultClickHousePass   = "PrimaBek123"
+	defaultClickHouseDialTO = 5 * time.Second
 )
 
 // ClickHouseConfig groups every connection and schema setting required by the RL dataset sink.
@@ -27,8 +32,8 @@ type ClickHouseConfig struct {
 	DialTimeout time.Duration
 }
 
-// LoadClickHouseConfigFromEnv keeps secrets out of the repository while still giving the new
-// headless launcher one deterministic place to read its dataset sink configuration from.
+// LoadClickHouseConfigFromEnv applies environment overrides on top of one built-in ClickHouse
+// default profile so RL collection and export commands can connect without extra flags.
 func LoadClickHouseConfigFromEnv(lookup func(string) string) ClickHouseConfig {
 	if lookup == nil {
 		lookup = func(string) string { return "" }
@@ -41,13 +46,19 @@ func LoadClickHouseConfigFromEnv(lookup func(string) string) ClickHouseConfig {
 		Password:    lookup("ENDLESS_CLICKHOUSE_PASSWORD"),
 		TablePrefix: strings.TrimSpace(lookup("ENDLESS_CLICKHOUSE_TABLE_PREFIX")),
 		BatchSize:   parsePositiveInt(lookup("ENDLESS_CLICKHOUSE_BATCH_SIZE"), defaultBatchSize),
-		DialTimeout: parseDuration(lookup("ENDLESS_CLICKHOUSE_DIAL_TIMEOUT"), 5*time.Second),
+		DialTimeout: parseDuration(lookup("ENDLESS_CLICKHOUSE_DIAL_TIMEOUT"), defaultClickHouseDialTO),
+	}
+	if len(cfg.Addr) == 0 {
+		cfg.Addr = []string{defaultClickHouseAddr}
 	}
 	if cfg.Database == "" {
-		cfg.Database = "default"
+		cfg.Database = defaultClickHouseDB
 	}
 	if cfg.Username == "" {
-		cfg.Username = "default"
+		cfg.Username = defaultClickHouseUser
+	}
+	if cfg.Password == "" {
+		cfg.Password = defaultClickHousePass
 	}
 	if cfg.TablePrefix == "" {
 		cfg.TablePrefix = defaultTablePrefix
@@ -59,6 +70,8 @@ func LoadClickHouseConfigFromEnv(lookup func(string) string) ClickHouseConfig {
 type ClickHouseRecorder struct {
 	conn driver.Conn
 	cfg  ClickHouseConfig
+
+	episodeIDBase uint64
 
 	mu       sync.Mutex
 	steps    []StepRecord
@@ -84,6 +97,9 @@ func NewClickHouseRecorder(ctx context.Context, cfg ClickHouseConfig) (*ClickHou
 	if err := recorder.ensureSchema(ctx); err != nil {
 		return nil, err
 	}
+	if err := recorder.reserveEpisodeIDBase(ctx); err != nil {
+		return nil, err
+	}
 	return recorder, nil
 }
 
@@ -91,6 +107,8 @@ func (c *ClickHouseRecorder) RecordStep(ctx context.Context, step StepRecord) er
 	if c == nil {
 		return nil
 	}
+
+	step.EpisodeID = c.translateEpisodeID(step.EpisodeID)
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -108,10 +126,16 @@ func (c *ClickHouseRecorder) RecordEvents(ctx context.Context, events []EventRec
 		return nil
 	}
 
+	normalizedEvents := make([]EventRecord, len(events))
+	copy(normalizedEvents, events)
+	for index := range normalizedEvents {
+		normalizedEvents[index].EpisodeID = c.translateEpisodeID(normalizedEvents[index].EpisodeID)
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.events = append(c.events, events...)
+	c.events = append(c.events, normalizedEvents...)
 	if len(c.events) < c.cfg.BatchSize {
 		return nil
 	}
@@ -123,6 +147,8 @@ func (c *ClickHouseRecorder) RecordEpisode(ctx context.Context, episode EpisodeR
 	if c == nil {
 		return nil
 	}
+
+	episode.EpisodeID = c.translateEpisodeID(episode.EpisodeID)
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -286,7 +312,6 @@ CREATE TABLE IF NOT EXISTS %s (
 ) ENGINE = MergeTree
 ORDER BY (episode_id, tick, category, event_type)
 `, c.eventsTable()),
-		c.transitionsViewStatement(),
 	}
 
 	for _, statement := range statements {
@@ -296,6 +321,24 @@ ORDER BY (episode_id, tick, category, event_type)
 	}
 	if err := c.ensureStepColumns(ctx); err != nil {
 		return err
+	}
+	if err := c.ensureTransitionsView(ctx); err != nil {
+		return err
+	}
+	return nil
+}
+
+// reserveEpisodeIDBase claims the next free persisted episode-id range by reading the current
+// maximum from ClickHouse once per recorder session. This keeps repeated collect runs from
+// reusing local 1..N episode ids inside the same table prefix.
+func (c *ClickHouseRecorder) reserveEpisodeIDBase(ctx context.Context) error {
+	if c == nil || c.conn == nil {
+		return nil
+	}
+
+	query := fmt.Sprintf("SELECT ifNull(max(episode_id), toUInt64(0)) FROM %s", c.episodesTable())
+	if err := c.conn.QueryRow(ctx, query).Scan(&c.episodeIDBase); err != nil {
+		return fmt.Errorf("reserve clickhouse episode id base: %w", err)
 	}
 	return nil
 }
@@ -574,12 +617,41 @@ func (c *ClickHouseRecorder) transitionsView() string {
 	return fmt.Sprintf("%s.%s_transitions", c.cfg.Database, c.cfg.TablePrefix)
 }
 
+// translateEpisodeID maps the deterministic local 1..N runner ids into one recorder-scoped
+// persisted range so multiple collect invocations may append to the same ClickHouse tables
+// without interleaving unrelated episodes under identical ids.
+func (c *ClickHouseRecorder) translateEpisodeID(localEpisodeID uint64) uint64 {
+	if c == nil || localEpisodeID == 0 {
+		return localEpisodeID
+	}
+	return c.episodeIDBase + localEpisodeID
+}
+
+// ensureTransitionsView recreates the trainer-facing view so read-side tools always see the
+// latest alias contract even when the local database was initialized by an older binary.
+func (c *ClickHouseRecorder) ensureTransitionsView(ctx context.Context) error {
+	if c == nil {
+		return nil
+	}
+
+	statements := []string{
+		fmt.Sprintf("DROP VIEW IF EXISTS %s", c.transitionsView()),
+		c.transitionsViewStatement(),
+	}
+	for _, statement := range statements {
+		if err := c.conn.Exec(ctx, statement); err != nil {
+			return fmt.Errorf("ensure clickhouse transitions view: %w", err)
+		}
+	}
+	return nil
+}
+
 // transitionsViewStatement exposes one stable trainer-facing read contract with explicit
 // obs_* and next_obs_* aliases. External training code should prefer this view over the raw
 // step table so future internal column renames stay isolated inside the recorder.
 func (c *ClickHouseRecorder) transitionsViewStatement() string {
 	return fmt.Sprintf(`
-CREATE VIEW IF NOT EXISTS %s AS
+CREATE VIEW %s AS
 SELECT
 	s.episode_id,
 	s.tick,
@@ -664,11 +736,17 @@ LEFT JOIN %s AS e ON s.episode_id = e.episode_id
 }
 
 func (c ClickHouseConfig) normalized() ClickHouseConfig {
+	if len(c.Addr) == 0 {
+		c.Addr = []string{defaultClickHouseAddr}
+	}
 	if c.Database == "" {
-		c.Database = "default"
+		c.Database = defaultClickHouseDB
 	}
 	if c.Username == "" {
-		c.Username = "default"
+		c.Username = defaultClickHouseUser
+	}
+	if c.Password == "" {
+		c.Password = defaultClickHousePass
 	}
 	if c.TablePrefix == "" {
 		c.TablePrefix = defaultTablePrefix
@@ -677,7 +755,7 @@ func (c ClickHouseConfig) normalized() ClickHouseConfig {
 		c.BatchSize = defaultBatchSize
 	}
 	if c.DialTimeout <= 0 {
-		c.DialTimeout = 5 * time.Second
+		c.DialTimeout = defaultClickHouseDialTO
 	}
 	return c
 }

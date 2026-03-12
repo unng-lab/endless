@@ -54,10 +54,21 @@ func NewClickHouseTransitionReader(ctx context.Context, cfg ClickHouseConfig) (*
 	if err != nil {
 		return nil, err
 	}
-	return &ClickHouseTransitionReader{
+	reader := &ClickHouseTransitionReader{
 		conn: conn,
 		cfg:  cfg,
-	}, nil
+	}
+	// Reader-only modes must also tolerate databases created before the trainer-facing view
+	// existed, so they proactively bring the shared RL schema up to date before querying it.
+	schemaHelper := &ClickHouseRecorder{
+		conn: conn,
+		cfg:  cfg,
+	}
+	if err := schemaHelper.ensureSchema(ctx); err != nil {
+		_ = conn.Close()
+		return nil, fmt.Errorf("ensure clickhouse read schema: %w", err)
+	}
+	return reader, nil
 }
 
 // Close releases the reader connection once the caller no longer needs transition rows.

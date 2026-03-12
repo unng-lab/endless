@@ -31,17 +31,42 @@ func RunDuelEvaluation(ctx context.Context, config DuelRunConfig, policy Policy)
 		policy = NewLeadAndStrafePolicy()
 	}
 
-	sessionRNG := rand.New(rand.NewSource(config.Seed))
+	return runDuelEvaluationWithEpisodeSeeds(ctx, config, policy, generateDuelEvaluationEpisodeSeeds(config.Seed, config.Episodes))
+}
+
+// generateDuelEvaluationEpisodeSeeds freezes the episode suite derived from one root seed so
+// multiple policies may be evaluated against the exact same duel instances for fair comparison.
+func generateDuelEvaluationEpisodeSeeds(seed int64, episodes int) []int64 {
+	if episodes <= 0 {
+		return nil
+	}
+
+	sessionRNG := rand.New(rand.NewSource(seed))
+	episodeSeeds := make([]int64, 0, episodes)
+	for episodeIndex := 0; episodeIndex < episodes; episodeIndex++ {
+		episodeSeeds = append(episodeSeeds, sessionRNG.Int63())
+	}
+	return episodeSeeds
+}
+
+// runDuelEvaluationWithEpisodeSeeds replays one explicit episode seed suite so callers can
+// compare multiple policies against the same deterministic duel lineup without regenerating a
+// different world sequence per policy.
+func runDuelEvaluationWithEpisodeSeeds(ctx context.Context, config DuelRunConfig, policy Policy, episodeSeeds []int64) (DuelEvaluationSummary, error) {
+	config = normalizedDuelRunConfig(config)
+	if policy == nil {
+		policy = NewLeadAndStrafePolicy()
+	}
+
 	summary := DuelEvaluationSummary{}
 	totalTicks := uint64(0)
-	for episodeIndex := 0; episodeIndex < config.Episodes; episodeIndex++ {
+	for episodeIndex, episodeSeed := range episodeSeeds {
 		select {
 		case <-ctx.Done():
 			return summary, ctx.Err()
 		default:
 		}
 
-		episodeSeed := sessionRNG.Int63()
 		episodeSummary, err := runOneDuelEvaluationEpisode(episodeSeed, config, policy)
 		if err != nil {
 			return summary, fmt.Errorf("run duel evaluation episode %d: %w", episodeIndex+1, err)
