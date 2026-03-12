@@ -22,6 +22,22 @@ func (m *Manager) Update(gameTick int64) {
 	}
 }
 
+// Close shuts down the background worker pool that powers unit updates. The RL headless
+// runner creates one manager per episode, so releasing these goroutines explicitly prevents
+// long collection sessions from accumulating idle workers between episodes.
+func (m *Manager) Close() {
+	if m == nil {
+		return
+	}
+
+	m.closeOnce.Do(func() {
+		for _, worker := range m.workers {
+			close(worker)
+		}
+		m.workers = nil
+	})
+}
+
 func (m *Manager) startWorkers() {
 	workerCount := runtime.GOMAXPROCS(0) / 4
 	if workerCount < 1 {

@@ -37,6 +37,7 @@ type Manager struct {
 	tileRegistryMu  sync.RWMutex
 	pendingSpawnsMu sync.Mutex
 	pendingSpawns   []Unit
+	closeOnce       sync.Once
 }
 
 // tileEntryReactiveUnit describes units whose side effects must run exactly at the moment the

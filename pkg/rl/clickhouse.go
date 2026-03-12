@@ -200,6 +200,22 @@ CREATE TABLE IF NOT EXISTS %s (
 	tick UInt32,
 	shooter_id Int64,
 	target_id Int64,
+	obs_shooter_x Float32,
+	obs_shooter_y Float32,
+	obs_shooter_hp Int16,
+	obs_target_x Float32,
+	obs_target_y Float32,
+	obs_target_hp Int16,
+	obs_relative_target_x Float32,
+	obs_relative_target_y Float32,
+	obs_distance_to_target Float32,
+	obs_projectile_count UInt16,
+	obs_shooter_weapon_ready UInt8,
+	obs_shooter_cooldown_remaining UInt16,
+	obs_shooter_has_active_fire_order UInt8,
+	obs_shooter_has_queued_fire_order UInt8,
+	obs_shooter_has_active_move_order UInt8,
+	obs_shooter_has_queued_move_order UInt8,
 	shooter_x Float32,
 	shooter_y Float32,
 	shooter_hp Int16,
@@ -214,7 +230,12 @@ CREATE TABLE IF NOT EXISTS %s (
 	shooter_cooldown_remaining UInt16,
 	shooter_has_active_fire_order UInt8,
 	shooter_has_queued_fire_order UInt8,
+	shooter_has_active_move_order UInt8,
+	shooter_has_queued_move_order UInt8,
 	action_type LowCardinality(String),
+	action_accepted UInt8,
+	action_move_target_x Float32,
+	action_move_target_y Float32,
 	action_dir_x Float32,
 	action_dir_y Float32,
 	reward Float32,
@@ -253,6 +274,48 @@ ORDER BY (episode_id, tick, category, event_type)
 			return fmt.Errorf("ensure clickhouse schema: %w", err)
 		}
 	}
+	if err := c.ensureStepColumns(ctx); err != nil {
+		return err
+	}
+	return nil
+}
+
+// ensureStepColumns upgrades older step tables in place so the recorder may add richer RL
+// transition fields without forcing callers to drop existing datasets manually.
+func (c *ClickHouseRecorder) ensureStepColumns(ctx context.Context) error {
+	if c == nil {
+		return nil
+	}
+
+	statements := []string{
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_shooter_x Float32", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_shooter_y Float32", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_shooter_hp Int16", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_target_x Float32", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_target_y Float32", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_target_hp Int16", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_relative_target_x Float32", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_relative_target_y Float32", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_distance_to_target Float32", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_projectile_count UInt16", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_shooter_weapon_ready UInt8", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_shooter_cooldown_remaining UInt16", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_shooter_has_active_fire_order UInt8", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_shooter_has_queued_fire_order UInt8", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_shooter_has_active_move_order UInt8", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_shooter_has_queued_move_order UInt8", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS shooter_has_active_move_order UInt8", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS shooter_has_queued_move_order UInt8", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS action_accepted UInt8", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS action_move_target_x Float32", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS action_move_target_y Float32", c.stepsTable()),
+	}
+
+	for _, statement := range statements {
+		if err := c.conn.Exec(ctx, statement); err != nil {
+			return fmt.Errorf("ensure clickhouse step columns: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -263,7 +326,7 @@ func (c *ClickHouseRecorder) flushStepsLocked(ctx context.Context) error {
 
 	pending := append([]StepRecord(nil), c.steps...)
 	batch, err := c.conn.PrepareBatch(ctx, fmt.Sprintf(
-		"INSERT INTO %s (episode_id, tick, shooter_id, target_id, shooter_x, shooter_y, shooter_hp, target_x, target_y, target_hp, relative_target_x, relative_target_y, distance_to_target, projectile_count, shooter_weapon_ready, shooter_cooldown_remaining, shooter_has_active_fire_order, shooter_has_queued_fire_order, action_type, action_dir_x, action_dir_y, reward, done, created_at)",
+		"INSERT INTO %s (episode_id, tick, shooter_id, target_id, obs_shooter_x, obs_shooter_y, obs_shooter_hp, obs_target_x, obs_target_y, obs_target_hp, obs_relative_target_x, obs_relative_target_y, obs_distance_to_target, obs_projectile_count, obs_shooter_weapon_ready, obs_shooter_cooldown_remaining, obs_shooter_has_active_fire_order, obs_shooter_has_queued_fire_order, obs_shooter_has_active_move_order, obs_shooter_has_queued_move_order, shooter_x, shooter_y, shooter_hp, target_x, target_y, target_hp, relative_target_x, relative_target_y, distance_to_target, projectile_count, shooter_weapon_ready, shooter_cooldown_remaining, shooter_has_active_fire_order, shooter_has_queued_fire_order, shooter_has_active_move_order, shooter_has_queued_move_order, action_type, action_accepted, action_move_target_x, action_move_target_y, action_dir_x, action_dir_y, reward, done, created_at)",
 		c.stepsTable(),
 	))
 	if err != nil {
@@ -276,6 +339,22 @@ func (c *ClickHouseRecorder) flushStepsLocked(ctx context.Context) error {
 			step.Tick,
 			step.ShooterID,
 			step.TargetID,
+			step.ObsShooterX,
+			step.ObsShooterY,
+			step.ObsShooterHP,
+			step.ObsTargetX,
+			step.ObsTargetY,
+			step.ObsTargetHP,
+			step.ObsRelativeTargetX,
+			step.ObsRelativeTargetY,
+			step.ObsDistanceToTarget,
+			step.ObsProjectileCount,
+			step.ObsShooterWeaponReady,
+			step.ObsShooterCooldownRemaining,
+			step.ObsShooterHasActiveFireOrder,
+			step.ObsShooterHasQueuedFireOrder,
+			step.ObsShooterHasActiveMoveOrder,
+			step.ObsShooterHasQueuedMoveOrder,
 			step.ShooterX,
 			step.ShooterY,
 			step.ShooterHP,
@@ -290,7 +369,12 @@ func (c *ClickHouseRecorder) flushStepsLocked(ctx context.Context) error {
 			step.ShooterCooldownRemaining,
 			step.ShooterHasActiveFireOrder,
 			step.ShooterHasQueuedFireOrder,
+			step.ShooterHasActiveMoveOrder,
+			step.ShooterHasQueuedMoveOrder,
 			step.ActionType,
+			step.ActionAccepted,
+			step.ActionMoveTargetX,
+			step.ActionMoveTargetY,
 			step.ActionDirX,
 			step.ActionDirY,
 			step.Reward,

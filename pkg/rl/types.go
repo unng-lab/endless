@@ -17,33 +17,55 @@ type EpisodeRecord struct {
 	TotalReward float32
 }
 
-// StepRecord stores one compact post-tick RL row that later training code may consume
-// directly without joining back to the full runtime world state.
+// StepRecord stores one RL transition row with both the pre-action observation and the
+// resulting post-tick compact state. This shape keeps ClickHouse rows directly usable for
+// offline training without reconstructing state_t from the previous row.
 type StepRecord struct {
-	EpisodeID                 uint64
-	Tick                      uint32
-	ShooterID                 int64
-	TargetID                  int64
-	ShooterX                  float32
-	ShooterY                  float32
-	ShooterHP                 int16
-	TargetX                   float32
-	TargetY                   float32
-	TargetHP                  int16
-	RelativeTargetX           float32
-	RelativeTargetY           float32
-	DistanceToTarget          float32
-	ProjectileCount           uint16
-	ShooterWeaponReady        uint8
-	ShooterCooldownRemaining  uint16
-	ShooterHasActiveFireOrder uint8
-	ShooterHasQueuedFireOrder uint8
-	ActionType                string
-	ActionDirX                float32
-	ActionDirY                float32
-	Reward                    float32
-	Done                      uint8
-	CreatedAt                 time.Time
+	EpisodeID                    uint64
+	Tick                         uint32
+	ShooterID                    int64
+	TargetID                     int64
+	ObsShooterX                  float32
+	ObsShooterY                  float32
+	ObsShooterHP                 int16
+	ObsTargetX                   float32
+	ObsTargetY                   float32
+	ObsTargetHP                  int16
+	ObsRelativeTargetX           float32
+	ObsRelativeTargetY           float32
+	ObsDistanceToTarget          float32
+	ObsProjectileCount           uint16
+	ObsShooterWeaponReady        uint8
+	ObsShooterCooldownRemaining  uint16
+	ObsShooterHasActiveFireOrder uint8
+	ObsShooterHasQueuedFireOrder uint8
+	ObsShooterHasActiveMoveOrder uint8
+	ObsShooterHasQueuedMoveOrder uint8
+	ShooterX                     float32
+	ShooterY                     float32
+	ShooterHP                    int16
+	TargetX                      float32
+	TargetY                      float32
+	TargetHP                     int16
+	RelativeTargetX              float32
+	RelativeTargetY              float32
+	DistanceToTarget             float32
+	ProjectileCount              uint16
+	ShooterWeaponReady           uint8
+	ShooterCooldownRemaining     uint16
+	ShooterHasActiveFireOrder    uint8
+	ShooterHasQueuedFireOrder    uint8
+	ShooterHasActiveMoveOrder    uint8
+	ShooterHasQueuedMoveOrder    uint8
+	ActionType                   string
+	ActionAccepted               uint8
+	ActionMoveTargetX            float32
+	ActionMoveTargetY            float32
+	ActionDirX                   float32
+	ActionDirY                   float32
+	Reward                       float32
+	Done                         uint8
+	CreatedAt                    time.Time
 }
 
 // EventRecord keeps sparse order and combat events in one append-only shape so offline tools

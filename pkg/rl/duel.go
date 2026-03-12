@@ -24,8 +24,8 @@ type DuelRunConfig struct {
 	TileSize           float64
 }
 
-// RunDuelCollection executes deterministic fire-focused duel episodes and streams their
-// resulting step/event traces into the supplied recorder.
+// RunDuelCollection executes deterministic duel episodes and streams their resulting
+// observation/action/reward traces into the supplied recorder.
 func RunDuelCollection(ctx context.Context, config DuelRunConfig, recorder Recorder) error {
 	config = normalizedDuelRunConfig(config)
 	if recorder == nil {
@@ -33,6 +33,7 @@ func RunDuelCollection(ctx context.Context, config DuelRunConfig, recorder Recor
 	}
 
 	sessionRNG := rand.New(rand.NewSource(config.Seed))
+	policy := NewLeadAndStrafePolicy()
 	for episodeIndex := 0; episodeIndex < config.Episodes; episodeIndex++ {
 		select {
 		case <-ctx.Done():
@@ -42,7 +43,7 @@ func RunDuelCollection(ctx context.Context, config DuelRunConfig, recorder Recor
 
 		episodeSeed := sessionRNG.Int63()
 		episodeID := uint64(episodeIndex + 1)
-		if err := runOneDuelEpisode(ctx, episodeID, episodeSeed, config, recorder); err != nil {
+		if err := runOneDuelEpisode(ctx, episodeID, episodeSeed, config, recorder, policy); err != nil {
 			return fmt.Errorf("run duel episode %d: %w", episodeID, err)
 		}
 	}
@@ -50,124 +51,51 @@ func RunDuelCollection(ctx context.Context, config DuelRunConfig, recorder Recor
 	return recorder.Close(ctx)
 }
 
-type duelEpisodeState struct {
-	targetWaypoints      []geom.Point
-	nextTargetWaypoint   int
-	targetMoveInFlight   bool
-	previousTargetPos    geom.Point
-	hasPreviousTargetPos bool
-}
+func runOneDuelEpisode(ctx context.Context, episodeID uint64, episodeSeed int64, config DuelRunConfig, recorder Recorder, policy Policy) error {
+	environment := NewDuelEnvironment(config)
+	defer environment.Close()
 
-func runOneDuelEpisode(ctx context.Context, episodeID uint64, episodeSeed int64, config DuelRunConfig, recorder Recorder) error {
-	gameWorld := world.New(world.Config{
-		Columns:  config.WorldColumns,
-		Rows:     config.WorldRows,
-		TileSize: config.TileSize,
-	})
-	manager := unit.NewManager(gameWorld)
-	rng := rand.New(rand.NewSource(episodeSeed))
 	startedAt := time.Now().UTC()
-
-	shooterSpawn, targetSpawn, targetWaypoints := duelLayout(rng, gameWorld)
-	shooterID := manager.AddUnit(unit.NewRunner(shooterSpawn, false, 0))
-	targetID := manager.AddUnit(unit.NewRunner(targetSpawn, true, 6))
-
-	state := duelEpisodeState{
-		targetWaypoints:    targetWaypoints,
-		nextTargetWaypoint: 0,
-	}
 	totalReward := float32(0)
-	outcome := "timeout"
+	outcome := "setup_failed"
 	ticksExecuted := uint32(0)
 
+	before, err := environment.Reset(episodeSeed)
+	if err != nil {
+		return err
+	}
+
 	for tick := int64(1); tick <= config.MaxTicksPerEpisode; tick++ {
-		ticksExecuted = uint32(tick)
-		before, ok := manager.DuelSnapshot(shooterID, targetID)
-		if !ok {
-			outcome = "setup_failed"
-			break
+		action := policy.ChooseAction(before)
+		actionAccepted, actionErr := environment.ApplyAction(action)
+		if actionErr != nil {
+			actionAccepted = false
 		}
 
-		actionType, actionDirection := decideShooterAction(before, state.previousTargetPos, state.hasPreviousTargetPos)
-		if actionType == "fire" {
-			if err := manager.IssueFireOrder(shooterID, actionDirection); err != nil {
-				actionType = "none"
-				actionDirection = geom.Point{}
-			}
+		stepResult, err := environment.Step()
+		if err != nil {
+			return err
 		}
-
-		if !state.targetMoveInFlight && len(state.targetWaypoints) > 0 {
-			targetPoint := state.targetWaypoints[state.nextTargetWaypoint]
-			if err := manager.IssueMoveOrder(targetID, targetPoint); err == nil {
-				state.targetMoveInFlight = true
-				state.nextTargetWaypoint = (state.nextTargetWaypoint + 1) % len(state.targetWaypoints)
-			}
-		}
-
-		manager.Update(tick)
-		createdAt := time.Now().UTC()
-
-		shooterReports := manager.DrainUnitOrderReports(shooterID)
-		targetReports := manager.DrainUnitOrderReports(targetID)
-		combatEvents := manager.DrainCombatEvents()
-
-		if targetMoveReportFinished(targetReports) {
-			state.targetMoveInFlight = false
-		}
+		ticksExecuted = uint32(stepResult.After.Snapshot.Tick)
+		outcome = stepResult.Outcome
+		totalReward += stepResult.Reward
 
 		eventRecords := append(
-			orderReportsToEventRecords(episodeID, tick, shooterReports, createdAt),
-			orderReportsToEventRecords(episodeID, tick, targetReports, createdAt)...,
+			orderReportsToEventRecords(episodeID, tick, stepResult.ShooterReports, stepResult.CreatedAt),
+			orderReportsToEventRecords(episodeID, tick, stepResult.TargetReports, stepResult.CreatedAt)...,
 		)
-		eventRecords = append(eventRecords, combatEventsToEventRecords(episodeID, combatEvents, createdAt)...)
+		eventRecords = append(eventRecords, combatEventsToEventRecords(episodeID, stepResult.CombatEvents, stepResult.CreatedAt)...)
 		if err := recorder.RecordEvents(ctx, eventRecords); err != nil {
 			return err
 		}
 
-		after := resolvePostTickSnapshot(manager, shooterID, targetID, before, combatEvents)
-		reward := rewardForTick(shooterID, targetID, combatEvents)
-		totalReward += reward
-
-		done := !after.Shooter.Alive || !after.Target.Alive || tick == config.MaxTicksPerEpisode
-		if !after.Target.Alive {
-			outcome = "target_killed"
-		} else if !after.Shooter.Alive {
-			outcome = "shooter_killed"
-		}
-
-		stepRecord := StepRecord{
-			EpisodeID:                 episodeID,
-			Tick:                      uint32(tick),
-			ShooterID:                 after.Shooter.UnitID,
-			TargetID:                  after.Target.UnitID,
-			ShooterX:                  float32(after.Shooter.Position.X),
-			ShooterY:                  float32(after.Shooter.Position.Y),
-			ShooterHP:                 int16(after.Shooter.Health),
-			TargetX:                   float32(after.Target.Position.X),
-			TargetY:                   float32(after.Target.Position.Y),
-			TargetHP:                  int16(after.Target.Health),
-			RelativeTargetX:           float32(after.RelativeTarget.X),
-			RelativeTargetY:           float32(after.RelativeTarget.Y),
-			DistanceToTarget:          float32(after.DistanceToTarget),
-			ProjectileCount:           uint16(after.ProjectileCount),
-			ShooterWeaponReady:        boolToUInt8(after.Shooter.WeaponReady),
-			ShooterCooldownRemaining:  uint16(maxInt(after.Shooter.FireCooldownRemaining, 0)),
-			ShooterHasActiveFireOrder: boolToUInt8(after.Shooter.HasActiveFireOrder),
-			ShooterHasQueuedFireOrder: boolToUInt8(after.Shooter.HasQueuedFireOrder),
-			ActionType:                actionType,
-			ActionDirX:                float32(actionDirection.X),
-			ActionDirY:                float32(actionDirection.Y),
-			Reward:                    reward,
-			Done:                      boolToUInt8(done),
-			CreatedAt:                 createdAt,
-		}
+		stepRecord := buildStepRecord(episodeID, before, stepResult.After, action, actionAccepted, stepResult.Reward, stepResult.Done, stepResult.CreatedAt)
 		if err := recorder.RecordStep(ctx, stepRecord); err != nil {
 			return err
 		}
 
-		state.previousTargetPos = after.Target.Position
-		state.hasPreviousTargetPos = after.Target.Alive
-		if done {
+		before = stepResult.After
+		if stepResult.Done {
 			break
 		}
 	}
@@ -217,38 +145,6 @@ func duelLayout(rng *rand.Rand, gameWorld world.World) (geom.Point, geom.Point, 
 	return cellAnchor(shooterTileX, shooterTileY, gameWorld.TileSize()),
 		cellAnchor(targetTileX, targetTileY, gameWorld.TileSize()),
 		[]geom.Point{topWaypoint, bottomWaypoint}
-}
-
-func decideShooterAction(snapshot unit.DuelSnapshot, previousTargetPos geom.Point, hasPreviousTargetPos bool) (string, geom.Point) {
-	if !snapshot.Shooter.Alive || !snapshot.Target.Alive {
-		return "none", geom.Point{}
-	}
-	if !snapshot.Shooter.WeaponReady || snapshot.Shooter.HasActiveFireOrder || snapshot.Shooter.HasQueuedFireOrder {
-		return "none", geom.Point{}
-	}
-	if snapshot.DistanceToTarget <= 1e-6 {
-		return "none", geom.Point{}
-	}
-
-	direction := snapshot.RelativeTarget
-	if hasPreviousTargetPos {
-		targetVelocity := geom.Point{
-			X: snapshot.Target.Position.X - previousTargetPos.X,
-			Y: snapshot.Target.Position.Y - previousTargetPos.Y,
-		}
-		direction.X += targetVelocity.X * 2
-		direction.Y += targetVelocity.Y * 2
-	}
-
-	length := math.Hypot(direction.X, direction.Y)
-	if length <= 1e-6 {
-		return "none", geom.Point{}
-	}
-
-	return "fire", geom.Point{
-		X: direction.X / length,
-		Y: direction.Y / length,
-	}
 }
 
 func targetMoveReportFinished(reports []unit.OrderReport) bool {
@@ -407,4 +303,54 @@ func maxInt64(value, min int64) int64 {
 		return min
 	}
 	return value
+}
+
+func buildStepRecord(episodeID uint64, before, after Observation, action Action, actionAccepted bool, reward float32, done bool, createdAt time.Time) StepRecord {
+	return StepRecord{
+		EpisodeID:                    episodeID,
+		Tick:                         uint32(after.Snapshot.Tick),
+		ShooterID:                    after.Snapshot.Shooter.UnitID,
+		TargetID:                     after.Snapshot.Target.UnitID,
+		ObsShooterX:                  float32(before.Snapshot.Shooter.Position.X),
+		ObsShooterY:                  float32(before.Snapshot.Shooter.Position.Y),
+		ObsShooterHP:                 int16(before.Snapshot.Shooter.Health),
+		ObsTargetX:                   float32(before.Snapshot.Target.Position.X),
+		ObsTargetY:                   float32(before.Snapshot.Target.Position.Y),
+		ObsTargetHP:                  int16(before.Snapshot.Target.Health),
+		ObsRelativeTargetX:           float32(before.Snapshot.RelativeTarget.X),
+		ObsRelativeTargetY:           float32(before.Snapshot.RelativeTarget.Y),
+		ObsDistanceToTarget:          float32(before.Snapshot.DistanceToTarget),
+		ObsProjectileCount:           uint16(before.Snapshot.ProjectileCount),
+		ObsShooterWeaponReady:        boolToUInt8(before.Snapshot.Shooter.WeaponReady),
+		ObsShooterCooldownRemaining:  uint16(maxInt(before.Snapshot.Shooter.FireCooldownRemaining, 0)),
+		ObsShooterHasActiveFireOrder: boolToUInt8(before.Snapshot.Shooter.HasActiveFireOrder),
+		ObsShooterHasQueuedFireOrder: boolToUInt8(before.Snapshot.Shooter.HasQueuedFireOrder),
+		ObsShooterHasActiveMoveOrder: boolToUInt8(before.Snapshot.Shooter.HasActiveMoveOrder),
+		ObsShooterHasQueuedMoveOrder: boolToUInt8(before.Snapshot.Shooter.HasQueuedMoveOrder),
+		ShooterX:                     float32(after.Snapshot.Shooter.Position.X),
+		ShooterY:                     float32(after.Snapshot.Shooter.Position.Y),
+		ShooterHP:                    int16(after.Snapshot.Shooter.Health),
+		TargetX:                      float32(after.Snapshot.Target.Position.X),
+		TargetY:                      float32(after.Snapshot.Target.Position.Y),
+		TargetHP:                     int16(after.Snapshot.Target.Health),
+		RelativeTargetX:              float32(after.Snapshot.RelativeTarget.X),
+		RelativeTargetY:              float32(after.Snapshot.RelativeTarget.Y),
+		DistanceToTarget:             float32(after.Snapshot.DistanceToTarget),
+		ProjectileCount:              uint16(after.Snapshot.ProjectileCount),
+		ShooterWeaponReady:           boolToUInt8(after.Snapshot.Shooter.WeaponReady),
+		ShooterCooldownRemaining:     uint16(maxInt(after.Snapshot.Shooter.FireCooldownRemaining, 0)),
+		ShooterHasActiveFireOrder:    boolToUInt8(after.Snapshot.Shooter.HasActiveFireOrder),
+		ShooterHasQueuedFireOrder:    boolToUInt8(after.Snapshot.Shooter.HasQueuedFireOrder),
+		ShooterHasActiveMoveOrder:    boolToUInt8(after.Snapshot.Shooter.HasActiveMoveOrder),
+		ShooterHasQueuedMoveOrder:    boolToUInt8(after.Snapshot.Shooter.HasQueuedMoveOrder),
+		ActionType:                   string(action.Type),
+		ActionAccepted:               boolToUInt8(actionAccepted),
+		ActionMoveTargetX:            float32(action.MoveTarget.X),
+		ActionMoveTargetY:            float32(action.MoveTarget.Y),
+		ActionDirX:                   float32(action.FireDirection.X),
+		ActionDirY:                   float32(action.FireDirection.Y),
+		Reward:                       reward,
+		Done:                         boolToUInt8(done),
+		CreatedAt:                    createdAt,
+	}
 }
