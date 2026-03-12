@@ -38,7 +38,10 @@ func main() {
 	log.Printf("[startup] launcher: window configured in %s", time.Since(windowStartedAt))
 
 	gameStartedAt := time.Now()
-	game := endless.NewStressGame()
+	game, err := endless.NewStressGame()
+	if err != nil {
+		log.Fatalf("create stress game: %v", err)
+	}
 	log.Printf("[startup] launcher: NewStressGame completed in %s", time.Since(gameStartedAt))
 	log.Printf("[startup] launcher: entering ebiten.RunGame after %s total startup prep", time.Since(startedAt))
 

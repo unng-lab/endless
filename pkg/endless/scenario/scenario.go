@@ -1,6 +1,7 @@
 package scenario
 
 import (
+	"github.com/unng-lab/endless/pkg/rl"
 	"github.com/unng-lab/endless/pkg/unit"
 	"github.com/unng-lab/endless/pkg/world"
 )
@@ -13,6 +14,7 @@ type Mode string
 const (
 	ModeBasic  Mode = "basic"
 	ModeStress Mode = "stress"
+	ModeRLDuel Mode = "rl_duel"
 )
 
 // Scenario captures the small contract required by the game loop to seed the initial world
@@ -24,15 +26,24 @@ type Scenario interface {
 	DebugText() string
 }
 
+// Config groups every scenario-side option the game constructor may pass into the selected
+// bootstrapper without exposing individual scenario internals to the launcher layer.
+type Config struct {
+	Mode   Mode
+	RLDuel rl.VisualDuelScenarioConfig
+}
+
 // New chooses the concrete scene bootstrapper for the requested launch mode. Falling back to
 // the basic scene keeps accidental zero-value configs lightweight and safe.
-func New(mode Mode, gameWorld world.World) Scenario {
-	switch mode {
+func New(config Config, gameWorld world.World) (Scenario, error) {
+	switch config.Mode {
 	case ModeStress:
-		return newStressScenario(gameWorld)
+		return newStressScenario(gameWorld), nil
+	case ModeRLDuel:
+		return rl.NewVisualDuelScenario(gameWorld, config.RLDuel)
 	case ModeBasic:
 		fallthrough
 	default:
-		return newBasicScenario(gameWorld)
+		return newBasicScenario(gameWorld), nil
 	}
 }

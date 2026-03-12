@@ -31,6 +31,7 @@ func main() {
 	trainEpochs := linearQStubDefaults.Epochs
 	trainLearningRate := float64(linearQStubDefaults.LearningRate)
 	trainDiscount := float64(linearQStubDefaults.Discount)
+	trainModelOutputPath := ""
 	flag.StringVar(&mode, "mode", "collect", "launcher mode: collect, evaluate, compare, export, export-sequences, inspect-batches or train-stub")
 	flag.StringVar(&policyName, "policy", rl.PolicyLeadAndStrafe, "shooter policy: lead_strafe or random")
 	flag.StringVar(&policySuite, "policy-suite", policySuite, "comma-separated policy list for compare mode")
@@ -55,6 +56,7 @@ func main() {
 	flag.IntVar(&trainEpochs, "train-epochs", linearQStubDefaults.Epochs, "number of offline learner epochs for train-stub mode")
 	flag.Float64Var(&trainLearningRate, "train-learning-rate", float64(linearQStubDefaults.LearningRate), "learning rate for train-stub mode")
 	flag.Float64Var(&trainDiscount, "train-discount", float64(linearQStubDefaults.Discount), "discount factor for train-stub mode")
+	flag.StringVar(&trainModelOutputPath, "train-model-output", "", "optional filesystem path where train-stub writes the trained linear q stub artifact as JSON")
 	flag.Parse()
 
 	ctx := context.Background()
@@ -258,6 +260,11 @@ func main() {
 		if err != nil {
 			log.Fatalf("train linear q stub: %v", err)
 		}
+		if trainModelOutputPath != "" {
+			if err := rl.SaveLinearQStubArtifact(trainModelOutputPath, spec, model); err != nil {
+				log.Fatalf("save linear q stub artifact %q: %v", trainModelOutputPath, err)
+			}
+		}
 
 		for _, epoch := range summary.EpochSummaries {
 			log.Printf(
@@ -292,6 +299,9 @@ func main() {
 			trainLearningRate,
 			trainDiscount,
 		)
+		if trainModelOutputPath != "" {
+			log.Printf("[rl-train-stub-model] output=%s", trainModelOutputPath)
+		}
 		return
 	}
 	if mode == "compare" {

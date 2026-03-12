@@ -94,8 +94,21 @@
 - `inspect-batches` является каноническим smoke-check путём для проверки того, что живые transition'ы в ClickHouse всё ещё соответствуют зафиксированному tensor contract.
 
 ## Следующий план
-1. Пересмотреть normalization scale'ы, если размер мира, запас здоровья или бюджет cooldown существенно выйдут за пределы текущих duel defaults.
-2. Держать trainer/inference вне Go runtime до тех пор, пока не стабилизируются environment и schema датасета.
+1. Добавить явную ревизию tensor contract'а вокруг `TransitionNormalizationSpec`:
+   - научиться быстро видеть saturation scalar features при `inspect-batches`
+   - пересматривать normalization scale'ы, если размер мира, запас здоровья или бюджет cooldown заметно выходят за пределы текущих duel defaults
+   - версионировать contract, если поменяются patch radius, vocabularies или layout tensor'ов
+2. Развести два режима trainer-side pipeline:
+   - оставить текущий single-step contract каноническим для `*_transitions`
+   - при реальной потребности sequence trainer'ов ввести отдельный sequence/window tensor contract поверх `export-sequences`, а не размывать текущую row-level схему
+3. Ужесточить trainer-side diagnostics:
+   - для `compare` добавить опциональный per-episode breakdown/export
+   - для `compare` добавить простую оценку статистической устойчивости delta'ов на fixed-seed suite
+   - для `train-stub` добавить более явную диагностику dataset coverage, unlinked transition'ов и причин terminal/non-terminal распределений
+4. Подготовить memory-bounded путь для больших оффлайн-срезов:
+   - сохранить текущий eager in-memory `train-stub` как детерминированный smoke-check baseline
+   - отдельно добавить streaming/chunked loader, если объём transition'ов перестанет помещаться в память одного процесса
+5. Держать production trainer/inference вне Go runtime до тех пор, пока не стабилизируются environment, trainer-facing schema и tensor contract.
 
 ## Текущие ограничения
 - Окружение по-прежнему является дуэлью `1v1`, а не общей боевой сценой.

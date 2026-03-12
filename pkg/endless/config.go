@@ -1,11 +1,15 @@
 package endless
 
-import gamescenario "github.com/unng-lab/endless/pkg/endless/scenario"
+import (
+	gamescenario "github.com/unng-lab/endless/pkg/endless/scenario"
+	"github.com/unng-lab/endless/pkg/rl"
+)
 
 // GameConfig groups constructor options for Game so callers may choose the startup scenario
 // without exposing the scenario package from every call site explicitly.
 type GameConfig struct {
-	Mode gamescenario.Mode
+	Mode   gamescenario.Mode
+	RLDuel rl.VisualDuelScenarioConfig
 }
 
 // normalizedGameConfig applies stable defaults once so every launcher path builds the game

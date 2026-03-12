@@ -67,18 +67,18 @@ type Game struct {
 }
 
 // NewGame builds the regular lightweight scene used by the default desktop launcher.
-func NewGame() *Game {
+func NewGame() (*Game, error) {
 	return NewGameWithConfig(GameConfig{Mode: gamescenario.ModeBasic})
 }
 
 // NewStressGame builds the dedicated heavy-load scene used by the separate stress launcher.
-func NewStressGame() *Game {
+func NewStressGame() (*Game, error) {
 	return NewGameWithConfig(GameConfig{Mode: gamescenario.ModeStress})
 }
 
 // NewGameWithConfig constructs the game core and chooses one startup scenario that will seed
 // units and optional orchestration on top of the shared world, camera and rendering systems.
-func NewGameWithConfig(config GameConfig) *Game {
+func NewGameWithConfig(config GameConfig) (*Game, error) {
 	startedAt := time.Now()
 	log.Printf("[startup] game: NewGame started")
 	config = normalizedGameConfig(config)
@@ -97,7 +97,13 @@ func NewGameWithConfig(config GameConfig) *Game {
 	log.Printf("[startup] game: world created in %s (%dx%d tiles, tile size %.1f)", time.Since(worldStartedAt), mapColumns, mapRows, tileSize)
 
 	scenarioStartedAt := time.Now()
-	selectedScenario := gamescenario.New(config.Mode, gameWorld)
+	selectedScenario, err := gamescenario.New(gamescenario.Config{
+		Mode:   config.Mode,
+		RLDuel: config.RLDuel,
+	}, gameWorld)
+	if err != nil {
+		return nil, fmt.Errorf("create %s scenario: %w", config.Mode, err)
+	}
 	log.Printf("[startup] game: %s scenario prepared in %s", config.Mode, time.Since(scenarioStartedAt))
 
 	structStartedAt := time.Now()
@@ -137,7 +143,7 @@ func NewGameWithConfig(config GameConfig) *Game {
 	log.Printf("[startup] game: initial camera placement completed in %s", time.Since(cameraStartedAt))
 	log.Printf("[startup] game: NewGame finished in %s", time.Since(startedAt))
 
-	return g
+	return g, nil
 }
 
 func (g *Game) Update() error {

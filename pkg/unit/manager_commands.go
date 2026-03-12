@@ -12,6 +12,27 @@ func (m *Manager) HasSelected() bool {
 	return ok
 }
 
+// SelectUnitByID pins one concrete runtime object into the existing overlay and command-target
+// flow so autonomous scenarios may keep the same actor selected without requiring a mouse click.
+func (m *Manager) SelectUnitByID(unitID int64) bool {
+	if m == nil || unitID == 0 {
+		m.selectedID = 0
+		return false
+	}
+
+	selected, ok := m.unitByID(unitID)
+	if !ok || selected == nil {
+		m.selectedID = 0
+		return false
+	}
+
+	m.selectedID = unitID
+	if body, ok := selected.(*NonStaticUnit); ok {
+		body.Wake()
+	}
+	return true
+}
+
 func (m *Manager) SelectAtScreen(cam *camera.Camera, cursor geom.Point, screenWidth, screenHeight int) {
 	if m.PointInPanel(cam, cursor, screenWidth, screenHeight) {
 		return
