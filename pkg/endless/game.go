@@ -15,6 +15,7 @@ import (
 
 	"github.com/unng-lab/endless/pkg/assets"
 	"github.com/unng-lab/endless/pkg/camera"
+	gamescenario "github.com/unng-lab/endless/pkg/endless/scenario"
 	"github.com/unng-lab/endless/pkg/geom"
 	"github.com/unng-lab/endless/pkg/pathfinding"
 	"github.com/unng-lab/endless/pkg/unit"
@@ -41,7 +42,7 @@ type Game struct {
 	atlas    *assets.TileAtlas
 	tile     *ebiten.Image
 	units    *unit.Manager
-	scenario gameScenario
+	scenario gamescenario.Scenario
 
 	tileRenderWorkers []chan tileRenderRequest
 	tileRenderTargets []*ebiten.Image
@@ -67,12 +68,12 @@ type Game struct {
 
 // NewGame builds the regular lightweight scene used by the default desktop launcher.
 func NewGame() *Game {
-	return NewGameWithConfig(GameConfig{Mode: GameModeBasic})
+	return NewGameWithConfig(GameConfig{Mode: gamescenario.ModeBasic})
 }
 
 // NewStressGame builds the dedicated heavy-load scene used by the separate stress launcher.
 func NewStressGame() *Game {
-	return NewGameWithConfig(GameConfig{Mode: GameModeStress})
+	return NewGameWithConfig(GameConfig{Mode: gamescenario.ModeStress})
 }
 
 // NewGameWithConfig constructs the game core and chooses one startup scenario that will seed
@@ -96,7 +97,7 @@ func NewGameWithConfig(config GameConfig) *Game {
 	log.Printf("[startup] game: world created in %s (%dx%d tiles, tile size %.1f)", time.Since(worldStartedAt), mapColumns, mapRows, tileSize)
 
 	scenarioStartedAt := time.Now()
-	scenario := newScenarioForMode(config.Mode, gameWorld)
+	selectedScenario := gamescenario.New(config.Mode, gameWorld)
 	log.Printf("[startup] game: %s scenario prepared in %s", config.Mode, time.Since(scenarioStartedAt))
 
 	structStartedAt := time.Now()
@@ -109,7 +110,7 @@ func NewGameWithConfig(config GameConfig) *Game {
 		world:        gameWorld,
 		atlas:        assets.NewTileAtlas(),
 		tile:         tile,
-		scenario:     scenario,
+		scenario:     selectedScenario,
 		screenWidth:  DefaultScreenWidth,
 		screenHeight: DefaultScreenHeight,
 		startedAt:    startedAt,
@@ -471,11 +472,4 @@ func (g *Game) tileImage(x, y int, quality assets.Quality) (*ebiten.Image, float
 	}
 
 	return tileImage, float64(tileSize), nil
-}
-
-func cellAnchor(tileX, tileY int, tileSize float64) geom.Point {
-	return geom.Point{
-		X: (float64(tileX) + 0.5) * tileSize,
-		Y: (float64(tileY) + 0.5) * tileSize,
-	}
 }
