@@ -30,6 +30,28 @@ type CombatEvent struct {
 	Killed           bool
 }
 
+// ProjectileSnapshot exposes the small immutable subset of projectile runtime state that
+// observation builders need for spatial features. Keeping this separate from UnitSnapshot
+// avoids polluting the generic unit view with projectile-only fields.
+type ProjectileSnapshot struct {
+	UnitID    int64
+	OwnerID   int64
+	Position  geom.Point
+	Direction geom.Point
+	Exploding bool
+	SleepTime int
+}
+
+// BlockingUnitSnapshot exposes the immutable subset of one live movement-blocking unit that
+// observation builders need to project local cover occupancy.
+type BlockingUnitSnapshot struct {
+	UnitID   int64
+	Kind     Kind
+	Position geom.Point
+	TileX    int
+	TileY    int
+}
+
 // UnitSnapshot exposes one compact read-only view of a world body at one simulation tick.
 // The shape is intentionally narrower than the full runtime object so dataset code remains
 // stable even when unit internals evolve.
@@ -199,4 +221,68 @@ func (m *Manager) projectileCount() int {
 		return true
 	})
 	return count
+}
+
+// ProjectileSnapshots returns one defensive snapshot for every projectile currently tracked by
+// the manager. RL observation code uses this to build nearest-projectile features without
+// depending on mutable runtime objects or package-private manager storage.
+func (m *Manager) ProjectileSnapshots() []ProjectileSnapshot {
+	if m == nil {
+		return nil
+	}
+
+	projectiles := make([]ProjectileSnapshot, 0)
+	m.units.Range(func(current Unit) bool {
+		projectile, ok := current.(*Projectile)
+		if !ok || projectile == nil {
+			return true
+		}
+
+		projectiles = append(projectiles, ProjectileSnapshot{
+			UnitID:    projectile.UnitID(),
+			OwnerID:   projectile.OwnerID,
+			Position:  projectile.Position,
+			Direction: projectile.Direction,
+			Exploding: projectile.exploding,
+			SleepTime: projectile.SleepTime(),
+		})
+		return true
+	})
+	if len(projectiles) == 0 {
+		return nil
+	}
+
+	return projectiles
+}
+
+// BlockingUnitSnapshots returns one defensive snapshot for every live unit that currently
+// blocks movement. RL observation code uses this to represent cover and impassable objects in
+// local occupancy patches without depending on mutable manager internals.
+func (m *Manager) BlockingUnitSnapshots() []BlockingUnitSnapshot {
+	if m == nil {
+		return nil
+	}
+
+	blockers := make([]BlockingUnitSnapshot, 0)
+	m.units.Range(func(current Unit) bool {
+		if current == nil || !current.Alive() || !current.BlocksMovement() {
+			return true
+		}
+
+		base := current.Base()
+		tileX, tileY := base.TilePosition(m.world.TileSize())
+		blockers = append(blockers, BlockingUnitSnapshot{
+			UnitID:   current.UnitID(),
+			Kind:     current.UnitKind(),
+			Position: base.Position,
+			TileX:    tileX,
+			TileY:    tileY,
+		})
+		return true
+	})
+	if len(blockers) == 0 {
+		return nil
+	}
+
+	return blockers
 }

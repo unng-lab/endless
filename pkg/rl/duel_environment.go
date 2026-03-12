@@ -21,14 +21,15 @@ type DuelEnvironment struct {
 	shooterID int64
 	targetID  int64
 
-	tick                 int64
-	targetWaypoints      []geom.Point
-	nextTargetWaypoint   int
-	targetMoveInFlight   bool
-	previousTargetPos    geom.Point
-	hasPreviousTargetPos bool
-	lastObservation      Observation
-	hasLastObservation   bool
+	tick                     int64
+	targetWaypoints          []geom.Point
+	nextTargetWaypoint       int
+	targetMoveInFlight       bool
+	previousTargetPos        geom.Point
+	hasPreviousTargetPos     bool
+	recentShooterMoveFailure bool
+	lastObservation          Observation
+	hasLastObservation       bool
 }
 
 // NewDuelEnvironment prepares one episode-scoped environment wrapper around the current duel
@@ -54,14 +55,18 @@ func (e *DuelEnvironment) Reset(seed int64) (Observation, error) {
 	e.nextTargetWaypoint = 0
 	e.previousTargetPos = geom.Point{}
 	e.hasPreviousTargetPos = false
+	e.recentShooterMoveFailure = false
 	e.lastObservation = Observation{}
 	e.hasLastObservation = false
 
 	rng := rand.New(rand.NewSource(seed))
-	shooterSpawn, targetSpawn, targetWaypoints := duelLayout(rng, e.gameWorld)
-	e.shooterID = e.manager.AddUnit(unit.NewRunner(shooterSpawn, false, 0))
-	e.targetID = e.manager.AddUnit(unit.NewRunner(targetSpawn, true, 6))
-	e.targetWaypoints = targetWaypoints
+	layout := buildDuelScenarioLayout(rng, e.config.Scenario, e.gameWorld)
+	for _, staticUnit := range layout.StaticUnits {
+		e.manager.AddUnit(staticUnit)
+	}
+	e.shooterID = e.manager.AddUnit(unit.NewRunner(layout.ShooterSpawn, false, 0))
+	e.targetID = e.manager.AddUnit(unit.NewRunner(layout.TargetSpawn, true, 6))
+	e.targetWaypoints = append([]geom.Point(nil), layout.TargetWaypoints...)
 
 	observation, err := e.Observe()
 	if err != nil {
@@ -83,15 +88,15 @@ func (e *DuelEnvironment) Observe() (Observation, error) {
 	if !ok {
 		return Observation{}, fmt.Errorf("duel snapshot is unavailable")
 	}
-
-	return Observation{
-		Snapshot:             snapshot,
-		PreviousTargetPos:    e.previousTargetPos,
-		HasPreviousTargetPos: e.hasPreviousTargetPos,
-		TileSize:             e.gameWorld.TileSize(),
-		WorldWidth:           e.gameWorld.Width(),
-		WorldHeight:          e.gameWorld.Height(),
-	}, nil
+	return buildObservation(
+		e.gameWorld,
+		snapshot,
+		e.manager.ProjectileSnapshots(),
+		e.manager.BlockingUnitSnapshots(),
+		e.previousTargetPos,
+		e.hasPreviousTargetPos,
+		e.recentShooterMoveFailure,
+	), nil
 }
 
 // ApplyAction maps one policy decision back into the manager order API. Returning the accepted
@@ -147,6 +152,7 @@ func (e *DuelEnvironment) Step() (StepResult, error) {
 	if targetMoveReportFinished(targetReports) {
 		e.targetMoveInFlight = false
 	}
+	e.recentShooterMoveFailure = shooterMoveFailed(shooterReports)
 
 	afterSnapshot := resolvePostTickSnapshot(
 		e.manager,
@@ -167,14 +173,15 @@ func (e *DuelEnvironment) Step() (StepResult, error) {
 		outcome = "timeout"
 	}
 
-	after := Observation{
-		Snapshot:             afterSnapshot,
-		PreviousTargetPos:    before.Snapshot.Target.Position,
-		HasPreviousTargetPos: before.Snapshot.Target.Alive,
-		TileSize:             e.gameWorld.TileSize(),
-		WorldWidth:           e.gameWorld.Width(),
-		WorldHeight:          e.gameWorld.Height(),
-	}
+	after := buildObservation(
+		e.gameWorld,
+		afterSnapshot,
+		e.manager.ProjectileSnapshots(),
+		e.manager.BlockingUnitSnapshots(),
+		before.Snapshot.Target.Position,
+		before.Snapshot.Target.Alive,
+		e.recentShooterMoveFailure,
+	)
 
 	e.previousTargetPos = before.Snapshot.Target.Position
 	e.hasPreviousTargetPos = before.Snapshot.Target.Alive
@@ -216,4 +223,13 @@ func (e *DuelEnvironment) issueTargetPatrolOrder() {
 
 	e.targetMoveInFlight = true
 	e.nextTargetWaypoint = (e.nextTargetWaypoint + 1) % len(e.targetWaypoints)
+}
+
+func shooterMoveFailed(reports []unit.OrderReport) bool {
+	for _, report := range reports {
+		if report.Kind == unit.OrderKindMove && report.Status == unit.OrderFailed {
+			return true
+		}
+	}
+	return false
 }

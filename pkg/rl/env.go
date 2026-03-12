@@ -26,16 +26,38 @@ type Action struct {
 	FireDirection geom.Point
 }
 
+const duelObservationPatchRadius = 2
+
+// ProjectileFeature keeps one compact nearest-projectile descriptor relative to the shooter.
+// The observation uses two copies of this structure: one for friendly projectiles and one for
+// hostile projectiles.
+type ProjectileFeature struct {
+	Exists    bool
+	RelativeX float64
+	RelativeY float64
+	Distance  float64
+}
+
 // Observation keeps the policy-facing state for one decision point. The embedded duel snapshot
 // remains the canonical world projection, while the extra metadata provides enough context for
 // movement target generation without forcing policies to reach back into world internals.
 type Observation struct {
-	Snapshot             unit.DuelSnapshot
-	PreviousTargetPos    geom.Point
-	HasPreviousTargetPos bool
-	TileSize             float64
-	WorldWidth           float64
-	WorldHeight          float64
+	Snapshot                     unit.DuelSnapshot
+	PreviousTargetPos            geom.Point
+	HasPreviousTargetPos         bool
+	ShooterHasDestination        bool
+	ShooterDestinationRelativeX  float64
+	ShooterDestinationRelativeY  float64
+	ShooterDistanceToDestination float64
+	ShooterRecentMoveFailure     bool
+	PatchRadius                  int
+	LocalTerrainPatch            []int16
+	LocalOccupancyPatch          []int16
+	NearestFriendlyShot          ProjectileFeature
+	NearestHostileShot           ProjectileFeature
+	TileSize                     float64
+	WorldWidth                   float64
+	WorldHeight                  float64
 }
 
 // StepResult groups the post-tick state transition emitted by one environment step so dataset

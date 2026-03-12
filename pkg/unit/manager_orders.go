@@ -36,7 +36,11 @@ func (m *Manager) IssueMoveOrder(unitID int64, targetPoint geom.Point) error {
 
 	canonicalTarget := m.tileAnchor(targetTileX, targetTileY)
 	startTileX, startTileY := body.Base().TilePosition(m.world.TileSize())
-	grid := worldGrid{world: m.world}
+	grid := worldGrid{
+		world:         m.world,
+		manager:       m,
+		ignoredUnitID: unitID,
+	}
 	path, err := pathfinding.FindPath(
 		grid,
 		pathfinding.Step{X: startTileX, Y: startTileY},
@@ -240,7 +244,9 @@ func normalizeDirection(direction geom.Point) (geom.Point, bool) {
 }
 
 type worldGrid struct {
-	world world.World
+	world         world.World
+	manager       *Manager
+	ignoredUnitID int64
 }
 
 func (g worldGrid) InBounds(x, y int) bool {
@@ -249,6 +255,9 @@ func (g worldGrid) InBounds(x, y int) bool {
 
 func (g worldGrid) Cost(x, y int) float64 {
 	if !g.InBounds(x, y) {
+		return 0
+	}
+	if g.manager != nil && g.manager.tileBlockedForMovement(x, y, g.ignoredUnitID) {
 		return 0
 	}
 

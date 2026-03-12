@@ -256,3 +256,35 @@ func (m *Manager) tileStackAtKey(key tileKey) *TileStack {
 	m.tileRegistryMu.RUnlock()
 	return stack
 }
+
+// tileBlockedForMovement reports whether the specified tile currently contains a live unit that
+// blocks movement and is not the ignored unit. Movement pathfinding calls this to keep routed
+// destinations from crossing static cover and other blocking world bodies.
+func (m *Manager) tileBlockedForMovement(tileX, tileY int, ignoredUnitID int64) bool {
+	if m == nil {
+		return false
+	}
+
+	stack := m.tileStackAtKey(tileKey{x: tileX, y: tileY})
+	if stack == nil {
+		return false
+	}
+
+	for _, unitID := range stack.UnitIDs() {
+		if unitID == ignoredUnitID {
+			continue
+		}
+
+		current, ok := m.unitByID(unitID)
+		if !ok || current == nil || !current.Alive() {
+			continue
+		}
+		if !current.BlocksMovement() {
+			continue
+		}
+
+		return true
+	}
+
+	return false
+}

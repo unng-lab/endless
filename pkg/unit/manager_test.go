@@ -413,6 +413,26 @@ func TestManagerIssueMoveOrderReportsFailureForImmobileTarget(t *testing.T) {
 	}
 }
 
+func TestManagerIssueMoveOrderFailsWhenDestinationTileHasBlockingUnit(t *testing.T) {
+	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
+	runner := NewRunner(geom.Point{X: 8, Y: 8}, false, 0)
+	blocker := NewWall(geom.Point{X: 24, Y: 8})
+	m := newTestManager(gameWorld, runner, blocker)
+
+	err := m.IssueMoveOrder(runner.UnitID(), geom.Point{X: 24, Y: 8})
+	if err == nil {
+		t.Fatal("IssueMoveOrder() error = nil, want blocker-related path failure")
+	}
+
+	reports := m.DrainUnitOrderReports(runner.UnitID())
+	if len(reports) != 1 {
+		t.Fatalf("DrainUnitOrderReports() len = %d, want 1", len(reports))
+	}
+	if reports[0].Status != OrderFailed {
+		t.Fatalf("order status = %v, want %v", reports[0].Status, OrderFailed)
+	}
+}
+
 func TestManagerCollectsCanceledOrderBeforeRemovingDeadUnit(t *testing.T) {
 	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
 	runner := NewRunner(geom.Point{X: 8, Y: 8}, false, 0)

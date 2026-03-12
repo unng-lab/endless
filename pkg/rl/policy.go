@@ -115,15 +115,34 @@ func (p LeadAndStrafePolicy) chooseMoveTarget(observation Observation) (geom.Poi
 	}
 
 	// When the shooter is already near the preferred radius, alternate between two mirrored
-	// lateral offsets so the baseline still exercises move-order collection while weaving.
+	// lateral offsets so the baseline still exercises move-order collection while weaving. When
+	// local occupancy is available, prefer the side with less blocking cover near the intended
+	// destination so the policy starts reacting to the enriched observation patch.
 	moveTarget := baseTarget
 	if observation.TileSize > 0 && math.Abs(distance-desiredRange) <= observation.TileSize*1.5 {
-		strafeSign := 1.0
-		if (snapshot.Tick/45)%2 == 1 {
-			strafeSign = -1
+		positive := geom.Point{
+			X: baseTarget.X + perpendicular.X*strafeOffset,
+			Y: baseTarget.Y + perpendicular.Y*strafeOffset,
 		}
-		moveTarget.X += perpendicular.X * strafeOffset * strafeSign
-		moveTarget.Y += perpendicular.Y * strafeOffset * strafeSign
+		negative := geom.Point{
+			X: baseTarget.X - perpendicular.X*strafeOffset,
+			Y: baseTarget.Y - perpendicular.Y*strafeOffset,
+		}
+		positiveScore := occupancyPenaltyAtPoint(observation, positive)
+		negativeScore := occupancyPenaltyAtPoint(observation, negative)
+		switch {
+		case positiveScore < negativeScore:
+			moveTarget = positive
+		case negativeScore < positiveScore:
+			moveTarget = negative
+		default:
+			strafeSign := 1.0
+			if (snapshot.Tick/45)%2 == 1 {
+				strafeSign = -1
+			}
+			moveTarget.X += perpendicular.X * strafeOffset * strafeSign
+			moveTarget.Y += perpendicular.Y * strafeOffset * strafeSign
+		}
 	}
 
 	return clampPointToWorld(moveTarget, observation.WorldWidth, observation.WorldHeight), true
@@ -159,4 +178,33 @@ func clampPointToWorld(point geom.Point, worldWidth, worldHeight float64) geom.P
 		clamped.Y = geom.ClampFloat(clamped.Y, 0, worldHeight-1e-6)
 	}
 	return clamped
+}
+
+func occupancyPenaltyAtPoint(observation Observation, targetPoint geom.Point) int {
+	if observation.PatchRadius <= 0 || observation.TileSize <= 0 || len(observation.LocalOccupancyPatch) == 0 {
+		return 0
+	}
+
+	targetTileX := int(math.Floor(targetPoint.X / observation.TileSize))
+	targetTileY := int(math.Floor(targetPoint.Y / observation.TileSize))
+	relativeTileX := targetTileX - observation.Snapshot.Shooter.TileX
+	relativeTileY := targetTileY - observation.Snapshot.Shooter.TileY
+	if relativeTileX < -observation.PatchRadius || relativeTileX > observation.PatchRadius || relativeTileY < -observation.PatchRadius || relativeTileY > observation.PatchRadius {
+		return 0
+	}
+
+	patchWidth := observation.PatchRadius*2 + 1
+	index := (relativeTileY+observation.PatchRadius)*patchWidth + (relativeTileX + observation.PatchRadius)
+	if index < 0 || index >= len(observation.LocalOccupancyPatch) {
+		return 0
+	}
+
+	switch observation.LocalOccupancyPatch[index] {
+	case occupancyMovementBlocker, occupancyUnknown:
+		return 2
+	case occupancyFriendlyShot, occupancyHostileShot:
+		return 1
+	default:
+		return 0
+	}
 }

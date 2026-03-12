@@ -69,28 +69,9 @@ type ClickHouseRecorder struct {
 // NewClickHouseRecorder establishes one connection, verifies it with Ping and ensures the
 // required MergeTree tables exist before any training episode starts.
 func NewClickHouseRecorder(ctx context.Context, cfg ClickHouseConfig) (*ClickHouseRecorder, error) {
-	cfg = cfg.normalized()
-	if len(cfg.Addr) == 0 {
-		return nil, fmt.Errorf("clickhouse addr is empty; set ENDLESS_CLICKHOUSE_ADDR")
-	}
-
-	conn, err := clickhouse.Open(&clickhouse.Options{
-		Addr:     cfg.Addr,
-		Protocol: clickhouse.HTTP,
-		Auth: clickhouse.Auth{
-			Database: cfg.Database,
-			Username: cfg.Username,
-			Password: cfg.Password,
-		},
-		DialTimeout:  cfg.DialTimeout,
-		MaxOpenConns: 1,
-		MaxIdleConns: 1,
-	})
+	conn, cfg, err := openClickHouseConn(ctx, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("open clickhouse: %w", err)
-	}
-	if err := conn.Ping(ctx); err != nil {
-		return nil, fmt.Errorf("ping clickhouse: %w", err)
+		return nil, err
 	}
 
 	recorder := &ClickHouseRecorder{
@@ -160,19 +141,25 @@ func (c *ClickHouseRecorder) Close(ctx context.Context) error {
 		return nil
 	}
 
+	var flushErr error
 	c.mu.Lock()
-	defer c.mu.Unlock()
+	if err := c.flushEpisodesLocked(ctx); err != nil && flushErr == nil {
+		flushErr = err
+	}
+	if err := c.flushEventsLocked(ctx); err != nil && flushErr == nil {
+		flushErr = err
+	}
+	if err := c.flushStepsLocked(ctx); err != nil && flushErr == nil {
+		flushErr = err
+	}
+	c.mu.Unlock()
 
-	if err := c.flushEpisodesLocked(ctx); err != nil {
-		return err
+	if c.conn != nil {
+		if err := c.conn.Close(); err != nil && flushErr == nil {
+			flushErr = fmt.Errorf("close clickhouse connection: %w", err)
+		}
 	}
-	if err := c.flushEventsLocked(ctx); err != nil {
-		return err
-	}
-	if err := c.flushStepsLocked(ctx); err != nil {
-		return err
-	}
-	return nil
+	return flushErr
 }
 
 func (c *ClickHouseRecorder) ensureSchema(ctx context.Context) error {
@@ -200,6 +187,7 @@ CREATE TABLE IF NOT EXISTS %s (
 	tick UInt32,
 	shooter_id Int64,
 	target_id Int64,
+	obs_patch_radius Int16,
 	obs_shooter_x Float32,
 	obs_shooter_y Float32,
 	obs_shooter_hp Int16,
@@ -216,6 +204,22 @@ CREATE TABLE IF NOT EXISTS %s (
 	obs_shooter_has_queued_fire_order UInt8,
 	obs_shooter_has_active_move_order UInt8,
 	obs_shooter_has_queued_move_order UInt8,
+	obs_shooter_has_destination UInt8,
+	obs_shooter_destination_x Float32,
+	obs_shooter_destination_y Float32,
+	obs_shooter_distance_to_destination Float32,
+	obs_shooter_recent_move_failure UInt8,
+	obs_local_terrain_patch Array(Int16),
+	obs_local_occupancy_patch Array(Int16),
+	obs_nearest_friendly_shot_exists UInt8,
+	obs_nearest_friendly_shot_x Float32,
+	obs_nearest_friendly_shot_y Float32,
+	obs_nearest_friendly_shot_dist Float32,
+	obs_nearest_hostile_shot_exists UInt8,
+	obs_nearest_hostile_shot_x Float32,
+	obs_nearest_hostile_shot_y Float32,
+	obs_nearest_hostile_shot_dist Float32,
+	patch_radius Int16,
 	shooter_x Float32,
 	shooter_y Float32,
 	shooter_hp Int16,
@@ -232,6 +236,21 @@ CREATE TABLE IF NOT EXISTS %s (
 	shooter_has_queued_fire_order UInt8,
 	shooter_has_active_move_order UInt8,
 	shooter_has_queued_move_order UInt8,
+	shooter_has_destination UInt8,
+	shooter_destination_x Float32,
+	shooter_destination_y Float32,
+	shooter_distance_to_destination Float32,
+	shooter_recent_move_failure UInt8,
+	local_terrain_patch Array(Int16),
+	local_occupancy_patch Array(Int16),
+	nearest_friendly_shot_exists UInt8,
+	nearest_friendly_shot_x Float32,
+	nearest_friendly_shot_y Float32,
+	nearest_friendly_shot_dist Float32,
+	nearest_hostile_shot_exists UInt8,
+	nearest_hostile_shot_x Float32,
+	nearest_hostile_shot_y Float32,
+	nearest_hostile_shot_dist Float32,
 	action_type LowCardinality(String),
 	action_accepted UInt8,
 	action_move_target_x Float32,
@@ -267,6 +286,7 @@ CREATE TABLE IF NOT EXISTS %s (
 ) ENGINE = MergeTree
 ORDER BY (episode_id, tick, category, event_type)
 `, c.eventsTable()),
+		c.transitionsViewStatement(),
 	}
 
 	for _, statement := range statements {
@@ -288,6 +308,7 @@ func (c *ClickHouseRecorder) ensureStepColumns(ctx context.Context) error {
 	}
 
 	statements := []string{
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_patch_radius Int16", c.stepsTable()),
 		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_shooter_x Float32", c.stepsTable()),
 		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_shooter_y Float32", c.stepsTable()),
 		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_shooter_hp Int16", c.stepsTable()),
@@ -304,8 +325,39 @@ func (c *ClickHouseRecorder) ensureStepColumns(ctx context.Context) error {
 		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_shooter_has_queued_fire_order UInt8", c.stepsTable()),
 		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_shooter_has_active_move_order UInt8", c.stepsTable()),
 		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_shooter_has_queued_move_order UInt8", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_shooter_has_destination UInt8", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_shooter_destination_x Float32", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_shooter_destination_y Float32", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_shooter_distance_to_destination Float32", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_shooter_recent_move_failure UInt8", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_local_terrain_patch Array(Int16)", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_local_occupancy_patch Array(Int16)", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_nearest_friendly_shot_exists UInt8", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_nearest_friendly_shot_x Float32", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_nearest_friendly_shot_y Float32", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_nearest_friendly_shot_dist Float32", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_nearest_hostile_shot_exists UInt8", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_nearest_hostile_shot_x Float32", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_nearest_hostile_shot_y Float32", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS obs_nearest_hostile_shot_dist Float32", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS patch_radius Int16", c.stepsTable()),
 		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS shooter_has_active_move_order UInt8", c.stepsTable()),
 		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS shooter_has_queued_move_order UInt8", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS shooter_has_destination UInt8", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS shooter_destination_x Float32", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS shooter_destination_y Float32", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS shooter_distance_to_destination Float32", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS shooter_recent_move_failure UInt8", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS local_terrain_patch Array(Int16)", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS local_occupancy_patch Array(Int16)", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS nearest_friendly_shot_exists UInt8", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS nearest_friendly_shot_x Float32", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS nearest_friendly_shot_y Float32", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS nearest_friendly_shot_dist Float32", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS nearest_hostile_shot_exists UInt8", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS nearest_hostile_shot_x Float32", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS nearest_hostile_shot_y Float32", c.stepsTable()),
+		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS nearest_hostile_shot_dist Float32", c.stepsTable()),
 		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS action_accepted UInt8", c.stepsTable()),
 		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS action_move_target_x Float32", c.stepsTable()),
 		fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS action_move_target_y Float32", c.stepsTable()),
@@ -326,7 +378,7 @@ func (c *ClickHouseRecorder) flushStepsLocked(ctx context.Context) error {
 
 	pending := append([]StepRecord(nil), c.steps...)
 	batch, err := c.conn.PrepareBatch(ctx, fmt.Sprintf(
-		"INSERT INTO %s (episode_id, tick, shooter_id, target_id, obs_shooter_x, obs_shooter_y, obs_shooter_hp, obs_target_x, obs_target_y, obs_target_hp, obs_relative_target_x, obs_relative_target_y, obs_distance_to_target, obs_projectile_count, obs_shooter_weapon_ready, obs_shooter_cooldown_remaining, obs_shooter_has_active_fire_order, obs_shooter_has_queued_fire_order, obs_shooter_has_active_move_order, obs_shooter_has_queued_move_order, shooter_x, shooter_y, shooter_hp, target_x, target_y, target_hp, relative_target_x, relative_target_y, distance_to_target, projectile_count, shooter_weapon_ready, shooter_cooldown_remaining, shooter_has_active_fire_order, shooter_has_queued_fire_order, shooter_has_active_move_order, shooter_has_queued_move_order, action_type, action_accepted, action_move_target_x, action_move_target_y, action_dir_x, action_dir_y, reward, done, created_at)",
+		"INSERT INTO %s (episode_id, tick, shooter_id, target_id, obs_patch_radius, obs_shooter_x, obs_shooter_y, obs_shooter_hp, obs_target_x, obs_target_y, obs_target_hp, obs_relative_target_x, obs_relative_target_y, obs_distance_to_target, obs_projectile_count, obs_shooter_weapon_ready, obs_shooter_cooldown_remaining, obs_shooter_has_active_fire_order, obs_shooter_has_queued_fire_order, obs_shooter_has_active_move_order, obs_shooter_has_queued_move_order, obs_shooter_has_destination, obs_shooter_destination_x, obs_shooter_destination_y, obs_shooter_distance_to_destination, obs_shooter_recent_move_failure, obs_local_terrain_patch, obs_local_occupancy_patch, obs_nearest_friendly_shot_exists, obs_nearest_friendly_shot_x, obs_nearest_friendly_shot_y, obs_nearest_friendly_shot_dist, obs_nearest_hostile_shot_exists, obs_nearest_hostile_shot_x, obs_nearest_hostile_shot_y, obs_nearest_hostile_shot_dist, patch_radius, shooter_x, shooter_y, shooter_hp, target_x, target_y, target_hp, relative_target_x, relative_target_y, distance_to_target, projectile_count, shooter_weapon_ready, shooter_cooldown_remaining, shooter_has_active_fire_order, shooter_has_queued_fire_order, shooter_has_active_move_order, shooter_has_queued_move_order, shooter_has_destination, shooter_destination_x, shooter_destination_y, shooter_distance_to_destination, shooter_recent_move_failure, local_terrain_patch, local_occupancy_patch, nearest_friendly_shot_exists, nearest_friendly_shot_x, nearest_friendly_shot_y, nearest_friendly_shot_dist, nearest_hostile_shot_exists, nearest_hostile_shot_x, nearest_hostile_shot_y, nearest_hostile_shot_dist, action_type, action_accepted, action_move_target_x, action_move_target_y, action_dir_x, action_dir_y, reward, done, created_at)",
 		c.stepsTable(),
 	))
 	if err != nil {
@@ -339,6 +391,7 @@ func (c *ClickHouseRecorder) flushStepsLocked(ctx context.Context) error {
 			step.Tick,
 			step.ShooterID,
 			step.TargetID,
+			step.ObsPatchRadius,
 			step.ObsShooterX,
 			step.ObsShooterY,
 			step.ObsShooterHP,
@@ -355,6 +408,22 @@ func (c *ClickHouseRecorder) flushStepsLocked(ctx context.Context) error {
 			step.ObsShooterHasQueuedFireOrder,
 			step.ObsShooterHasActiveMoveOrder,
 			step.ObsShooterHasQueuedMoveOrder,
+			step.ObsShooterHasDestination,
+			step.ObsShooterDestinationX,
+			step.ObsShooterDestinationY,
+			step.ObsShooterDistanceToDestination,
+			step.ObsShooterRecentMoveFailure,
+			step.ObsLocalTerrainPatch,
+			step.ObsLocalOccupancyPatch,
+			step.ObsNearestFriendlyShotExists,
+			step.ObsNearestFriendlyShotX,
+			step.ObsNearestFriendlyShotY,
+			step.ObsNearestFriendlyShotDist,
+			step.ObsNearestHostileShotExists,
+			step.ObsNearestHostileShotX,
+			step.ObsNearestHostileShotY,
+			step.ObsNearestHostileShotDist,
+			step.PatchRadius,
 			step.ShooterX,
 			step.ShooterY,
 			step.ShooterHP,
@@ -371,6 +440,21 @@ func (c *ClickHouseRecorder) flushStepsLocked(ctx context.Context) error {
 			step.ShooterHasQueuedFireOrder,
 			step.ShooterHasActiveMoveOrder,
 			step.ShooterHasQueuedMoveOrder,
+			step.ShooterHasDestination,
+			step.ShooterDestinationX,
+			step.ShooterDestinationY,
+			step.ShooterDistanceToDestination,
+			step.ShooterRecentMoveFailure,
+			step.LocalTerrainPatch,
+			step.LocalOccupancyPatch,
+			step.NearestFriendlyShotExists,
+			step.NearestFriendlyShotX,
+			step.NearestFriendlyShotY,
+			step.NearestFriendlyShotDist,
+			step.NearestHostileShotExists,
+			step.NearestHostileShotX,
+			step.NearestHostileShotY,
+			step.NearestHostileShotDist,
 			step.ActionType,
 			step.ActionAccepted,
 			step.ActionMoveTargetX,
@@ -486,6 +570,99 @@ func (c *ClickHouseRecorder) eventsTable() string {
 	return fmt.Sprintf("%s.%s_events", c.cfg.Database, c.cfg.TablePrefix)
 }
 
+func (c *ClickHouseRecorder) transitionsView() string {
+	return fmt.Sprintf("%s.%s_transitions", c.cfg.Database, c.cfg.TablePrefix)
+}
+
+// transitionsViewStatement exposes one stable trainer-facing read contract with explicit
+// obs_* and next_obs_* aliases. External training code should prefer this view over the raw
+// step table so future internal column renames stay isolated inside the recorder.
+func (c *ClickHouseRecorder) transitionsViewStatement() string {
+	return fmt.Sprintf(`
+CREATE VIEW IF NOT EXISTS %s AS
+SELECT
+	s.episode_id,
+	s.tick,
+	e.scenario,
+	e.outcome,
+	s.obs_patch_radius,
+	s.obs_shooter_x,
+	s.obs_shooter_y,
+	s.obs_shooter_hp,
+	s.obs_target_x,
+	s.obs_target_y,
+	s.obs_target_hp,
+	s.obs_relative_target_x,
+	s.obs_relative_target_y,
+	s.obs_distance_to_target,
+	s.obs_projectile_count,
+	s.obs_shooter_weapon_ready,
+	s.obs_shooter_cooldown_remaining,
+	s.obs_shooter_has_active_fire_order,
+	s.obs_shooter_has_queued_fire_order,
+	s.obs_shooter_has_active_move_order,
+	s.obs_shooter_has_queued_move_order,
+	s.obs_shooter_has_destination,
+	s.obs_shooter_destination_x,
+	s.obs_shooter_destination_y,
+	s.obs_shooter_distance_to_destination,
+	s.obs_shooter_recent_move_failure,
+	s.obs_local_terrain_patch,
+	s.obs_local_occupancy_patch,
+	s.obs_nearest_friendly_shot_exists,
+	s.obs_nearest_friendly_shot_x,
+	s.obs_nearest_friendly_shot_y,
+	s.obs_nearest_friendly_shot_dist,
+	s.obs_nearest_hostile_shot_exists,
+	s.obs_nearest_hostile_shot_x,
+	s.obs_nearest_hostile_shot_y,
+	s.obs_nearest_hostile_shot_dist,
+	s.action_type,
+	s.action_accepted,
+	s.action_move_target_x,
+	s.action_move_target_y,
+	s.action_dir_x,
+	s.action_dir_y,
+	s.reward,
+	s.done,
+	s.patch_radius AS next_obs_patch_radius,
+	s.shooter_x AS next_obs_shooter_x,
+	s.shooter_y AS next_obs_shooter_y,
+	s.shooter_hp AS next_obs_shooter_hp,
+	s.target_x AS next_obs_target_x,
+	s.target_y AS next_obs_target_y,
+	s.target_hp AS next_obs_target_hp,
+	s.relative_target_x AS next_obs_relative_target_x,
+	s.relative_target_y AS next_obs_relative_target_y,
+	s.distance_to_target AS next_obs_distance_to_target,
+	s.projectile_count AS next_obs_projectile_count,
+	s.shooter_weapon_ready AS next_obs_shooter_weapon_ready,
+	s.shooter_cooldown_remaining AS next_obs_shooter_cooldown_remaining,
+	s.shooter_has_active_fire_order AS next_obs_shooter_has_active_fire_order,
+	s.shooter_has_queued_fire_order AS next_obs_shooter_has_queued_fire_order,
+	s.shooter_has_active_move_order AS next_obs_shooter_has_active_move_order,
+	s.shooter_has_queued_move_order AS next_obs_shooter_has_queued_move_order,
+	s.shooter_has_destination AS next_obs_shooter_has_destination,
+	s.shooter_destination_x AS next_obs_shooter_destination_x,
+	s.shooter_destination_y AS next_obs_shooter_destination_y,
+	s.shooter_distance_to_destination AS next_obs_shooter_distance_to_destination,
+	s.shooter_recent_move_failure AS next_obs_shooter_recent_move_failure,
+	s.local_terrain_patch AS next_obs_local_terrain_patch,
+	s.local_occupancy_patch AS next_obs_local_occupancy_patch,
+	s.nearest_friendly_shot_exists AS next_obs_nearest_friendly_shot_exists,
+	s.nearest_friendly_shot_x AS next_obs_nearest_friendly_shot_x,
+	s.nearest_friendly_shot_y AS next_obs_nearest_friendly_shot_y,
+	s.nearest_friendly_shot_dist AS next_obs_nearest_friendly_shot_dist,
+	s.nearest_hostile_shot_exists AS next_obs_nearest_hostile_shot_exists,
+	s.nearest_hostile_shot_x AS next_obs_nearest_hostile_shot_x,
+	s.nearest_hostile_shot_y AS next_obs_nearest_hostile_shot_y,
+	s.nearest_hostile_shot_dist AS next_obs_nearest_hostile_shot_dist,
+	s.created_at
+FROM %s AS s
+LEFT JOIN %s AS e ON s.episode_id = e.episode_id
+`, c.transitionsView(), c.stepsTable(), c.episodesTable())
+}
+
 func (c ClickHouseConfig) normalized() ClickHouseConfig {
 	if c.Database == "" {
 		c.Database = "default"
@@ -503,6 +680,36 @@ func (c ClickHouseConfig) normalized() ClickHouseConfig {
 		c.DialTimeout = 5 * time.Second
 	}
 	return c
+}
+
+// openClickHouseConn centralizes connection setup so recorders and trainer-facing readers use
+// the same transport, authentication and validation rules.
+func openClickHouseConn(ctx context.Context, cfg ClickHouseConfig) (driver.Conn, ClickHouseConfig, error) {
+	cfg = cfg.normalized()
+	if len(cfg.Addr) == 0 {
+		return nil, ClickHouseConfig{}, fmt.Errorf("clickhouse addr is empty; set ENDLESS_CLICKHOUSE_ADDR")
+	}
+
+	conn, err := clickhouse.Open(&clickhouse.Options{
+		Addr:     cfg.Addr,
+		Protocol: clickhouse.HTTP,
+		Auth: clickhouse.Auth{
+			Database: cfg.Database,
+			Username: cfg.Username,
+			Password: cfg.Password,
+		},
+		DialTimeout:  cfg.DialTimeout,
+		MaxOpenConns: 1,
+		MaxIdleConns: 1,
+	})
+	if err != nil {
+		return nil, ClickHouseConfig{}, fmt.Errorf("open clickhouse: %w", err)
+	}
+	if err := conn.Ping(ctx); err != nil {
+		_ = conn.Close()
+		return nil, ClickHouseConfig{}, fmt.Errorf("ping clickhouse: %w", err)
+	}
+	return conn, cfg, nil
 }
 
 func splitAddrList(value string) []string {
