@@ -171,6 +171,17 @@ func (m *Manager) retireDeletedUnit(unit Unit) {
 	if isRegistered {
 		m.unregisterUnitFromTile(unit, registeredKey)
 	}
+	if projectile, ok := unit.(*Projectile); ok && !projectile.hitOccurred {
+		m.appendCombatEvent(CombatEvent{
+			Tick:             m.lastGameTick,
+			Type:             CombatEventProjectileExpired,
+			SourceUnitID:     projectile.OwnerID,
+			ProjectileUnitID: projectile.UnitID(),
+			Position:         projectile.Position,
+			Damage:           projectile.Damage,
+			Killed:           false,
+		})
+	}
 	unit.Base().MarkRemovalHandled()
 	m.units.ReleaseDeletedSlot(unit.UnitID())
 }
@@ -217,6 +228,21 @@ func (m *Manager) flushPendingSpawns() {
 	m.pendingSpawnsMu.Unlock()
 
 	for _, current := range pending {
-		m.AddUnit(current)
+		unitID := m.AddUnit(current)
+		projectile, ok := current.(*Projectile)
+		if !ok {
+			continue
+		}
+
+		projectile.ID = unitID
+		m.appendCombatEvent(CombatEvent{
+			Tick:             m.lastGameTick,
+			Type:             CombatEventProjectileSpawned,
+			SourceUnitID:     projectile.OwnerID,
+			ProjectileUnitID: projectile.UnitID(),
+			Position:         projectile.Position,
+			Damage:           projectile.Damage,
+			Killed:           false,
+		})
 	}
 }

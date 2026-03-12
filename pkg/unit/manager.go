@@ -22,6 +22,7 @@ type Manager struct {
 	units *orderedUnitMap
 
 	bufferedOrderReports map[int64][]OrderReport
+	combatEvents         []CombatEvent
 	tileStacks           map[tileKey]*TileStack
 	registeredTiles      map[int64]tileKey
 	selectedID           int64
@@ -32,6 +33,7 @@ type Manager struct {
 	workers         []chan int64
 	updateWG        sync.WaitGroup
 	orderReportsMu  sync.Mutex
+	combatEventsMu  sync.Mutex
 	tileRegistryMu  sync.RWMutex
 	pendingSpawnsMu sync.Mutex
 	pendingSpawns   []Unit
@@ -66,6 +68,7 @@ func NewManager(gameWorld world.World) *Manager {
 		renderer:             NewRenderer(),
 		units:                newOrderedUnitMap(0),
 		bufferedOrderReports: make(map[int64][]OrderReport),
+		combatEvents:         make([]CombatEvent, 0),
 		tileStacks:           make(map[tileKey]*TileStack),
 		registeredTiles:      make(map[int64]tileKey),
 	}

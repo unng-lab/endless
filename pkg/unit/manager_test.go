@@ -751,6 +751,66 @@ func reportsForOrderID(reports []OrderReport, orderID int64) []OrderReport {
 	return filtered
 }
 
+func TestManagerDrainCombatEventsReportsProjectileSpawnHitAndKill(t *testing.T) {
+	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
+	shooter := NewRunner(geom.Point{X: 24, Y: 24}, false, 0)
+	target := NewRunner(geom.Point{X: 37, Y: 28}, false, 0)
+	target.Health = 1
+	m := newTestManager(gameWorld, shooter, target)
+
+	if err := m.IssueFireOrder(shooter.UnitID(), geom.Point{X: 1, Y: 0}); err != nil {
+		t.Fatalf("IssueFireOrder() error = %v", err)
+	}
+
+	collected := make([]CombatEvent, 0)
+	for tick := int64(1); tick <= 40; tick++ {
+		m.Update(tick)
+		collected = append(collected, m.DrainCombatEvents()...)
+		if containsCombatEventType(collected, CombatEventUnitKilled) {
+			break
+		}
+	}
+
+	assertCombatEventTypesPresent(t, collected, CombatEventProjectileSpawned, CombatEventProjectileHit, CombatEventUnitKilled)
+	if containsCombatEventType(collected, CombatEventProjectileExpired) {
+		t.Fatal("unexpected projectile_expired event for a projectile that hit and killed its target")
+	}
+}
+
+func TestManagerDuelSnapshotReportsQueuedFireOrderAndCooldown(t *testing.T) {
+	gameWorld := world.New(world.Config{Columns: 32, Rows: 32, TileSize: 16})
+	shooter := NewRunner(geom.Point{X: 24, Y: 24}, false, 0)
+	target := NewRunner(geom.Point{X: 56, Y: 24}, false, 0)
+	m := newTestManager(gameWorld, shooter, target)
+
+	if err := m.IssueFireOrder(shooter.UnitID(), geom.Point{X: 1, Y: 0}); err != nil {
+		t.Fatalf("IssueFireOrder() error = %v", err)
+	}
+
+	queuedSnapshot, ok := m.DuelSnapshot(shooter.UnitID(), target.UnitID())
+	if !ok {
+		t.Fatal("DuelSnapshot() = false, want true before the first update")
+	}
+	if !queuedSnapshot.Shooter.HasQueuedFireOrder {
+		t.Fatal("expected queued fire order to be visible before execution starts")
+	}
+
+	spawnTick := advanceFireOrderUntilProjectileSpawned(t, m, 1)
+	cooldownSnapshot, ok := m.DuelSnapshot(shooter.UnitID(), target.UnitID())
+	if !ok {
+		t.Fatal("DuelSnapshot() = false, want true after projectile spawn")
+	}
+	if cooldownSnapshot.Tick != spawnTick {
+		t.Fatalf("snapshot tick = %d, want %d", cooldownSnapshot.Tick, spawnTick)
+	}
+	if cooldownSnapshot.Shooter.WeaponReady {
+		t.Fatal("expected weapon to be cooling down immediately after fire-order completion")
+	}
+	if cooldownSnapshot.Shooter.FireCooldownRemaining == 0 {
+		t.Fatal("expected cooldown counter to be visible in duel snapshot")
+	}
+}
+
 func firstOrderedUnitID(t *testing.T, units *orderedUnitMap) int64 {
 	t.Helper()
 
@@ -773,4 +833,26 @@ func newTestManager(gameWorld world.World, units ...Unit) *Manager {
 		manager.AddUnit(current)
 	}
 	return manager
+}
+
+func containsCombatEventType(events []CombatEvent, eventType CombatEventType) bool {
+	for _, event := range events {
+		if event.Type == eventType {
+			return true
+		}
+	}
+
+	return false
+}
+
+func assertCombatEventTypesPresent(t *testing.T, events []CombatEvent, eventTypes ...CombatEventType) {
+	t.Helper()
+
+	for _, eventType := range eventTypes {
+		if containsCombatEventType(events, eventType) {
+			continue
+		}
+
+		t.Fatalf("combat events %+v do not contain event type %q", events, eventType)
+	}
 }

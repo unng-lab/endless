@@ -20,15 +20,17 @@ const (
 
 type Projectile struct {
 	BaseUnit
-	ID      int64
-	OwnerID int64
-	Radius  float64
-	Damage  int
+	ID        int64
+	OwnerID   int64
+	Radius    float64
+	Damage    int
+	Direction geom.Point
 
 	impactRadius        float64
 	impactTicks         int
 	impactDurationTicks int
 	exploding           bool
+	hitOccurred         bool
 }
 
 // newProjectile builds a discrete trajectory that advances from tile to tile in the requested
@@ -54,6 +56,7 @@ func newProjectile(owner *NonStaticUnit, direction geom.Point, gameWorld world.W
 		OwnerID:             owner.ID,
 		Radius:              gameWorld.TileSize() * projectileRadiusScale,
 		Damage:              projectileDamage,
+		Direction:           direction,
 		impactRadius:        gameWorld.TileSize() * impactRadiusScale,
 		impactDurationTicks: impactDurationTicks,
 	}, nil
@@ -117,6 +120,7 @@ func (p *Projectile) ApplyDamage(_ int) bool {
 
 func (p *Projectile) Respawn() {
 	p.exploding = false
+	p.hitOccurred = false
 	p.impactTicks = 0
 	p.clearTravel()
 	p.ClearRemovalMark()
@@ -190,9 +194,32 @@ func (p *Projectile) ReactToEnteredTile(m *Manager, stack *TileStack) {
 	}
 
 	if target.ApplyDamage(p.Damage) {
+		if targetUnit := target.Base(); targetUnit != nil {
+			m.appendCombatEvent(CombatEvent{
+				Tick:             m.lastGameTick,
+				Type:             CombatEventUnitKilled,
+				SourceUnitID:     p.OwnerID,
+				TargetUnitID:     target.UnitID(),
+				ProjectileUnitID: p.UnitID(),
+				Position:         targetUnit.Position,
+				Damage:           p.Damage,
+				Killed:           true,
+			})
+		}
 		m.retireDeletedUnit(target)
 	}
 
+	p.hitOccurred = true
+	m.appendCombatEvent(CombatEvent{
+		Tick:             m.lastGameTick,
+		Type:             CombatEventProjectileHit,
+		SourceUnitID:     p.OwnerID,
+		TargetUnitID:     target.UnitID(),
+		ProjectileUnitID: p.UnitID(),
+		Position:         p.Position,
+		Damage:           p.Damage,
+		Killed:           !target.Alive(),
+	})
 	p.StartExplosion()
 }
 
