@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -51,6 +52,10 @@ func LoadLinearQStubArtifact(path string) (LinearQStubArtifact, error) {
 	if path == "" {
 		return LinearQStubArtifact{}, fmt.Errorf("artifact path is empty")
 	}
+	info, err := os.Stat(path)
+	if err == nil && info.IsDir() {
+		return LinearQStubArtifact{}, fmt.Errorf("linear q stub artifact path %q points to a directory, want one JSON artifact file written by train-stub", path)
+	}
 
 	payload, err := os.ReadFile(path)
 	if err != nil {
@@ -59,12 +64,51 @@ func LoadLinearQStubArtifact(path string) (LinearQStubArtifact, error) {
 
 	var artifact LinearQStubArtifact
 	if err := json.Unmarshal(payload, &artifact); err != nil {
+		if formatErr := detectUnsupportedRuntimeArtifact(path, payload); formatErr != nil {
+			return LinearQStubArtifact{}, formatErr
+		}
 		return LinearQStubArtifact{}, fmt.Errorf("unmarshal linear q stub artifact %q: %w", path, err)
 	}
 	if err := artifact.Validate(); err != nil {
+		if formatErr := detectUnsupportedRuntimeArtifact(path, payload); formatErr != nil {
+			return LinearQStubArtifact{}, formatErr
+		}
 		return LinearQStubArtifact{}, err
 	}
 	return artifact, nil
+}
+
+// detectUnsupportedRuntimeArtifact recognizes trainer-side GoMLX outputs so runtime callers get
+// one actionable error instead of a misleading tensor-dimension mismatch from the stub loader.
+func detectUnsupportedRuntimeArtifact(path string, payload []byte) error {
+	lowerPath := strings.ToLower(path)
+	if strings.HasSuffix(lowerPath, ".bin") {
+		return fmt.Errorf("file %q looks like a GoMLX checkpoint binary, not a linear q stub runtime artifact; -rl-model-path only supports JSON artifacts written by cmd/endless-rl-train -mode train-stub -train-model-output", path)
+	}
+
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &root); err != nil {
+		return nil
+	}
+
+	if hasJSONKeys(root, "trained_at", "obs_dim", "action_dim", "input_dim", "checkpoint_dir") {
+		return fmt.Errorf("file %q is a GoMLX critic trainer manifest, not a linear q stub runtime artifact; use LoadRuntimePolicyFromPath or pass this path through -rl-model-path instead of the linear-q-stub-only loader", path)
+	}
+	if hasJSONKeys(root, "Variables", "BinFormat") {
+		return fmt.Errorf("file %q is GoMLX checkpoint metadata, not a linear q stub runtime artifact; use LoadRuntimePolicyFromPath or pass this path through -rl-model-path instead of the linear-q-stub-only loader", path)
+	}
+	return nil
+}
+
+// hasJSONKeys keeps the format detection explicit and readable because the loader only needs a
+// small set of stable top-level markers to distinguish trainer artifacts from runtime ones.
+func hasJSONKeys(root map[string]json.RawMessage, keys ...string) bool {
+	for _, key := range keys {
+		if _, ok := root[key]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // Validate checks that the serialized model and normalization spec still describe one coherent

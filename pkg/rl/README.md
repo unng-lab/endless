@@ -6,6 +6,7 @@
 2. как проверить, что собранные transition-строки соответствуют текущему tensor contract
 3. как запустить текущее встроенное offline-обучение `train-stub`
 4. как выгрузить датасет для внешнего trainer'а
+5. как запустить внешний GoMLX trainer в `WSL2`
 
 Документ предполагает, что команды запускаются из корня репозитория `h:\projects\unng\endless` в `PowerShell`.
 
@@ -18,6 +19,7 @@
 3. векторизовать transition'ы по текущему `TransitionNormalizationSpec`
 4. запускать встроенный Go-side baseline `train-stub`
 5. экспортировать row-level или grouped sequence датасет для внешнего обучения
+6. запускать отдельный GoMLX trainer поверх того же trainer-facing контракта
 
 Важно: `train-stub` является диагностическим baseline'ом, а не production trainer'ом. Его задача сейчас в том, чтобы проверить, что сбор данных, tensorization и базовый offline learning-loop работают согласованно.
 
@@ -151,7 +153,7 @@ go run ./cmd/endless-rl-train `
   -export-scenario duel_with_cover `
   -batch-size 64 `
   -train-epochs 10 `
-  -train-learning-rate 0.05 `
+  -train-learning-rate 0.005 `
   -train-discount 0.99
 ```
 
@@ -160,7 +162,7 @@ go run ./cmd/endless-rl-train `
 1. Читает transition'ы из ClickHouse.
 2. Векторизует их в фиксированный observation/action tensor contract.
 3. Строит простой in-memory dataset.
-4. Запускает линейный SARSA-style critic поверх `(obs, action) -> value`.
+4. Запускает линейный critic поверх `(obs, action) -> discounted return-to-go`.
 5. После каждой эпохи печатает агрегированные метрики обучения.
 
 Как читать лог обучения:
@@ -188,7 +190,7 @@ go run ./cmd/endless-rl-train `
 ```powershell
 go run ./cmd/endless-rl-train -mode collect -scenario duel_with_cover -policy lead_strafe -episodes 200 -max-ticks 600 -seed 1001
 go run ./cmd/endless-rl-train -mode inspect-batches -export-scenario duel_with_cover -batch-size 64
-go run ./cmd/endless-rl-train -mode train-stub -export-scenario duel_with_cover -batch-size 64 -train-epochs 10 -train-learning-rate 0.05 -train-discount 0.99
+go run ./cmd/endless-rl-train -mode train-stub -export-scenario duel_with_cover -batch-size 64 -train-epochs 10 -train-learning-rate 0.005 -train-discount 0.99
 ```
 
 Логика этой последовательности такая:
@@ -210,7 +212,7 @@ $env:ENDLESS_CLICKHOUSE_TABLE_PREFIX = "endless_rl_smoke"
 
 go run ./cmd/endless-rl-train -mode collect -scenario duel_open -policy lead_strafe -episodes 50 -max-ticks 400 -seed 101
 go run ./cmd/endless-rl-train -mode inspect-batches -export-scenario duel_open -batch-size 32
-go run ./cmd/endless-rl-train -mode train-stub -export-scenario duel_open -batch-size 32 -train-epochs 3 -train-learning-rate 0.05 -train-discount 0.99
+go run ./cmd/endless-rl-train -mode train-stub -export-scenario duel_open -batch-size 32 -train-epochs 3 -train-learning-rate 0.005 -train-discount 0.99
 ```
 
 Почему именно такие параметры:
@@ -239,7 +241,7 @@ $env:ENDLESS_CLICKHOUSE_TABLE_PREFIX = "endless_rl_cover_exp01"
 go run ./cmd/endless-rl-train -mode collect -scenario duel_with_cover -policy lead_strafe -episodes 3000 -max-ticks 800 -seed 2001 -world-columns 64 -world-rows 64 -tile-size 16
 go run ./cmd/endless-rl-train -mode collect -scenario duel_with_cover -policy random -episodes 3000 -max-ticks 800 -seed 2002 -world-columns 64 -world-rows 64 -tile-size 16
 go run ./cmd/endless-rl-train -mode inspect-batches -export-scenario duel_with_cover -batch-size 128
-go run ./cmd/endless-rl-train -mode train-stub -export-scenario duel_with_cover -batch-size 128 -train-epochs 10 -train-learning-rate 0.03 -train-discount 0.99
+go run ./cmd/endless-rl-train -mode train-stub -export-scenario duel_with_cover -batch-size 128 -train-epochs 10 -train-learning-rate 0.005 -train-discount 0.99
 ```
 
 Что даёт такой сценарий:
@@ -376,3 +378,95 @@ go run ./cmd/endless-rl-train `
 3. Не начинай обучение, пока `inspect-batches` не проходит без ошибок.
 4. Если нужен production trainer, считай `train-stub` не конечной целью, а только проверкой корректности данных и контракта.
 5. Если датасет становится слишком большим, текущий `train-stub` может упереться в память, потому что грузит выбранный transition slice целиком.
+
+## Внешний GoMLX trainer
+
+Следующий шаг из плана теперь реализован как отдельный launcher `cmd/endless-rl-gomlx-train` и trainer-side пакет `pkg/rl/gomlxtrain`.
+
+Что делает новый trainer:
+
+1. читает trainer-facing contract либо из ClickHouse view `*_transitions`, либо из уже экспортированного `jsonl`
+2. векторизует строки через тот же `TransitionNormalizationSpec`, что и встроенный smoke-check pipeline
+3. строит offline dataset формата `(obs || action) -> discounted return-to-go`
+4. обучает MLP critic через GoMLX
+5. сохраняет GoMLX checkpoint и `gomlx_critic_manifest.json` с описанием tensor contract'а, hyperparameters и источника данных
+
+Почему он вынесен отдельно:
+
+1. `train-stub` остаётся диагностическим baseline'ом, а не production trainer'ом внутри игрового runtime
+2. `WSL2` даёт Linux execution path для GoMLX/XLA и GPU tooling
+3. trainer-side зависимости, batching, checkpointing и backend остаются изолированными от `pkg/endless`
+
+### Установка и запуск в WSL2
+
+Новый trainer предназначен для запуска внутри Linux-окружения `WSL2`. На чистом Windows launcher намеренно завершится ошибкой с подсказкой перейти в `WSL2`.
+
+Минимальный путь для `WSL2`:
+
+1. открыть репозиторий из Linux shell внутри `WSL2`
+2. установить PJRT/runtime через `gopjrt` installer:
+
+```bash
+go run github.com/gomlx/gopjrt/cmd/gopjrt_installer@latest
+```
+
+3. выбрать backend:
+   - GPU: `export GOMLX_BACKEND=xla:cuda`
+   - CPU smoke-check: `export GOMLX_BACKEND=xla:cpu`
+
+Если позже понадобится отдельный runtime inference path, его стоит проектировать отдельно. `onnxruntime_go` пока не входит в текущий trainer flow.
+
+### Пример: обучение прямо из ClickHouse
+
+```bash
+export GOMLX_BACKEND=xla:cuda
+
+go run ./cmd/endless-rl-gomlx-train \
+  -input-format clickhouse \
+  -export-scenario duel_with_cover \
+  -batch-size 128 \
+  -train-epochs 20 \
+  -train-learning-rate 0.001 \
+  -train-discount 0.99 \
+  -hidden-dims 256,128 \
+  -checkpoint-dir ./artifacts/gomlx_critic_cover
+```
+
+Что делает эта команда:
+
+1. читает выбранный slice transition'ов из ClickHouse по тем же `-export-*` фильтрам, что и export path
+2. строит return-to-go dataset
+3. обучает critic
+4. пишет checkpoint и trainer manifest в `./artifacts/gomlx_critic_cover`
+
+### Пример: обучение из экспортированного JSONL
+
+Сначала выгрузи стабильный row-level dataset:
+
+```powershell
+go run ./cmd/endless-rl-train `
+  -mode export `
+  -export-scenario duel_with_cover `
+  -export-format jsonl `
+  -export-output .\transitions.jsonl
+```
+
+Затем внутри `WSL2` запусти trainer:
+
+```bash
+export GOMLX_BACKEND=xla:cpu
+
+go run ./cmd/endless-rl-gomlx-train \
+  -input-format jsonl \
+  -input-path ./transitions.jsonl \
+  -batch-size 128 \
+  -train-epochs 10 \
+  -hidden-dims 256,128 \
+  -checkpoint-dir ./artifacts/gomlx_critic_jsonl
+```
+
+### Что дальше после этого шага
+
+1. определить отдельный inference/export формат поверх trainer checkpoint'ов
+2. при необходимости отдельно рассмотреть `onnxruntime_go` именно как inference-only зависимость
+3. добавить memory-bounded/streaming путь для очень больших offline срезов

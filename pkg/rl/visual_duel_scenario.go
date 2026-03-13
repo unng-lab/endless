@@ -2,6 +2,7 @@ package rl
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 
 	"github.com/unng-lab/endless/pkg/geom"
@@ -40,6 +41,9 @@ type VisualDuelScenario struct {
 	lastActionAccepted   bool
 	lastOutcome          string
 	lastTick             int64
+	lastObservation      Observation
+	hasLastObservation   bool
+	lastPolicyDebug      string
 	done                 bool
 	spawnedUnits         int
 	staticObjects        int
@@ -79,11 +83,11 @@ func normalizedVisualDuelScenarioConfig(config VisualDuelScenarioConfig) VisualD
 
 func newVisualDuelPolicy(config VisualDuelScenarioConfig) (Policy, string, error) {
 	if config.ModelPath != "" {
-		policy, err := LoadLinearQStubRuntimePolicy(config.ModelPath)
+		policy, policyLabel, err := LoadRuntimePolicyFromPath(config.ModelPath)
 		if err != nil {
-			return nil, "", fmt.Errorf("load linear q stub runtime policy: %w", err)
+			return nil, "", fmt.Errorf("load runtime policy: %w", err)
 		}
-		return policy, "linear_q_stub", nil
+		return policy, policyLabel, nil
 	}
 
 	policy, err := NewPolicyByName(config.Policy, config.Seed)
@@ -113,6 +117,9 @@ func (s *VisualDuelScenario) SeedUnits(manager *unit.Manager) {
 	s.lastOutcome = "in_progress"
 	s.lastAction = Action{Type: ActionTypeNone}
 	s.lastActionAccepted = true
+	s.lastObservation = Observation{}
+	s.hasLastObservation = false
+	s.lastPolicyDebug = ""
 	s.done = false
 	manager.SelectUnitByID(s.shooterID)
 }
@@ -141,6 +148,8 @@ func (s *VisualDuelScenario) Update(gameTick int64, manager *unit.Manager) {
 		s.done = true
 		return
 	}
+	s.lastObservation = observation
+	s.hasLastObservation = true
 
 	s.lastOutcome = visualDuelOutcome(observation, gameTick, s.config.MaxTicks)
 	if s.lastOutcome != "in_progress" {
@@ -152,6 +161,7 @@ func (s *VisualDuelScenario) Update(gameTick int64, manager *unit.Manager) {
 	}
 
 	action := s.policy.ChooseAction(observation)
+	s.lastPolicyDebug = policyDebugText(s.policy)
 	actionAccepted := s.applyAction(manager, action)
 	s.lastAction = action
 	s.lastActionAccepted = actionAccepted
@@ -167,8 +177,24 @@ func (s *VisualDuelScenario) DebugText() string {
 		return ""
 	}
 
+	observationText := "obs: unavailable"
+	if s.hasLastObservation {
+		snapshot := s.lastObservation.Snapshot
+		desiredRange := NewLeadAndStrafePolicy().desiredRange() * s.lastObservation.TileSize
+		observationText = fmt.Sprintf(
+			"obs: dist %.1f desired %.1f shooter_hp %d target_hp %d weapon_ready %t move_active %t fire_active %t",
+			snapshot.DistanceToTarget,
+			desiredRange,
+			snapshot.Shooter.Health,
+			snapshot.Target.Health,
+			snapshot.Shooter.WeaponReady,
+			snapshot.Shooter.HasActiveMoveOrder || snapshot.Shooter.HasQueuedMoveOrder,
+			snapshot.Shooter.HasActiveFireOrder || snapshot.Shooter.HasQueuedFireOrder,
+		)
+	}
+
 	return fmt.Sprintf(
-		"Scene: rl_duel  policy %s  layout %s  outcome %s  tick %d/%d  shooter %d  target %d  action %s accepted %t  static %d",
+		"Scene: rl_duel  policy %s  layout %s  outcome %s  tick %d/%d  shooter %d  target %d\n%s\nlast_action: %s accepted %t\n%s",
 		s.runtimePolicyLabel,
 		s.config.Scenario,
 		s.lastOutcome,
@@ -176,9 +202,10 @@ func (s *VisualDuelScenario) DebugText() string {
 		s.config.MaxTicks,
 		s.shooterID,
 		s.targetID,
-		s.lastAction.Type,
+		observationText,
+		formatVisualDuelAction(s.lastAction),
 		s.lastActionAccepted,
-		s.staticObjects,
+		composeVisualPolicyDebugText(s.lastPolicyDebug, s.staticObjects),
 	)
 }
 
@@ -244,5 +271,37 @@ func visualDuelOutcome(observation Observation, tick, maxTicks int64) string {
 		return "timeout"
 	default:
 		return "in_progress"
+	}
+}
+
+type runtimeDecisionDebugProvider interface {
+	LastDecisionDebugText() string
+}
+
+func policyDebugText(policy Policy) string {
+	if provider, ok := policy.(runtimeDecisionDebugProvider); ok {
+		return provider.LastDecisionDebugText()
+	}
+	return ""
+}
+
+func composeVisualPolicyDebugText(policyDebug string, staticObjects int) string {
+	if policyDebug == "" {
+		return fmt.Sprintf("policy_debug: unavailable  static %d", staticObjects)
+	}
+	return fmt.Sprintf("%s  static %d", policyDebug, staticObjects)
+}
+
+func formatVisualDuelAction(action Action) string {
+	switch action.Type {
+	case ActionTypeMove:
+		return fmt.Sprintf("move target=(%.1f, %.1f)", action.MoveTarget.X, action.MoveTarget.Y)
+	case ActionTypeFire:
+		angle := math.Atan2(action.FireDirection.Y, action.FireDirection.X) * 180 / math.Pi
+		return fmt.Sprintf("fire dir=(%.2f, %.2f) angle=%.0fdeg", action.FireDirection.X, action.FireDirection.Y, angle)
+	case ActionTypeNone, "":
+		fallthrough
+	default:
+		return "none"
 	}
 }

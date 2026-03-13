@@ -26,7 +26,7 @@ func main() {
 	flag.StringVar(&rlScenario, "rl-scenario", rlScenario, "visual rl duel layout: duel_open or duel_with_cover")
 	flag.StringVar(&rlPolicy, "rl-policy", rlPolicy, "visual rl duel shooter policy: lead_strafe or random")
 	flag.Int64Var(&rlSeed, "rl-seed", rlSeed, "seed for visual rl duel layout and stochastic policies")
-	flag.StringVar(&rlModelPath, "rl-model-path", "", "optional path to a saved linear q stub artifact; when set it overrides -rl-policy")
+	flag.StringVar(&rlModelPath, "rl-model-path", "", "optional path to a saved runtime model artifact; accepts train-stub JSON, GoMLX manifest JSON, GoMLX checkpoint JSON/.bin, or a GoMLX checkpoint directory, and overrides -rl-policy")
 	flag.Int64Var(&rlMaxTicks, "rl-max-ticks", rlMaxTicks, "tick budget for one visual rl duel episode before it times out")
 
 	flagsStartedAt := time.Now()

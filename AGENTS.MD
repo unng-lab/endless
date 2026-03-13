@@ -2,6 +2,7 @@
 - `cmd/endless` - точка входа, настройка окна и запуск игры.
 - `cmd/endless-stress` - отдельная точка входа для нагрузочного сценария и профилирования большого количества юнитов и статичных объектов.
 - `cmd/endless-rl-train` - headless launcher для генерации боевых эпизодов и записи RL-датасета в ClickHouse.
+- `cmd/endless-rl-gomlx-train` - внешний offline trainer для RL-контракта: чтение ClickHouse/JSONL, запуск GoMLX-обучения и запись checkpoint/manifest.
 - `cmd/internal/launcher` - общая обработка флагов профилирования и управление runtime-профилями для desktop launcher'ов.
 - `pkg/endless` - игровой цикл Ebiten, ввод, рендер и координация подсистем.
 - `pkg/endless/scenario` - сценарии запуска игры, выбор режима сцены и наполнение мира стартовыми юнитами и статикой.
@@ -12,6 +13,7 @@
 - `pkg/assets/img` - загрузка встроенных изображений, ресайз и дисковый кэш по размерам.
 - `pkg/pathfinding` - поиск пути A* по тайловой сетке и построение маршрутов между клетками.
 - `pkg/rl` - headless RL-контур: генерация duel-эпизодов, формирование RL-trace и запись dataset-строк в ClickHouse.
+- `pkg/rl/gomlxtrain` - trainer-side подготовка offline датасета и запуск GoMLX critic trainer поверх стабильного RL tensor contract.
 - `pkg/unit` - описание юнитов, их анимация и рендер спрайтов на карте.
 
 ## Поддержка

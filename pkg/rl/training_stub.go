@@ -3,13 +3,16 @@ package rl
 import (
 	"context"
 	"fmt"
+	"math"
 )
 
 const (
-	defaultLinearQStubEpochs       = 5
-	defaultLinearQStubBatchSize    = 64
-	defaultLinearQStubLearningRate = 0.05
-	defaultLinearQStubDiscount     = 0.99
+	defaultLinearQStubEpochs         = 5
+	defaultLinearQStubBatchSize      = 64
+	defaultLinearQStubLearningRate   = 0.005
+	defaultLinearQStubDiscount       = 0.99
+	defaultLinearQStubTargetAbsMax   = 16
+	defaultLinearQStubResidualAbsMax = 8
 )
 
 // VectorizedTransitionDataset keeps the in-memory transition slice together with the tensor
@@ -20,9 +23,9 @@ type VectorizedTransitionDataset struct {
 }
 
 // LinearQStubConfig defines the first Go-side learner stub settings. The stub intentionally
-// stays simple: it trains one linear SARSA-style critic over the frozen observation/action
-// tensors so the CLI can smoke-check an end-to-end offline training pass without introducing
-// a long-lived inference/runtime contract inside gameplay code.
+// stays simple: it trains one linear critic over the frozen observation/action tensors so the
+// CLI can smoke-check an end-to-end offline training pass without introducing a long-lived
+// inference/runtime contract inside gameplay code.
 type LinearQStubConfig struct {
 	Epochs       int
 	BatchSize    int
@@ -77,9 +80,10 @@ type LinearQStubTrainingSummary struct {
 }
 
 type linearQStubExample struct {
-	Transition    VectorizedTransition
-	NextAction    []float32
-	HasNextAction bool
+	Transition       VectorizedTransition
+	NextAction       []float32
+	HasNextAction    bool
+	DiscountedReturn float32
 }
 
 type linearQStubEvaluationMetrics struct {
@@ -178,13 +182,16 @@ func (m LinearQStubModel) Predict(obs, action []float32) (float32, error) {
 	for index, feature := range action {
 		value += m.Weights[m.ObsDim+index] * feature
 	}
+	if !isFiniteFloat32(value) {
+		return 0, fmt.Errorf("prediction became non-finite")
+	}
 	return value, nil
 }
 
 // TrainLinearQStub runs the first Go-side learner stub over already vectorized transitions.
-// The implementation intentionally remains small and explicit: it links consecutive actions
-// from the same episode, performs batch-averaged semi-gradient SARSA updates, and reports
-// post-epoch metrics so operators can verify that training behaves sensibly from the CLI.
+// The implementation intentionally remains small and explicit: it links consecutive rows from
+// the same episode, computes discounted return-to-go targets and performs batch-averaged
+// regression updates so operators can verify that offline training behaves sensibly from the CLI.
 func TrainLinearQStub(ctx context.Context, transitions []VectorizedTransition, config LinearQStubConfig) (LinearQStubModel, LinearQStubTrainingSummary, error) {
 	if len(transitions) == 0 {
 		return LinearQStubModel{}, LinearQStubTrainingSummary{}, fmt.Errorf("transition dataset is empty")
@@ -214,8 +221,9 @@ func TrainLinearQStub(ctx context.Context, transitions []VectorizedTransition, c
 	if err != nil {
 		return LinearQStubModel{}, LinearQStubTrainingSummary{}, err
 	}
+	annotateLinearQStubReturns(examples, config.Discount)
 
-	initialMetrics, err := evaluateLinearQStubModel(model, examples, config.Discount)
+	initialMetrics, err := evaluateLinearQStubModel(model, examples)
 	if err != nil {
 		return LinearQStubModel{}, LinearQStubTrainingSummary{}, err
 	}
@@ -238,7 +246,7 @@ func TrainLinearQStub(ctx context.Context, transitions []VectorizedTransition, c
 			return LinearQStubModel{}, LinearQStubTrainingSummary{}, err
 		}
 
-		metrics, err := evaluateLinearQStubModel(model, examples, config.Discount)
+		metrics, err := evaluateLinearQStubModel(model, examples)
 		if err != nil {
 			return LinearQStubModel{}, LinearQStubTrainingSummary{}, err
 		}
@@ -256,7 +264,7 @@ func TrainLinearQStub(ctx context.Context, transitions []VectorizedTransition, c
 
 	finalMetrics := initialMetrics
 	if len(summary.EpochSummaries) > 0 {
-		finalMetrics, err = evaluateLinearQStubModel(model, examples, config.Discount)
+		finalMetrics, err = evaluateLinearQStubModel(model, examples)
 		if err != nil {
 			return LinearQStubModel{}, LinearQStubTrainingSummary{}, err
 		}
@@ -274,8 +282,8 @@ func TrainLinearQStub(ctx context.Context, transitions []VectorizedTransition, c
 	return model, summary, nil
 }
 
-// buildLinearQStubExamples reconstructs the next action for SARSA-style targets by linking
-// the next deterministic transition from the same episode when the tick sequence is contiguous.
+// buildLinearQStubExamples reconstructs the next action linkage and episode continuity metadata
+// from one deterministic transition slice so later training code may derive per-row targets.
 func buildLinearQStubExamples(transitions []VectorizedTransition, actionDim int) ([]linearQStubExample, int, int, error) {
 	examples := make([]linearQStubExample, 0, len(transitions))
 	linkedNextActions := 0
@@ -302,6 +310,33 @@ func buildLinearQStubExamples(transitions []VectorizedTransition, actionDim int)
 		examples = append(examples, example)
 	}
 	return examples, linkedNextActions, terminalTransitions, nil
+}
+
+// annotateLinearQStubReturns computes one discounted return-to-go target per example by
+// walking every recorded episode backwards. Unlinked rows fall back to their immediate reward.
+func annotateLinearQStubReturns(examples []linearQStubExample, discount float32) {
+	if len(examples) == 0 {
+		return
+	}
+
+	discount = clampFloat32(discount, 0, 1)
+	for index := len(examples) - 1; index >= 0; index-- {
+		examples[index].DiscountedReturn = clampLinearQStubTarget(examples[index].Transition.Reward)
+		if examples[index].Transition.Done >= 0.5 {
+			continue
+		}
+		if index+1 >= len(examples) {
+			continue
+		}
+		nextExample := examples[index+1]
+		if nextExample.Transition.EpisodeID != examples[index].Transition.EpisodeID {
+			continue
+		}
+		if nextExample.Transition.Tick != examples[index].Transition.Tick+1 {
+			continue
+		}
+		examples[index].DiscountedReturn = clampLinearQStubTarget(examples[index].DiscountedReturn + discount*nextExample.DiscountedReturn)
+	}
 }
 
 // trainLinearQStubEpoch applies one pass of batch-averaged semi-gradient updates so the stub
@@ -334,32 +369,34 @@ func trainLinearQStubEpoch(ctx context.Context, model *LinearQStubModel, example
 			if err != nil {
 				return err
 			}
-			target, err := linearQStubTarget(*model, example, config.Discount)
-			if err != nil {
-				return err
-			}
-			tdError := target - prediction
+			residual := clampFloat32(example.DiscountedReturn-prediction, -defaultLinearQStubResidualAbsMax, defaultLinearQStubResidualAbsMax)
 			for index, feature := range example.Transition.Obs {
-				gradient[index] += tdError * feature
+				gradient[index] += residual * feature
 			}
 			for index, feature := range example.Transition.Action {
-				gradient[model.ObsDim+index] += tdError * feature
+				gradient[model.ObsDim+index] += residual * feature
 			}
-			biasGradient += tdError
+			biasGradient += residual
 		}
 
 		stepScale := config.LearningRate / float32(batchEnd-batchStart)
 		for index := range model.Weights {
 			model.Weights[index] += stepScale * gradient[index]
+			if !isFiniteFloat32(model.Weights[index]) {
+				return fmt.Errorf("weight %d became non-finite", index)
+			}
 		}
 		model.Bias += stepScale * biasGradient
+		if !isFiniteFloat32(model.Bias) {
+			return fmt.Errorf("bias became non-finite")
+		}
 	}
 	return nil
 }
 
 // evaluateLinearQStubModel replays the current dataset without mutating weights so callers can
-// compare epochs by one stable set of aggregate TD error statistics.
-func evaluateLinearQStubModel(model LinearQStubModel, examples []linearQStubExample, discount float32) (linearQStubEvaluationMetrics, error) {
+// compare epochs by one stable set of aggregate residual statistics against frozen targets.
+func evaluateLinearQStubModel(model LinearQStubModel, examples []linearQStubExample) (linearQStubEvaluationMetrics, error) {
 	if len(examples) == 0 {
 		return linearQStubEvaluationMetrics{}, fmt.Errorf("linear q stub examples are empty")
 	}
@@ -371,9 +408,9 @@ func evaluateLinearQStubModel(model LinearQStubModel, examples []linearQStubExam
 		if err != nil {
 			return linearQStubEvaluationMetrics{}, err
 		}
-		target, err := linearQStubTarget(model, example, discount)
-		if err != nil {
-			return linearQStubEvaluationMetrics{}, err
+		target := example.DiscountedReturn
+		if !isFiniteFloat32(target) {
+			return linearQStubEvaluationMetrics{}, fmt.Errorf("target became non-finite")
 		}
 
 		tdError := target - prediction
@@ -408,15 +445,10 @@ func evaluateLinearQStubModel(model LinearQStubModel, examples []linearQStubExam
 	return metrics, nil
 }
 
-// linearQStubTarget keeps the target construction explicit: terminal or unlinked transitions
-// fall back to immediate reward, while linked rows bootstrap from the next recorded action.
-func linearQStubTarget(model LinearQStubModel, example linearQStubExample, discount float32) (float32, error) {
-	if example.Transition.Done >= 0.5 || !example.HasNextAction {
-		return example.Transition.Reward, nil
-	}
-	nextPrediction, err := model.Predict(example.Transition.NextObs, example.NextAction)
-	if err != nil {
-		return 0, err
-	}
-	return example.Transition.Reward + discount*nextPrediction, nil
+func clampLinearQStubTarget(value float32) float32 {
+	return clampFloat32(value, -defaultLinearQStubTargetAbsMax, defaultLinearQStubTargetAbsMax)
+}
+
+func isFiniteFloat32(value float32) bool {
+	return !math.IsNaN(float64(value)) && !math.IsInf(float64(value), 0)
 }

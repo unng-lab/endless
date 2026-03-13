@@ -35,7 +35,10 @@
 - `transitions_export.go` потоково читает trainer-facing view `*_transitions` и экспортирует его как `jsonl` или `json` без ручной сборки SQL.
 - `sequence_export.go` группирует trainer-facing transition-строки в sequence export'ы по полным эпизодам или фиксированным окнам для sequence-oriented offline trainer'ов.
 - `transition_tensor.go` фиксирует первый Go-side tensor contract: normalization spec, векторизацию `TrainingTransitionRecord`, packing фиксированных batch'ей и inspection summaries.
-- `training_stub.go` добавляет первый Go-side learner stub: загрузку vectorized dataset из ClickHouse и batch-trained линейный SARSA-style critic с per-epoch CLI metrics.
+- `training_stub.go` добавляет первый Go-side learner stub: загрузку vectorized dataset из ClickHouse и batch-trained линейный critic по discounted return-to-go с per-epoch CLI metrics.
+- `training_transition_jsonl.go` добавляет потоковое чтение trainer-facing `jsonl`, чтобы внешний trainer мог использовать тот же логический контракт, что и ClickHouse view.
+- `offline_value_dataset.go` собирает поверх vectorized transition'ов return-to-go targets и summary continuity, чтобы trainer-side пакет не дублировал эпизодную логику.
+- `pkg/rl/gomlxtrain` материализует `(obs||action) -> discounted_return` offline dataset из ClickHouse или `jsonl`, обучает MLP critic через GoMLX и сохраняет checkpoint вместе с manifest'ом tensor contract'а.
 - Первый tensor contract сейчас использует:
   - scalar numeric features, нормализованные в ограниченный `float32`
   - бинарные флаги, закодированные как явные `0.0/1.0`
@@ -65,6 +68,7 @@
 - `cmd/endless-rl-train` теперь также предоставляет режим `export` с фильтрами по scenario/outcome/episode для внешних потребителей датасета.
 - `cmd/endless-rl-train` теперь также предоставляет режим `export-sequences`, чтобы внешние trainer'ы могли экспортировать сгруппированные sequence'ы по эпизодам/окнам из того же отфильтрованного transition view.
 - `cmd/endless-rl-train` теперь также предоставляет режим `train-stub` для запуска первой offline learner smoke-check проверки прямо на trainer-facing transition'ах.
+- `cmd/endless-rl-gomlx-train` предоставляет отдельный trainer-side launcher, который на Linux/WSL2 запускает реальное GoMLX-обучение, а на Windows явно направляет оператора в WSL2 execution path.
 - `cmd/endless-rl-train` теперь также предоставляет режим `compare` с `-policy-suite` и выбором baseline для fixed-seed оценки нескольких политик из CLI.
 - `clickhouse_test.go`, `transitions_export_test.go`, `sequence_export_test.go`, `transition_tensor_test.go`, `training_stub_test.go` и `evaluation_suite_test.go` проверяют, что trainer-facing contract остаётся читаемым, tensorizable, обучаемым текущим stub'ом, экспортируемым как grouped sequences и сравнимым между детерминированными policy suite'ами.
 
@@ -94,26 +98,31 @@
 - `inspect-batches` является каноническим smoke-check путём для проверки того, что живые transition'ы в ClickHouse всё ещё соответствуют зафиксированному tensor contract.
 
 ## Следующий план
-1. Добавить явную ревизию tensor contract'а вокруг `TransitionNormalizationSpec`:
+1. Подготовить отдельный inference/export bridge после появления внешнего trainer'а:
+   - определить runtime-friendly формат весов отдельно от trainer-side checkpoint'ов GoMLX
+   - при необходимости отдельно оценить `onnxruntime_go` как inference-only слой, не смешивая его с trainer-side training path
+   - сохранить trainer-facing contracts `*_transitions` / export JSONL стабильными независимо от будущего inference backend'а
+2. Добавить явную ревизию tensor contract'а вокруг `TransitionNormalizationSpec`:
    - научиться быстро видеть saturation scalar features при `inspect-batches`
    - пересматривать normalization scale'ы, если размер мира, запас здоровья или бюджет cooldown заметно выходят за пределы текущих duel defaults
    - версионировать contract, если поменяются patch radius, vocabularies или layout tensor'ов
-2. Развести два режима trainer-side pipeline:
+3. Развести два режима trainer-side pipeline:
    - оставить текущий single-step contract каноническим для `*_transitions`
    - при реальной потребности sequence trainer'ов ввести отдельный sequence/window tensor contract поверх `export-sequences`, а не размывать текущую row-level схему
-3. Ужесточить trainer-side diagnostics:
+4. Ужесточить trainer-side diagnostics:
    - для `compare` добавить опциональный per-episode breakdown/export
    - для `compare` добавить простую оценку статистической устойчивости delta'ов на fixed-seed suite
    - для `train-stub` добавить более явную диагностику dataset coverage, unlinked transition'ов и причин terminal/non-terminal распределений
-4. Подготовить memory-bounded путь для больших оффлайн-срезов:
+5. Подготовить memory-bounded путь для больших оффлайн-срезов:
    - сохранить текущий eager in-memory `train-stub` как детерминированный smoke-check baseline
    - отдельно добавить streaming/chunked loader, если объём transition'ов перестанет помещаться в память одного процесса
-5. Держать production trainer/inference вне Go runtime до тех пор, пока не стабилизируются environment, trainer-facing schema и tensor contract.
+6. Держать production trainer/inference вне Go runtime до тех пор, пока не стабилизируются environment, trainer-facing schema и tensor contract.
 
 ## Текущие ограничения
 - Окружение по-прежнему является дуэлью `1v1`, а не общей боевой сценой.
 - Целевой актор по-прежнему scripted и следует логике waypoint patrol.
-- Production trainer/inference integration вне Go пока не реализован; текущий Go-side learner является только smoke-check baseline.
+- Внешний GoMLX trainer рассчитан на Linux/WSL2 execution path; на чистом Windows launcher намеренно возвращает явную подсказку запустить обучение внутри WSL2.
+- Production inference integration по-прежнему не реализована; текущий `train-stub` остаётся smoke-check baseline, а новый GoMLX trainer пока завершает задачу checkpoint'ом и trainer manifest'ом.
 - Полный multi-unit snapshot мира в ClickHouse не пишется; датасет по-прежнему представляет собой enriched transition row, ориентированный на дуэль.
 - Первый tensor contract зафиксирован для текущей дуэльной конфигурации, но scale-константы всё ещё предполагают текущие диапазоны мира и могут потребовать пересмотра при заметном изменении размера сценариев.
 - Канонический tensor contract по-прежнему оптимизирован под single-step transition learning; sequence export'ы сейчас сохраняют raw row payload вместо того, чтобы задавать второй tensor/window contract.

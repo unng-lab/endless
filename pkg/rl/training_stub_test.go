@@ -141,3 +141,44 @@ func TestTrainLinearQStubReducesLossOnTerminalRewardRegression(t *testing.T) {
 		t.Fatalf("predictionThree = %f, want close to 3", predictionThree)
 	}
 }
+
+func TestAnnotateLinearQStubReturnsComputesDiscountedReturnToGo(t *testing.T) {
+	examples := []linearQStubExample{
+		{
+			Transition: VectorizedTransition{
+				EpisodeID: 1,
+				Tick:      1,
+				Reward:    1,
+				Done:      0,
+			},
+		},
+		{
+			Transition: VectorizedTransition{
+				EpisodeID: 1,
+				Tick:      2,
+				Reward:    2,
+				Done:      1,
+			},
+		},
+		{
+			Transition: VectorizedTransition{
+				EpisodeID: 2,
+				Tick:      1,
+				Reward:    4,
+				Done:      1,
+			},
+		},
+	}
+
+	annotateLinearQStubReturns(examples, 0.5)
+
+	if got, want := examples[0].DiscountedReturn, float32(2); got != want {
+		t.Fatalf("examples[0].DiscountedReturn = %f, want %f", got, want)
+	}
+	if got, want := examples[1].DiscountedReturn, float32(2); got != want {
+		t.Fatalf("examples[1].DiscountedReturn = %f, want %f", got, want)
+	}
+	if got, want := examples[2].DiscountedReturn, float32(4); got != want {
+		t.Fatalf("examples[2].DiscountedReturn = %f, want %f", got, want)
+	}
+}

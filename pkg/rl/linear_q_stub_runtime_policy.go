@@ -12,6 +12,8 @@ import (
 type LinearQStubRuntimePolicy struct {
 	artifact LinearQStubArtifact
 	fallback Policy
+
+	lastDecisionDebug string
 }
 
 // LoadLinearQStubRuntimePolicy restores one saved stub model from disk and prepares it for
@@ -49,16 +51,19 @@ func (p *LinearQStubRuntimePolicy) ChooseAction(observation Observation) Action 
 	spec := p.artifact.NormalizationSpec.Normalized()
 	obsVector, err := vectorizeRuntimeObservation(observation, spec)
 	if err != nil {
+		p.lastDecisionDebug = "model: observation vectorization failed, fallback policy used"
 		return p.fallbackAction(observation)
 	}
 
 	candidates := buildLinearQStubActionCandidates(observation)
 	if len(candidates) == 0 {
+		p.lastDecisionDebug = "model: no candidates, fallback policy used"
 		return p.fallbackAction(observation)
 	}
 
 	bestAction := candidates[0]
 	bestScore := float32(math.Inf(-1))
+	successfulCandidates := 0
 	for _, candidate := range candidates {
 		actionVector, err := vectorizeRuntimeAction(spec, candidate, true)
 		if err != nil {
@@ -69,6 +74,7 @@ func (p *LinearQStubRuntimePolicy) ChooseAction(observation Observation) Action 
 		if err != nil {
 			continue
 		}
+		successfulCandidates++
 		if score > bestScore {
 			bestScore = score
 			bestAction = candidate
@@ -76,9 +82,26 @@ func (p *LinearQStubRuntimePolicy) ChooseAction(observation Observation) Action 
 	}
 
 	if math.IsInf(float64(bestScore), -1) {
+		p.lastDecisionDebug = "model: candidate scoring failed, fallback policy used"
 		return p.fallbackAction(observation)
 	}
+	p.lastDecisionDebug = fmt.Sprintf(
+		"model: best_score=%.4f candidates=%d scored=%d chosen=%s",
+		bestScore,
+		len(candidates),
+		successfulCandidates,
+		actionKey(bestAction),
+	)
 	return bestAction
+}
+
+// LastDecisionDebugText exposes one compact summary of the last runtime scoring pass so the
+// visual duel overlay may show why the current model chose its most recent action.
+func (p *LinearQStubRuntimePolicy) LastDecisionDebugText() string {
+	if p == nil {
+		return ""
+	}
+	return p.lastDecisionDebug
 }
 
 func (p *LinearQStubRuntimePolicy) fallbackAction(observation Observation) Action {
@@ -140,16 +163,24 @@ func vectorizeRuntimeAction(spec TransitionNormalizationSpec, action Action, acc
 }
 
 func buildLinearQStubActionCandidates(observation Observation) []Action {
-	candidates := []Action{{Type: ActionTypeNone}}
+	candidates := make([]Action, 0, 5)
 	if !observation.Snapshot.Shooter.Alive || !observation.Snapshot.Target.Alive {
-		return candidates
+		return []Action{{Type: ActionTypeNone}}
 	}
 
 	baseline := NewLeadAndStrafePolicy()
+	moveCandidates := buildLinearQStubMoveCandidates(observation, baseline)
+	forceMove := shouldForceRuntimeMove(observation, baseline, moveCandidates)
+	if !forceMove {
+		candidates = append(candidates, Action{Type: ActionTypeNone})
+	}
 	if fireAction, ok := baseline.chooseFireAction(observation); ok {
 		candidates = append(candidates, fireAction)
 	}
-	candidates = append(candidates, buildLinearQStubMoveCandidates(observation, baseline)...)
+	candidates = append(candidates, moveCandidates...)
+	if len(candidates) == 0 {
+		return []Action{{Type: ActionTypeNone}}
+	}
 	return dedupePolicyActions(candidates)
 }
 
@@ -197,6 +228,34 @@ func buildLinearQStubMoveCandidates(observation Observation, baseline LeadAndStr
 		candidates = append([]Action{{Type: ActionTypeMove, MoveTarget: preferred}}, candidates...)
 	}
 	return candidates
+}
+
+func shouldForceRuntimeMove(observation Observation, baseline LeadAndStrafePolicy, moveCandidates []Action) bool {
+	if len(moveCandidates) == 0 {
+		return false
+	}
+
+	snapshot := observation.Snapshot
+	if snapshot.Shooter.HasActiveMoveOrder || snapshot.Shooter.HasQueuedMoveOrder {
+		return false
+	}
+	if !snapshot.Shooter.Alive || !snapshot.Target.Alive {
+		return false
+	}
+
+	canFireNow := false
+	if _, ok := baseline.chooseFireAction(observation); ok {
+		canFireNow = true
+	}
+	if canFireNow {
+		return false
+	}
+
+	desiredRange := baseline.desiredRange() * observation.TileSize
+	if desiredRange <= 0 {
+		return true
+	}
+	return math.Abs(snapshot.DistanceToTarget-desiredRange) > observation.TileSize
 }
 
 func dedupePolicyActions(actions []Action) []Action {
