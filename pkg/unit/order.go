@@ -116,8 +116,8 @@ type activeOrderState struct {
 // queueMoveOrder accepts one move order into the unit-local lifecycle. If another order is
 // already waiting, only the newest queued order is kept because gameplay input should update
 // intent rather than accumulate an unbounded backlog for one unit.
-func (u *NonStaticUnit) queueMoveOrder(order moveOrder) {
-	u.enqueueOrder(unitOrder{
+func (u *NonStaticUnit) queueMoveOrder(gameTick int64, order moveOrder) {
+	u.enqueueOrder(gameTick, unitOrder{
 		id:          order.ID,
 		unitID:      order.UnitID,
 		kind:        OrderKindMove,
@@ -128,8 +128,8 @@ func (u *NonStaticUnit) queueMoveOrder(order moveOrder) {
 
 // queueFireOrder accepts one fire order into the same lifecycle as movement. The direction is
 // stored as a defensive copy so future callers cannot mutate the queued execution intent.
-func (u *NonStaticUnit) queueFireOrder(order fireOrder) {
-	u.enqueueOrder(unitOrder{
+func (u *NonStaticUnit) queueFireOrder(gameTick int64, order fireOrder) {
+	u.enqueueOrder(gameTick, unitOrder{
 		id:        order.ID,
 		unitID:    order.UnitID,
 		kind:      OrderKindFire,
@@ -137,8 +137,47 @@ func (u *NonStaticUnit) queueFireOrder(order fireOrder) {
 	})
 }
 
-func (u *NonStaticUnit) enqueueOrder(order unitOrder) {
+func (u *NonStaticUnit) enqueueOrder(gameTick int64, order unitOrder) {
 	u.emitOrderReport(OrderQueued, order)
+	if u.debugRuntimeLogf != nil {
+		if u.queuedOrder.hasOrder {
+			u.debugRuntimeLogf(
+				"queue unit=%d tick=%d next_order_id=%d next_kind=%s next_target=(%.1f, %.1f) next_direction=(%.3f, %.3f) next_path_waypoints=%d replaced_order_id=%d replaced_kind=%s active_order_id=%d active_kind=%s active_sleep=%d active_path_waypoints=%d",
+				u.UnitID(),
+				gameTick,
+				order.id,
+				order.kind.String(),
+				order.targetPoint.X,
+				order.targetPoint.Y,
+				order.direction.X,
+				order.direction.Y,
+				len(order.path),
+				u.queuedOrder.order.id,
+				u.queuedOrder.order.kind.String(),
+				u.activeOrder.order.id,
+				u.activeOrder.order.kind.String(),
+				u.sleepTime,
+				len(u.path),
+			)
+		} else {
+			u.debugRuntimeLogf(
+				"queue unit=%d tick=%d next_order_id=%d next_kind=%s next_target=(%.1f, %.1f) next_direction=(%.3f, %.3f) next_path_waypoints=%d active_order_id=%d active_kind=%s active_sleep=%d active_path_waypoints=%d",
+				u.UnitID(),
+				gameTick,
+				order.id,
+				order.kind.String(),
+				order.targetPoint.X,
+				order.targetPoint.Y,
+				order.direction.X,
+				order.direction.Y,
+				len(order.path),
+				u.activeOrder.order.id,
+				u.activeOrder.order.kind.String(),
+				u.sleepTime,
+				len(u.path),
+			)
+		}
+	}
 	if u.queuedOrder.hasOrder {
 		u.emitOrderReport(OrderCanceled, u.queuedOrder.order)
 	}
@@ -174,7 +213,7 @@ func (u *NonStaticUnit) drainPendingProjectiles() []*Projectile {
 
 // finishInterruptedMoveOrderAtTileBoundary cancels the active move order only at the exact
 // tile-boundary handoff where the unit may legally switch to the next queued command.
-func (u *NonStaticUnit) finishInterruptedMoveOrderAtTileBoundary() {
+func (u *NonStaticUnit) finishInterruptedMoveOrderAtTileBoundary(gameTick int64) {
 	if !u.activeOrder.hasOrder || u.activeOrder.order.kind != OrderKindMove {
 		return
 	}
@@ -185,6 +224,19 @@ func (u *NonStaticUnit) finishInterruptedMoveOrderAtTileBoundary() {
 		return
 	}
 
+	if u.debugRuntimeLogf != nil {
+		u.debugRuntimeLogf(
+			"handoff unit=%d tick=%d reached=(%.1f, %.1f) cancel_active_order_id=%d queued_order_id=%d queued_kind=%s remaining_path_waypoints=%d",
+			u.UnitID(),
+			gameTick,
+			u.Position.X,
+			u.Position.Y,
+			u.activeOrder.order.id,
+			u.queuedOrder.order.id,
+			u.queuedOrder.order.kind.String(),
+			len(u.path),
+		)
+	}
 	u.emitOrderReport(OrderCanceled, u.activeOrder.order)
 	u.path = u.path[:0]
 	u.clearActiveOrder()
@@ -207,7 +259,7 @@ func (u *NonStaticUnit) completeMoveOrderIfFinished() {
 
 // startQueuedOrderIfReady promotes the latest queued order into the active slot at the moment
 // the unit is allowed to begin a new gameplay action.
-func (u *NonStaticUnit) startQueuedOrderIfReady() {
+func (u *NonStaticUnit) startQueuedOrderIfReady(gameTick int64) {
 	if u.activeOrder.hasOrder || !u.queuedOrder.hasOrder || u.sleepTime > 0 {
 		return
 	}
@@ -222,6 +274,22 @@ func (u *NonStaticUnit) startQueuedOrderIfReady() {
 		order:    order,
 		hasOrder: true,
 		started:  true,
+	}
+	if u.debugRuntimeLogf != nil {
+		u.debugRuntimeLogf(
+			"start unit=%d tick=%d order_id=%d kind=%s target=(%.1f, %.1f) direction=(%.3f, %.3f) queued_path_waypoints=%d position=(%.1f, %.1f)",
+			u.UnitID(),
+			gameTick,
+			order.id,
+			order.kind.String(),
+			order.targetPoint.X,
+			order.targetPoint.Y,
+			order.direction.X,
+			order.direction.Y,
+			len(order.path),
+			u.Position.X,
+			u.Position.Y,
+		)
 	}
 	u.emitOrderReport(OrderStarted, order)
 

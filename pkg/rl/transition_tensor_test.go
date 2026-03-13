@@ -17,6 +17,12 @@ func TestDefaultTransitionNormalizationSpecDimensionsMatchFeatureNames(t *testin
 	if got, want := len(spec.ActionFeatureNames()), spec.ActionDim(); got != want {
 		t.Fatalf("len(ActionFeatureNames()) = %d, want %d", got, want)
 	}
+	if got, want := spec.PositionScale, float32(4096); got != want {
+		t.Fatalf("PositionScale = %f, want %f", got, want)
+	}
+	if got, want := spec.DistanceScale, float32(4096); got != want {
+		t.Fatalf("DistanceScale = %f, want %f", got, want)
+	}
 }
 
 func TestVectorizeTransitionNormalizesScalarsAndOneHotEncodesPatches(t *testing.T) {
@@ -41,11 +47,11 @@ func TestVectorizeTransitionNormalizesScalarsAndOneHotEncodesPatches(t *testing.
 	if transition.Obs[0] != 1 {
 		t.Fatalf("patch radius feature = %f, want 1", transition.Obs[0])
 	}
-	if transition.Obs[1] != 0.5 {
-		t.Fatalf("obs shooter x = %f, want 0.5", transition.Obs[1])
+	if transition.Obs[1] != 0.125 {
+		t.Fatalf("obs shooter x = %f, want 0.125", transition.Obs[1])
 	}
-	if transition.Obs[7] != -0.25 {
-		t.Fatalf("obs relative target x = %f, want -0.25", transition.Obs[7])
+	if transition.Obs[7] != -0.0625 {
+		t.Fatalf("obs relative target x = %f, want -0.0625", transition.Obs[7])
 	}
 	if transition.Obs[12] != 0.5 {
 		t.Fatalf("obs cooldown = %f, want 0.5", transition.Obs[12])
@@ -81,8 +87,8 @@ func TestVectorizeTransitionNormalizesScalarsAndOneHotEncodesPatches(t *testing.
 	if transition.Action[3] != 1 {
 		t.Fatalf("action accepted = %f, want 1", transition.Action[3])
 	}
-	if transition.Action[4] != 0.25 || transition.Action[5] != 0.5 {
-		t.Fatalf("normalized move target = [%f,%f], want [0.25,0.5]", transition.Action[4], transition.Action[5])
+	if transition.Action[4] != 0.0625 || transition.Action[5] != 0.125 {
+		t.Fatalf("normalized move target = [%f,%f], want [0.0625,0.125]", transition.Action[4], transition.Action[5])
 	}
 	if transition.Action[6] != -0.5 || transition.Action[7] != 0.75 {
 		t.Fatalf("normalized fire direction = [%f,%f], want [-0.5,0.75]", transition.Action[6], transition.Action[7])

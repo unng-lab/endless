@@ -106,12 +106,13 @@ func (m *Manager) UnitSnapshot(unitID int64) (UnitSnapshot, bool) {
 	}
 
 	base := current.Base()
-	tileX, tileY := base.TilePosition(m.world.TileSize())
+	reachedPosition := base.ReachedPosition()
+	tileX, tileY := base.ReachedTilePosition(m.world.TileSize())
 	destination, hasDestination := base.Destination()
 	snapshot := UnitSnapshot{
 		UnitID:         current.UnitID(),
 		Kind:           current.UnitKind(),
-		Position:       base.Position,
+		Position:       reachedPosition,
 		TileX:          tileX,
 		TileY:          tileY,
 		Health:         current.CurrentHealth(),

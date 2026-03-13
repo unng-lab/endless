@@ -26,10 +26,6 @@ const (
 	DefaultScreenWidth  = 1280
 	DefaultScreenHeight = 720
 
-	mapColumns = 10000
-	mapRows    = 10000
-	tileSize   = 16.0
-
 	minZoom  = 0.2
 	maxZoom  = 5.0
 	zoomStep = 0.12
@@ -89,12 +85,15 @@ func NewGameWithConfig(config GameConfig) (*Game, error) {
 	log.Printf("[startup] game: base tile image prepared in %s", time.Since(tileStartedAt))
 
 	worldStartedAt := time.Now()
-	gameWorld := world.New(world.Config{
-		Columns:  mapColumns,
-		Rows:     mapRows,
-		TileSize: tileSize,
-	})
-	log.Printf("[startup] game: world created in %s (%dx%d tiles, tile size %.1f)", time.Since(worldStartedAt), mapColumns, mapRows, tileSize)
+	worldConfig := config.worldConfig()
+	gameWorld := world.New(worldConfig)
+	log.Printf(
+		"[startup] game: world created in %s (%dx%d tiles, tile size %.1f)",
+		time.Since(worldStartedAt),
+		worldConfig.Columns,
+		worldConfig.Rows,
+		worldConfig.TileSize,
+	)
 
 	scenarioStartedAt := time.Now()
 	selectedScenario, err := gamescenario.New(gamescenario.Config{
@@ -125,6 +124,7 @@ func NewGameWithConfig(config GameConfig) (*Game, error) {
 
 	managerStartedAt := time.Now()
 	g.units = unit.NewManager(g.world)
+	g.units.SetExternalAPIDebugLogging(true)
 	log.Printf("[startup] game: unit manager initialized in %s", time.Since(managerStartedAt))
 
 	tileRenderStartedAt := time.Now()

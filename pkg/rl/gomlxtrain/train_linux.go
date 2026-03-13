@@ -83,11 +83,17 @@ func TrainCritic(ctx context.Context, cfg Config) (Result, error) {
 	}
 	defer dataset.FinalizeAll()
 
+	batchPlan, err := resolveTrainingBatchPlan(prepared.Samples, cfg.BatchSize)
+	if err != nil {
+		return Result{}, err
+	}
+	cfg.BatchSize = batchPlan.BatchSize
+
 	dataset.
 		Shuffle().
 		WithRand(newDatasetRand(cfg.Seed)).
 		Infinite(true).
-		BatchSize(cfg.BatchSize, false)
+		BatchSize(batchPlan.BatchSize, batchPlan.DropIncompleteBatch)
 
 	trainer := train.NewTrainer(
 		backend,
@@ -99,10 +105,7 @@ func TrainCritic(ctx context.Context, cfg Config) (Result, error) {
 		nil,
 	)
 
-	stepsPerEpoch := (prepared.Samples + cfg.BatchSize - 1) / cfg.BatchSize
-	if stepsPerEpoch <= 0 {
-		return Result{}, fmt.Errorf("steps per epoch resolved to zero for samples=%d batch_size=%d", prepared.Samples, cfg.BatchSize)
-	}
+	stepsPerEpoch := batchPlan.StepsPerEpoch
 	totalSteps := stepsPerEpoch * cfg.Epochs
 
 	loop := train.NewLoop(trainer)

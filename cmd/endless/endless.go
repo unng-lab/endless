@@ -21,7 +21,7 @@ func main() {
 	rlPolicy := rl.PolicyLeadAndStrafe
 	rlSeed := int64(1)
 	rlModelPath := ""
-	rlMaxTicks := int64(600)
+	rlMaxTicks := int64(1200)
 	flag.StringVar(&sceneMode, "scene", sceneMode, "scene bootstrap mode: basic or rl_duel")
 	flag.StringVar(&rlScenario, "rl-scenario", rlScenario, "visual rl duel layout: duel_open or duel_with_cover")
 	flag.StringVar(&rlPolicy, "rl-policy", rlPolicy, "visual rl duel shooter policy: lead_strafe or random")

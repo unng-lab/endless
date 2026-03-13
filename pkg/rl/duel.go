@@ -123,13 +123,13 @@ func normalizedDuelRunConfig(config DuelRunConfig) DuelRunConfig {
 		config.Episodes = 10
 	}
 	if config.MaxTicksPerEpisode <= 0 {
-		config.MaxTicksPerEpisode = 600
+		config.MaxTicksPerEpisode = 1200
 	}
 	if config.WorldColumns <= 0 {
-		config.WorldColumns = 64
+		config.WorldColumns = 256
 	}
 	if config.WorldRows <= 0 {
-		config.WorldRows = 64
+		config.WorldRows = 256
 	}
 	if config.TileSize <= 0 {
 		config.TileSize = 16

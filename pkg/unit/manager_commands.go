@@ -27,9 +27,6 @@ func (m *Manager) SelectUnitByID(unitID int64) bool {
 	}
 
 	m.selectedID = unitID
-	if body, ok := selected.(*NonStaticUnit); ok {
-		body.Wake()
-	}
 	return true
 }
 
@@ -57,9 +54,6 @@ func (m *Manager) SelectAtScreen(cam *camera.Camera, cursor geom.Point, screenWi
 
 	selected := candidates[len(candidates)-1]
 	m.selectedID = selected.UnitID()
-	if body, ok := selected.(*NonStaticUnit); ok {
-		body.Wake()
-	}
 }
 
 func (m *Manager) PointInPanel(cam *camera.Camera, cursor geom.Point, screenWidth, screenHeight int) bool {

@@ -17,6 +17,7 @@ type NonStaticUnit struct {
 	fireCooldownRemaining int
 
 	projectileBuilder func(*NonStaticUnit, geom.Point) (*Projectile, error)
+	debugRuntimeLogf  func(string, ...any)
 
 	queuedMove         queuedMoveCommand
 	activeOrder        activeOrderState
@@ -184,9 +185,11 @@ func (u *NonStaticUnit) LeaveTile(stack *TileStack) {
 	stack.RemoveUnit(u.UnitID())
 }
 
+// Wake clears the external-sleep flag without touching the active travel sleep budget.
+// Mobile units use sleepTime to model an in-flight move segment, so resetting it here would
+// incorrectly fast-forward movement when UI or scenario code merely wants the unit selected.
 func (u *NonStaticUnit) Wake() {
 	u.WakeForUpdate()
-	u.sleepTime = 0
 }
 
 // SetSpeedMultiplierLookup binds the terrain-speed resolver once so Tick may stay on the
@@ -199,4 +202,10 @@ func (u *NonStaticUnit) SetSpeedMultiplierLookup(speedAt func(geom.Point) float6
 // can prepare their projectile exactly when execution starts without depending on manager state.
 func (u *NonStaticUnit) SetProjectileBuilder(builder func(*NonStaticUnit, geom.Point) (*Projectile, error)) {
 	u.projectileBuilder = builder
+}
+
+// SetDebugRuntimeLogger binds a manager-owned debug sink that the unit may call while it
+// mutates its internal queue, promotes queued orders, or starts the next move segment.
+func (u *NonStaticUnit) SetDebugRuntimeLogger(logger func(string, ...any)) {
+	u.debugRuntimeLogf = logger
 }

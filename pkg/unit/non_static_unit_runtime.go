@@ -25,8 +25,8 @@ func (u *NonStaticUnit) Tick(gameTick int64) {
 	}
 
 	u.lastUpdateTick = gameTick
-	u.finishInterruptedMoveOrderAtTileBoundary()
-	u.startQueuedOrderIfReady()
+	u.finishInterruptedMoveOrderAtTileBoundary(gameTick)
+	u.startQueuedOrderIfReady(gameTick)
 	if u.activeOrder.hasOrder && u.activeOrder.order.kind == OrderKindFire && u.activeOrder.releasing {
 		if u.sleepTime == 0 {
 			u.releasePreparedFireOrder()
@@ -36,7 +36,7 @@ func (u *NonStaticUnit) Tick(gameTick int64) {
 	}
 
 	u.promoteQueuedMoveIfReady()
-	u.sleepTime = u.advance()
+	u.sleepTime = u.advance(gameTick)
 	u.completeMoveOrderIfFinished()
 	u.travel.remaining = u.sleepTime
 }
@@ -157,7 +157,7 @@ func (u *NonStaticUnit) weaponReady() bool {
 // advance schedules movement to the next reachable waypoint and returns how many ticks the
 // unit should stay asleep before the next logical update. Returning a sleep budget instead
 // of applying continuous movement each frame keeps all units aligned to the fixed game tick.
-func (u *NonStaticUnit) advance() int {
+func (u *NonStaticUnit) advance(gameTick int64) int {
 	if len(u.path) == 0 || u.moveSpeedPerTick <= 0 {
 		u.clearTravel()
 		return 0
@@ -175,7 +175,7 @@ func (u *NonStaticUnit) advance() int {
 			return 0
 		}
 
-		return u.startTravel(target, currentSpeed)
+		return u.startTravel(gameTick, target, currentSpeed)
 	}
 
 	u.clearTravel()
@@ -203,9 +203,10 @@ func (u *NonStaticUnit) moveSpeedAtCurrentTile() (float64, bool) {
 // startTravel snapshots the segment that render interpolation should visualize, then moves
 // the logical position directly to the next waypoint. This split lets pathfinding and tile
 // occupancy observe the new cell immediately while drawing still shows continuous motion.
-func (u *NonStaticUnit) startTravel(target geom.Point, currentSpeed float64) int {
-	dx := target.X - u.Position.X
-	dy := target.Y - u.Position.Y
+func (u *NonStaticUnit) startTravel(gameTick int64, target geom.Point, currentSpeed float64) int {
+	from := u.Position
+	dx := target.X - from.X
+	dy := target.Y - from.Y
 	distance := math.Hypot(dx, dy)
 	travelTicks := travelTicksForDistance(distance, currentSpeed)
 
@@ -219,6 +220,22 @@ func (u *NonStaticUnit) startTravel(target geom.Point, currentSpeed float64) int
 	}
 	u.Position = target
 	u.path = u.path[1:]
+	if u.debugRuntimeLogf != nil {
+		u.debugRuntimeLogf(
+			"move-step unit=%d tick=%d order_id=%d from=(%.1f, %.1f) to=(%.1f, %.1f) distance=%.2f speed=%.3f sleep=%d remaining_path_waypoints=%d",
+			u.UnitID(),
+			gameTick,
+			u.activeOrder.order.id,
+			from.X,
+			from.Y,
+			target.X,
+			target.Y,
+			distance,
+			currentSpeed,
+			travelTicks,
+			len(u.path),
+		)
+	}
 
 	return travelTicks
 }

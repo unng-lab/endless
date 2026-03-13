@@ -6,8 +6,8 @@ import (
 )
 
 const (
-	defaultObservationPositionScale = 1024
-	defaultObservationDistanceScale = 1024
+	defaultObservationPositionScale = 4096
+	defaultObservationDistanceScale = 4096
 	defaultObservationHealthScale   = 3
 	defaultProjectileCountScale     = 8
 	defaultCooldownScale            = 10

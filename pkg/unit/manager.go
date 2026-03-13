@@ -21,6 +21,11 @@ type Manager struct {
 
 	units *orderedUnitMap
 
+	// debugExternalAPILogging gates verbose audit logs for external movement and fire commands.
+	// The flag stays on the manager so visual/debug launchers may opt in without affecting the
+	// headless RL collection path that issues the same gameplay API at much higher frequency.
+	debugExternalAPILogging bool
+
 	bufferedOrderReports map[int64][]OrderReport
 	combatEvents         []CombatEvent
 	tileStacks           map[tileKey]*TileStack

@@ -17,25 +17,56 @@ func (m *Manager) IssueMoveOrder(unitID int64, targetPoint geom.Point) error {
 	if !ok {
 		report := m.failedMoveOrderReport(unitID, targetPoint)
 		m.appendBufferedOrderReport(report)
-		return fmt.Errorf("unit %d not found", unitID)
+		err := fmt.Errorf("unit %d not found", unitID)
+		m.debugExternalAPILogf(
+			"IssueMoveOrder move unit=%d tick=%d target=(%.1f, %.1f) accepted=false order_id=%d err=%q",
+			unitID,
+			m.lastGameTick,
+			targetPoint.X,
+			targetPoint.Y,
+			report.OrderID,
+			err,
+		)
+		return err
 	}
 
 	body, ok := current.(*NonStaticUnit)
 	if !ok || !body.IsMobile() {
 		report := m.failedMoveOrderReport(unitID, targetPoint)
 		m.appendBufferedOrderReport(report)
-		return fmt.Errorf("unit %d is immobile", unitID)
+		err := fmt.Errorf("unit %d is immobile", unitID)
+		m.debugExternalAPILogf(
+			"IssueMoveOrder move unit=%d tick=%d target=(%.1f, %.1f) accepted=false order_id=%d err=%q",
+			unitID,
+			m.lastGameTick,
+			targetPoint.X,
+			targetPoint.Y,
+			report.OrderID,
+			err,
+		)
+		return err
 	}
 
 	targetTileX, targetTileY, ok := m.worldPointToTile(targetPoint)
 	if !ok {
 		report := m.failedMoveOrderReport(unitID, targetPoint)
 		m.appendBufferedOrderReport(report)
-		return fmt.Errorf("target point %+v is outside the world", targetPoint)
+		err := fmt.Errorf("target point %+v is outside the world", targetPoint)
+		m.debugExternalAPILogf(
+			"IssueMoveOrder move unit=%d tick=%d target=(%.1f, %.1f) accepted=false order_id=%d err=%q",
+			unitID,
+			m.lastGameTick,
+			targetPoint.X,
+			targetPoint.Y,
+			report.OrderID,
+			err,
+		)
+		return err
 	}
 
 	canonicalTarget := m.tileAnchor(targetTileX, targetTileY)
-	startTileX, startTileY := body.Base().TilePosition(m.world.TileSize())
+	startTileX, startTileY := body.Base().ReachedTilePosition(m.world.TileSize())
+	pathStartTileX, pathStartTileY := body.Base().TilePosition(m.world.TileSize())
 	grid := worldGrid{
 		world:         m.world,
 		manager:       m,
@@ -43,20 +74,52 @@ func (m *Manager) IssueMoveOrder(unitID int64, targetPoint geom.Point) error {
 	}
 	path, err := pathfinding.FindPath(
 		grid,
-		pathfinding.Step{X: startTileX, Y: startTileY},
+		pathfinding.Step{X: pathStartTileX, Y: pathStartTileY},
 		pathfinding.Step{X: targetTileX, Y: targetTileY},
 	)
 	if err != nil {
-		m.appendBufferedOrderReport(m.failedMoveOrderReport(unitID, canonicalTarget))
+		report := m.failedMoveOrderReport(unitID, canonicalTarget)
+		m.appendBufferedOrderReport(report)
+		m.debugExternalAPILogf(
+			"IssueMoveOrder move unit=%d tick=%d from_tile=(%d, %d) target=(%.1f, %.1f) target_tile=(%d, %d) canonical=(%.1f, %.1f) accepted=false order_id=%d err=%q",
+			unitID,
+			m.lastGameTick,
+			startTileX,
+			startTileY,
+			targetPoint.X,
+			targetPoint.Y,
+			targetTileX,
+			targetTileY,
+			canonicalTarget.X,
+			canonicalTarget.Y,
+			report.OrderID,
+			err,
+		)
 		return err
 	}
 
-	body.queueMoveOrder(moveOrder{
+	order := moveOrder{
 		ID:          m.nextIssuedOrderID(),
 		UnitID:      unitID,
 		TargetPoint: canonicalTarget,
 		Path:        m.worldPath(path),
-	})
+	}
+	body.queueMoveOrder(m.lastGameTick, order)
+	m.debugExternalAPILogf(
+		"IssueMoveOrder move unit=%d tick=%d from_tile=(%d, %d) target=(%.1f, %.1f) target_tile=(%d, %d) canonical=(%.1f, %.1f) accepted=true order_id=%d path_waypoints=%d",
+		unitID,
+		m.lastGameTick,
+		startTileX,
+		startTileY,
+		targetPoint.X,
+		targetPoint.Y,
+		targetTileX,
+		targetTileY,
+		canonicalTarget.X,
+		canonicalTarget.Y,
+		order.ID,
+		len(order.Path),
+	)
 	return nil
 }
 
@@ -67,28 +130,69 @@ func (m *Manager) IssueFireOrder(unitID int64, direction geom.Point) error {
 	if !ok {
 		report := m.failedFireOrderReport(unitID, direction)
 		m.appendBufferedOrderReport(report)
-		return fmt.Errorf("unit %d not found", unitID)
+		err := fmt.Errorf("unit %d not found", unitID)
+		m.debugExternalAPILogf(
+			"fire unit=%d tick=%d direction=(%.3f, %.3f) accepted=false order_id=%d err=%q",
+			unitID,
+			m.lastGameTick,
+			direction.X,
+			direction.Y,
+			report.OrderID,
+			err,
+		)
+		return err
 	}
 
 	body, ok := current.(*NonStaticUnit)
 	if !ok || !body.CanShoot() {
 		report := m.failedFireOrderReport(unitID, direction)
 		m.appendBufferedOrderReport(report)
-		return fmt.Errorf("unit %d cannot shoot", unitID)
+		err := fmt.Errorf("unit %d cannot shoot", unitID)
+		m.debugExternalAPILogf(
+			"fire unit=%d tick=%d direction=(%.3f, %.3f) accepted=false order_id=%d err=%q",
+			unitID,
+			m.lastGameTick,
+			direction.X,
+			direction.Y,
+			report.OrderID,
+			err,
+		)
+		return err
 	}
 
 	normalizedDirection, ok := normalizeDirection(direction)
 	if !ok {
 		report := m.failedFireOrderReport(unitID, direction)
 		m.appendBufferedOrderReport(report)
-		return fmt.Errorf("direction %+v is too small", direction)
+		err := fmt.Errorf("direction %+v is too small", direction)
+		m.debugExternalAPILogf(
+			"fire unit=%d tick=%d direction=(%.3f, %.3f) accepted=false order_id=%d err=%q",
+			unitID,
+			m.lastGameTick,
+			direction.X,
+			direction.Y,
+			report.OrderID,
+			err,
+		)
+		return err
 	}
 
-	body.queueFireOrder(fireOrder{
+	order := fireOrder{
 		ID:        m.nextIssuedOrderID(),
 		UnitID:    unitID,
 		Direction: normalizedDirection,
-	})
+	}
+	body.queueFireOrder(m.lastGameTick, order)
+	m.debugExternalAPILogf(
+		"fire unit=%d tick=%d direction=(%.3f, %.3f) normalized=(%.3f, %.3f) accepted=true order_id=%d",
+		unitID,
+		m.lastGameTick,
+		direction.X,
+		direction.Y,
+		normalizedDirection.X,
+		normalizedDirection.Y,
+		order.ID,
+	)
 	return nil
 }
 

@@ -61,6 +61,31 @@ func (s BaseUnit) TilePosition(tileSize float64) (int, int) {
 	return int(math.Floor(s.Position.X / tileSize)), int(math.Floor(s.Position.Y / tileSize))
 }
 
+// ReachedPosition reports the last tile-center position the unit has already fully reached.
+// During one in-flight movement segment Position is snapped ahead to the reserved destination
+// tile so occupancy and path progression can observe that reservation immediately. External
+// command logs, however, must stay anchored to the previously reached tile center until the
+// segment sleep budget has actually elapsed, otherwise queued reroutes look like they started
+// before the unit arrived at the next cell center.
+func (s BaseUnit) ReachedPosition() geom.Point {
+	if s.travel.active && s.travel.remaining > 0 {
+		return s.travel.from
+	}
+
+	return s.Position
+}
+
+// ReachedTilePosition converts ReachedPosition into tile coordinates for external command
+// logging that should reflect only fully completed tile-center arrivals.
+func (s BaseUnit) ReachedTilePosition(tileSize float64) (int, int) {
+	position := s.ReachedPosition()
+	if tileSize <= 0 {
+		return 0, 0
+	}
+
+	return int(math.Floor(position.X / tileSize)), int(math.Floor(position.Y / tileSize))
+}
+
 func (s BaseUnit) HasPath() bool {
 	return len(s.path) > 0
 }

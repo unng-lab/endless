@@ -10,7 +10,7 @@ import (
 	"github.com/unng-lab/endless/pkg/world"
 )
 
-const defaultVisualDuelMaxTicks = 600
+const defaultVisualDuelMaxTicks = 1200
 
 // VisualDuelScenarioConfig groups every launcher-facing knob needed to render one RL-driven
 // duel inside the regular Ebiten game window.

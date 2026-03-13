@@ -59,6 +59,9 @@ func (m *Manager) bindUnitRuntimeDependencies(unit Unit) {
 	body.SetProjectileBuilder(func(owner *NonStaticUnit, direction geom.Point) (*Projectile, error) {
 		return newProjectile(owner, direction, m.world)
 	})
+	body.SetDebugRuntimeLogger(func(format string, args ...any) {
+		m.debugUnitRuntimeLogf(format, args...)
+	})
 }
 
 func (m *Manager) unregisterUnitFromTile(unit Unit, key tileKey) {
